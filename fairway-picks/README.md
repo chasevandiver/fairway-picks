@@ -151,3 +151,4 @@ fairway-picks/
 ├── tsconfig.json
 └── .env.example              ← Copy to .env.local with your keys
 ```
+
