@@ -34,7 +34,7 @@ export async function fetchLiveScores(): Promise<GolferScore[]> {
   try {
     const res = await fetch(
       'https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard',
-      { next: { revalidate: 120 } }
+      { cache: 'no-store' }
     )
     if (!res.ok) throw new Error('ESPN fetch failed')
     const data = await res.json()
@@ -45,50 +45,78 @@ export async function fetchLiveScores(): Promise<GolferScore[]> {
     const competitions = events[0]?.competitions || []
     if (!competitions.length) return MOCK_DATA
 
-    const competitors: GolferScore[] = competitions[0]?.competitors?.map((c: any) => {
-      const stats = c.statistics || []
-      const score = c.score ? parseInt(c.score) : null
-      const todayStat = stats.find((s: any) => s.name === 'scoreToPar')
-      const thruStat  = stats.find((s: any) => s.name === 'thru')
+    const raw = competitions[0]?.competitors || []
+    if (raw.length < 5) return MOCK_DATA
 
-      const statusRaw = c.status?.type?.name?.toLowerCase() || ''
+    const competitors: GolferScore[] = raw.map((c: any) => {
+      // ── Status ──
+      const statusRaw = (c.status?.type?.name || '').toLowerCase()
       const status: 'active' | 'cut' | 'wd' =
         statusRaw.includes('cut') ? 'cut' :
         statusRaw.includes('wd')  ? 'wd'  : 'active'
 
-      // Pull round-by-round scores (linescores)
-      const linescores: (number | null)[] = [null, null, null, null]
-      const lines = c.linescores || []
+      // ── Position ──
+      const position: string =
+        c.status?.position?.displayName ||
+        c.status?.period?.toString() ||
+        '—'
+
+      // ── Total score to par ──
+      const scoreRaw = c.score ?? c.linescores?.slice(-1)?.[0]?.value
+      const score: number | null = scoreRaw !== undefined && scoreRaw !== null
+        ? parseInt(String(scoreRaw))
+        : null
+
+      // ── Thru / today ──
+      // ESPN stores per-round data in linescores array
+      const lines: any[] = c.linescores || []
+
+      // Find which round is "today" — the last one with a non-null value
+      const playedLines = lines.filter((l: any) =>
+        l.value !== null && l.value !== undefined && l.displayValue !== '--'
+      )
+      const lastLine = playedLines[playedLines.length - 1]
+      const thruRaw = lastLine?.thru ?? lastLine?.period ?? null
+      const thru: string = status === 'cut' ? 'CUT' :
+        status === 'wd' ? 'WD' :
+        thruRaw !== null ? String(thruRaw) : '—'
+
+      const todayPar = lastLine?.value !== undefined ? parseInt(String(lastLine.value)) : null
+      const today: number | null = !isNaN(todayPar as number) ? todayPar : null
+
+      // ── Round-by-round strokes ──
+      // ESPN linescores: each entry has a displayValue like "69" (strokes) or "--"
+      const rounds: (number | null)[] = [null, null, null, null]
       lines.forEach((l: any, i: number) => {
-        if (i < 4) {
-          const v = parseInt(l.displayValue)
-          linescores[i] = isNaN(v) ? null : v
+        if (i >= 4) return
+        const dv = l.displayValue
+        if (dv && dv !== '--' && dv !== 'E') {
+          const n = parseInt(dv)
+          if (!isNaN(n) && n > 50) rounds[i] = n  // sanity check: must be > 50 strokes
         }
       })
 
-      // If cut, repeat R1+R2 for R3+R4
+      // For cut golfers, repeat R1+R2 into R3+R4
       if (status === 'cut') {
-        linescores[2] = linescores[0]
-        linescores[3] = linescores[1]
+        rounds[2] = rounds[0]
+        rounds[3] = rounds[1]
       }
-
-      // Detect par from linescores if available
-      const coursePar = c.linescores?.[0]?.par ? parseInt(c.linescores[0].par) * 4 : PAR
 
       return {
         name: c.athlete?.displayName || 'Unknown',
-        position: c.status?.position?.displayName || '—',
+        position,
         score: score !== null && !isNaN(score) ? score : null,
-        today: todayStat ? parseInt(todayStat.displayValue) : null,
-        thru: thruStat?.displayValue || (status === 'cut' ? 'CUT' : '—'),
+        today,
+        thru,
         status,
-        rounds: linescores,
+        rounds,
         par: PAR,
       } as GolferScore
-    }) || []
+    })
 
     return competitors.length > 5 ? competitors : MOCK_DATA
-  } catch {
+  } catch (e) {
+    console.error('ESPN fetch error:', e)
     return MOCK_DATA
   }
 }
