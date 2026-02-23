@@ -1,6 +1,6 @@
-export type Player = 'Eric' | 'Max' | 'Hayden' | 'Andrew' | 'Brennan'
+export type Player = 'Eric' | 'Max' | 'Hayden' | 'Andrew' | 'Brennan' | 'Chase'
 
-export const PLAYERS: Player[] = ['Eric', 'Max', 'Hayden', 'Andrew', 'Brennan']
+export const PLAYERS: Player[] = ['Eric', 'Max', 'Hayden', 'Andrew', 'Brennan', 'Chase']
 
 export const PAYOUT_RULES = {
   lowestStrokes: 10,  // per other player
@@ -28,16 +28,18 @@ export interface Pick {
 export interface GolferScore {
   name: string
   position: string
-  score: number | null   // total relative to par
-  today: number | null   // today's round relative to par
-  thru: string           // "F", "14", "WD", etc.
+  score: number | null        // total relative to par
+  today: number | null        // today's round relative to par
+  thru: string                // "F", "14", "WD", etc.
   status: 'active' | 'cut' | 'wd'
+  rounds: (number | null)[]   // raw strokes per round [R1, R2, R3, R4], null = not played
+  par: number                 // course par (usually 72)
 }
 
 export interface PlayerStanding {
   player: string
   totalScore: number
-  golfers: (GolferScore & { adjScore: number })[]
+  golfers: (GolferScore & { adjScore: number; displayRounds: (number | null)[] })[]
   hasWinner: boolean
   hasTop3: boolean
   rank: number

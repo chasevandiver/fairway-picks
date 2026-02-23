@@ -50,9 +50,20 @@ export function computeStandings(
       ) ?? { name, score: null, today: null, thru: '—', position: '—', status: 'active' as const }
 
       let adjScore = g.score ?? 0
-      if (g.status === 'cut' && g.score !== null) adjScore = Math.round((g.score / 2) * 4)
+      // Cut rule: repeat R1+R2 for R3+R4 → total = 2× the 2-round score
+      if (g.status === 'cut' && g.score !== null) adjScore = g.score * 2
+      // WD rule: same doubling approach
+      if (g.status === 'wd' && g.score !== null) adjScore = g.score * 2
+
+      // Build display rounds: for cut/wd, fill in repeated rounds
+      const displayRounds = [...(g.rounds || [null, null, null, null])]
+      if (g.status === 'cut' || g.status === 'wd') {
+        displayRounds[2] = displayRounds[0]
+        displayRounds[3] = displayRounds[1]
+      }
+
       totalScore += adjScore
-      return { ...g, adjScore }
+      return { ...g, adjScore, displayRounds }
     })
 
     const top3 = liveData.filter((g) => {
