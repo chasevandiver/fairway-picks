@@ -4,8 +4,8 @@ const PAR = 72
 
 const MOCK_DATA: GolferScore[] = [
   { name: 'Scottie Scheffler',   position: '1',   score: -14, today: -5, thru: 'F',   status: 'active', rounds: [67, 66, 68, 65], par: PAR },
-  { name: 'Rory McIlroy',        position: '2',   score: -12, today: -4, thru: 'F',   status: 'active', rounds: [68, 66, 68, 68], par: PAR },
-  { name: 'Xander Schauffele',   position: '3',   score: -11, today: -3, thru: 'F',   status: 'active', rounds: [67, 68, 68, 69], par: PAR },
+  { name: 'Rory McIlroy',        position: 'T2',  score: -12, today: -4, thru: 'F',   status: 'active', rounds: [68, 66, 68, 68], par: PAR },
+  { name: 'Xander Schauffele',   position: 'T2',  score: -12, today: -3, thru: 'F',   status: 'active', rounds: [67, 68, 68, 69], par: PAR },
   { name: 'Collin Morikawa',     position: '4',   score: -10, today: -4, thru: 'F',   status: 'active', rounds: [68, 68, 68, 68], par: PAR },
   { name: 'Ludvig Åberg',        position: '5',   score: -9,  today: -2, thru: 'F',   status: 'active', rounds: [69, 68, 68, 70], par: PAR },
   { name: 'Tommy Fleetwood',     position: '6',   score: -8,  today: -3, thru: 'F',   status: 'active', rounds: [69, 68, 69, 69], par: PAR },
@@ -13,21 +13,8 @@ const MOCK_DATA: GolferScore[] = [
   { name: 'Hideki Matsuyama',    position: 'T7',  score: -7,  today: -2, thru: 'F',   status: 'active', rounds: [70, 68, 69, 70], par: PAR },
   { name: 'Patrick Cantlay',     position: '9',   score: -6,  today: 0,  thru: 'F',   status: 'active', rounds: [70, 68, 70, 72], par: PAR },
   { name: 'Justin Rose',         position: '10',  score: -5,  today: -2, thru: 'F',   status: 'active', rounds: [70, 69, 70, 70], par: PAR },
-  { name: 'Sam Burns',           position: 'T10', score: -5,  today: -1, thru: 'F',   status: 'active', rounds: [71, 68, 70, 71], par: PAR },
-  { name: 'Matt Fitzpatrick',    position: '12',  score: -4,  today: -1, thru: 'F',   status: 'active', rounds: [70, 70, 70, 71], par: PAR },
-  { name: 'Max Homa',            position: 'T12', score: -4,  today: 0,  thru: 'F',   status: 'active', rounds: [71, 69, 72, 72], par: PAR },
-  { name: 'Min Woo Lee',         position: '14',  score: -3,  today: -1, thru: 'F',   status: 'active', rounds: [71, 70, 70, 72], par: PAR },
-  { name: 'Russell Henley',      position: 'T14', score: -3,  today: 0,  thru: 'F',   status: 'active', rounds: [71, 70, 72, 72], par: PAR },
-  { name: 'Si Woo Kim',          position: '16',  score: -2,  today: 1,  thru: 'F',   status: 'active', rounds: [71, 71, 71, 73], par: PAR },
-  { name: 'Harris English',      position: 'T16', score: -2,  today: -1, thru: 'F',   status: 'active', rounds: [72, 70, 72, 71], par: PAR },
-  { name: 'Jake Knapp',          position: '18',  score: -1,  today: 1,  thru: 'F',   status: 'active', rounds: [71, 71, 72, 73], par: PAR },
-  { name: 'Chris Gotterup',      position: '19',  score: 0,   today: 0,  thru: 'F',   status: 'active', rounds: [72, 72, 72, 72], par: PAR },
-  { name: 'Maverick McNealy',    position: '20',  score: 1,   today: 2,  thru: 'F',   status: 'active', rounds: [72, 73, 72, 74], par: PAR },
-  { name: 'Jordan Spieth',       position: '21',  score: 2,   today: 1,  thru: 'F',   status: 'active', rounds: [73, 73, 72, 73], par: PAR },
-  { name: 'Jon Rahm',            position: '22',  score: 3,   today: 2,  thru: 'CUT', status: 'cut',    rounds: [75, 72, 75, 72], par: PAR },
-  { name: 'Tony Finau',          position: '23',  score: 4,   today: 3,  thru: 'CUT', status: 'cut',    rounds: [74, 74, 74, 74], par: PAR },
-  { name: 'Byeong Hun An',       position: '24',  score: 5,   today: 4,  thru: 'CUT', status: 'cut',    rounds: [75, 73, 75, 73], par: PAR },
-  { name: 'Rickie Fowler',       position: '25',  score: 6,   today: 3,  thru: 'CUT', status: 'cut',    rounds: [75, 75, 75, 75], par: PAR },
+  { name: 'Jon Rahm',            position: 'CUT', score: 6,   today: 3,  thru: 'CUT', status: 'cut',    rounds: [75, 75, 75, 75], par: PAR },
+  { name: 'Tony Finau',          position: 'CUT', score: 8,   today: 4,  thru: 'CUT', status: 'cut',    rounds: [76, 76, 76, 76], par: PAR },
 ]
 
 export async function fetchLiveScores(): Promise<GolferScore[]> {
@@ -41,10 +28,8 @@ export async function fetchLiveScores(): Promise<GolferScore[]> {
 
     const events = data?.events || []
     if (!events.length) return MOCK_DATA
-
     const competitions = events[0]?.competitions || []
     if (!competitions.length) return MOCK_DATA
-
     const raw = competitions[0]?.competitors || []
     if (raw.length < 5) return MOCK_DATA
 
@@ -58,54 +43,87 @@ export async function fetchLiveScores(): Promise<GolferScore[]> {
       // ── Position ──
       const position: string =
         c.status?.position?.displayName ||
-        c.status?.period?.toString() ||
+        c.status?.position?.id ||
         '—'
 
       // ── Total score to par ──
-      const scoreRaw = c.score ?? c.linescores?.slice(-1)?.[0]?.value
-      const score: number | null = scoreRaw !== undefined && scoreRaw !== null
-        ? parseInt(String(scoreRaw))
-        : null
-
-      // ── Thru / today ──
-      // ESPN stores per-round data in linescores array
-      const lines: any[] = c.linescores || []
-
-      // Find which round is "today" — the last one with a non-null value
-      const playedLines = lines.filter((l: any) =>
-        l.value !== null && l.value !== undefined && l.displayValue !== '--'
+      // ESPN returns scoreToPar as a stat or in the score field
+      const stats: any[] = c.statistics || []
+      const scoreToParStat = stats.find((s: any) =>
+        s.name === 'scoreToPar' || s.abbreviation === 'SCORE'
       )
-      const lastLine = playedLines[playedLines.length - 1]
-      const thruRaw = lastLine?.thru ?? lastLine?.period ?? null
-      const thru: string = status === 'cut' ? 'CUT' :
-        status === 'wd' ? 'WD' :
-        thruRaw !== null ? String(thruRaw) : '—'
+      let score: number | null = null
+      if (scoreToParStat) {
+        const v = parseInt(scoreToParStat.displayValue?.replace('E', '0'))
+        if (!isNaN(v)) score = v
+      }
+      // fallback: c.score is sometimes the total strokes, convert to par
+      if (score === null && c.score !== undefined) {
+        const raw = parseInt(c.score)
+        if (!isNaN(raw)) {
+          // if it looks like strokes (60-80 range per round * rounds), convert
+          score = raw > 50 ? raw - (PAR * 4) : raw
+        }
+      }
 
-      const todayPar = lastLine?.value !== undefined ? parseInt(String(lastLine.value)) : null
-      const today: number | null = !isNaN(todayPar as number) ? todayPar : null
-
-      // ── Round-by-round strokes ──
-      // ESPN linescores: each entry has a displayValue like "69" (strokes) or "--"
+      // ── Round-by-round linescores ──
+      const lines: any[] = c.linescores || []
       const rounds: (number | null)[] = [null, null, null, null]
+
       lines.forEach((l: any, i: number) => {
         if (i >= 4) return
+        // displayValue is raw strokes like "69", value is to-par like "-3"
         const dv = l.displayValue
-        if (dv && dv !== '--' && dv !== 'E') {
+        if (dv && dv !== '--' && dv !== 'E' && dv !== '') {
           const n = parseInt(dv)
-          if (!isNaN(n) && n > 50) rounds[i] = n  // sanity check: must be > 50 strokes
+          // Raw strokes are typically between 60-85
+          if (!isNaN(n) && n >= 60 && n <= 90) {
+            rounds[i] = n
+          } else if (!isNaN(n) && Math.abs(n) <= 20) {
+            // It's a to-par value, convert to strokes
+            rounds[i] = PAR + n
+          }
         }
       })
 
-      // For cut golfers, repeat R1+R2 into R3+R4
+      // ── Thru ──
+      const thruStat = stats.find((s: any) => s.name === 'thru' || s.abbreviation === 'THRU')
+      const thruVal = thruStat?.displayValue
+      const thru: string =
+        status === 'cut' ? 'CUT' :
+        status === 'wd'  ? 'WD'  :
+        thruVal && thruVal !== '--' ? thruVal : '—'
+
+      // ── Today (current round to par) ──
+      const todayStat = stats.find((s: any) =>
+        s.name === 'toPar' || s.name === 'today' || s.abbreviation === 'TODAY'
+      )
+      let today: number | null = null
+      if (todayStat) {
+        const tv = todayStat.displayValue?.replace('E', '0')
+        const n = parseInt(tv)
+        if (!isNaN(n)) today = n
+      }
+      // Fallback: derive today from last played round
+      if (today === null) {
+        const lastRound = [...rounds].reverse().find(r => r !== null)
+        if (lastRound !== null && lastRound !== undefined) today = lastRound - PAR
+      }
+
+      // For cut golfers repeat R1+R2 into R3+R4
       if (status === 'cut') {
-        rounds[2] = rounds[0]
-        rounds[3] = rounds[1]
+        if (rounds[0] !== null) rounds[2] = rounds[0]
+        if (rounds[1] !== null) rounds[3] = rounds[1]
+        // Recalculate score from rounds
+        if (rounds[0] !== null && rounds[1] !== null) {
+          score = (rounds[0] + rounds[1]) * 2 - PAR * 4
+        }
       }
 
       return {
         name: c.athlete?.displayName || 'Unknown',
         position,
-        score: score !== null && !isNaN(score) ? score : null,
+        score,
         today,
         thru,
         status,
