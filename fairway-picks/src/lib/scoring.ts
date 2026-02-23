@@ -66,15 +66,16 @@ export function computeStandings(
       return { ...g, adjScore, displayRounds }
     })
 
-    const top3 = liveData.filter((g) => {
-      const pos = parseInt(g.position)
-      return !isNaN(pos) && pos <= 3
-    })
+    // Strip "T" prefix from positions like "T2", "T3" before parsing
+    const parsePos = (p: string) => parseInt(p.replace(/^T/, ''))
 
-    const hasWinner = golfers.some((g) => g.position === '1')
+    const hasWinner = golfers.some((g) => {
+      const pos = parsePos(g.position)
+      return pos === 1  // covers both "1" and "T1"
+    })
     const hasTop3 = golfers.some((g) => {
-      const pos = parseInt(g.position)
-      return !isNaN(pos) && pos <= 3
+      const pos = parsePos(g.position)
+      return !isNaN(pos) && pos <= 3  // covers 1, 2, 3, T1, T2, T3
     })
 
     return { player, totalScore, golfers, hasWinner, hasTop3, rank: 0, moneyThisWeek: 0 }
