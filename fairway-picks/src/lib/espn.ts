@@ -100,8 +100,11 @@ export async function fetchLiveScores(): Promise<GolferScore[]> {
       // ── Today (current round to par) ──
       // Derive from the last played round
       let today: number | null = null
-      const lastRoundIdx = rounds.reduceRight((found, r, i) => found === -1 && r !== null ? i : found, -1)
-      if (lastRoundIdx >= 0 && rounds[lastRoundIdx] !== null) {
+      let lastRoundIdx = -1
+      for (let i = rounds.length - 1; i >= 0; i--) {
+        if (rounds[i] !== null) { lastRoundIdx = i; break }
+      }
+      if (lastRoundIdx >= 0) {
         today = (rounds[lastRoundIdx] as number) - PAR
       }
 
