@@ -41,9 +41,18 @@ export async function fetchLiveScores(): Promise<GolferScore[]> {
         statusRaw.includes('wd')  ? 'wd'  : 'active'
 
       // ── Position ──
+      // ESPN stores position in several places depending on tournament state
+      // Log first competitor to help debug field names
+      if (raw.indexOf(c) === 0) {
+        console.log('[ESPN] competitor keys:', Object.keys(c))
+        console.log('[ESPN] status:', JSON.stringify(c.status))
+        console.log('[ESPN] linescores sample:', JSON.stringify((c.linescores||[]).slice(0,2)))
+      }
       const position: string =
         c.status?.position?.displayName ||
         c.status?.position?.id ||
+        c.status?.displayValue ||
+        (c.sortOrder !== undefined ? String(c.sortOrder) : '') ||
         '—'
 
       // ── Total score to par ──
@@ -110,14 +119,10 @@ export async function fetchLiveScores(): Promise<GolferScore[]> {
         if (lastRound !== null && lastRound !== undefined) today = lastRound - PAR
       }
 
-      // For cut golfers repeat R1+R2 into R3+R4
-      if (status === 'cut') {
-        if (rounds[0] !== null) rounds[2] = rounds[0]
-        if (rounds[1] !== null) rounds[3] = rounds[1]
-        // Recalculate score from rounds
-        if (rounds[0] !== null && rounds[1] !== null) {
-          score = (rounds[0] + rounds[1]) * 2 - PAR * 4
-        }
+      // For cut/wd golfers: score = actual 2-round to-par total
+      // DO NOT double here — scoring.ts handles adjScore = score * 2
+      if ((status === 'cut' || status === 'wd') && rounds[0] !== null && rounds[1] !== null) {
+        score = (rounds[0] + rounds[1]) - PAR * 2
       }
 
       return {
