@@ -58,11 +58,15 @@ export function computeStandings(liveData: any[], pickMap: Record<string, string
       return { ...g, adjScore, displayRounds }
     })
 
-    const parsePos = (p: string) => parseInt((p || '').replace(/^T/, ''))
+    const parsePos = (p: string): number => {
+      if (!p || p === '—' || p === '-' || p.toUpperCase() === 'CUT' || p.toUpperCase() === 'WD') return NaN
+      const n = parseInt(p.replace(/^T/i, ''))
+      return n
+    }
     const hasWinner = golfers.some((g: any) => parsePos(g.position) === 1)
     const hasTop3 = golfers.some((g: any) => {
       const pos = parsePos(g.position)
-      return !isNaN(pos) && pos <= 3
+      return !isNaN(pos) && pos >= 1 && pos <= 3
     })
 
     return { player, totalScore, golfers, hasWinner, hasTop3, rank: 0, moneyThisWeek: 0 }
