@@ -384,15 +384,20 @@ function PicksTab({ standings, pickMap, liveData, tournament }: {
         if (playerPicks.length === 0) return null
 
         // Build golfer rows with live data merged in
-        const golferRows = s?.golfers ?? playerPicks.map((name) => {
+        const golferRows = (s?.golfers ?? playerPicks.map((name) => {
           const g = liveData.find((d) => d.name.toLowerCase() === name.toLowerCase())
             ?? { name, score: null, today: null, thru: '—', position: '—', status: 'active' as const, rounds: [null,null,null,null], par }
-          const displayRounds = [...(g.rounds ?? [null, null, null, null])]
+          const dr = [...(g.rounds ?? [null, null, null, null])]
+          if (g.status === 'cut' || g.status === 'wd') { dr[2] = dr[0]; dr[3] = dr[1] }
+          return { ...g, adjScore: g.score ?? 0, displayRounds: dr }
+        })).map((g: any) => {
+          // Ensure displayRounds always has cut/wd rounds repeated, regardless of source
           if (g.status === 'cut' || g.status === 'wd') {
-            displayRounds[2] = displayRounds[0]
-            displayRounds[3] = displayRounds[1]
+            const dr = [...(g.displayRounds ?? g.rounds ?? [null,null,null,null])]
+            dr[2] = dr[0]; dr[3] = dr[1]
+            return { ...g, displayRounds: dr }
           }
-          return { ...g, adjScore: g.score ?? 0, displayRounds }
+          return g
         })
 
         // Per-round totals across all 4 golfers
