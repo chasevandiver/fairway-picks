@@ -387,7 +387,12 @@ function PicksTab({ standings, pickMap, liveData, tournament }: {
         const golferRows = s?.golfers ?? playerPicks.map((name) => {
           const g = liveData.find((d) => d.name.toLowerCase() === name.toLowerCase())
             ?? { name, score: null, today: null, thru: '—', position: '—', status: 'active' as const, rounds: [null,null,null,null], par }
-          return { ...g, adjScore: g.score ?? 0, displayRounds: g.rounds }
+          const displayRounds = [...(g.rounds ?? [null, null, null, null])]
+          if (g.status === 'cut' || g.status === 'wd') {
+            displayRounds[2] = displayRounds[0]
+            displayRounds[3] = displayRounds[1]
+          }
+          return { ...g, adjScore: g.score ?? 0, displayRounds }
         })
 
         // Per-round totals across all 4 golfers
