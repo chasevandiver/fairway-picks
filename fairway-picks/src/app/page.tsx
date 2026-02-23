@@ -11,6 +11,48 @@ import type { Tournament, Pick, GolferScore, PlayerStanding, SeasonMoney } from 
 
 const PICKS_PER_PLAYER = 4
 
+// ─── 2026 PGA Tour Schedule ───────────────────────────────────────────────────
+const PGA_SCHEDULE = [
+  { name: 'The Sentry',                        course: 'Plantation Course at Kapalua',       date: '2026-01-08' },
+  { name: 'Sony Open in Hawaii',                course: 'Waialae Country Club',               date: '2026-01-15' },
+  { name: 'The American Express',               course: 'PGA West / La Quinta CC',            date: '2026-01-22' },
+  { name: 'Farmers Insurance Open',             course: 'Torrey Pines Golf Course',           date: '2026-01-29' },
+  { name: 'AT&T Pebble Beach Pro-Am',           course: 'Pebble Beach Golf Links',            date: '2026-02-05' },
+  { name: 'WM Phoenix Open',                    course: 'TPC Scottsdale',                     date: '2026-02-12' },
+  { name: 'Genesis Invitational',               course: 'Riviera Country Club',               date: '2026-02-19' },
+  { name: 'Puerto Rico Open',                   course: 'Grand Reserve Country Club',         date: '2026-02-26' },
+  { name: 'Mexico Open at Vidanta',             course: 'Vidanta Vallarta',                   date: '2026-02-26' },
+  { name: 'Cognizant Classic in The Palm Beaches', course: 'PGA National Resort',             date: '2026-02-26' },
+  { name: 'Arnold Palmer Invitational',         course: 'Bay Hill Club & Lodge',              date: '2026-03-05' },
+  { name: 'THE PLAYERS Championship',           course: 'TPC Sawgrass',                       date: '2026-03-12' },
+  { name: 'Valspar Championship',               course: 'Innisbrook Resort (Copperhead)',      date: '2026-03-19' },
+  { name: 'Texas Children\'s Houston Open',     course: 'Memorial Park Golf Course',          date: '2026-03-26' },
+  { name: 'Valero Texas Open',                  course: 'TPC San Antonio (Oaks)',             date: '2026-04-02' },
+  { name: 'Masters Tournament',                 course: 'Augusta National Golf Club',         date: '2026-04-09' },
+  { name: 'RBC Heritage',                       course: 'Harbour Town Golf Links',            date: '2026-04-16' },
+  { name: 'Zurich Classic of New Orleans',      course: 'TPC Louisiana',                      date: '2026-04-23' },
+  { name: 'Myrtle Beach Classic',               course: 'Dunes Golf and Beach Club',          date: '2026-04-30' },
+  { name: 'Wells Fargo Championship',           course: 'Quail Hollow Club',                  date: '2026-05-07' },
+  { name: 'AT&T Byron Nelson',                  course: 'TPC Craig Ranch',                    date: '2026-05-14' },
+  { name: 'PGA Championship',                   course: 'Aronimink Golf Club',                date: '2026-05-21' },
+  { name: 'Charles Schwab Challenge',           course: 'Colonial Country Club',              date: '2026-05-28' },
+  { name: 'the Memorial Tournament',            course: 'Muirfield Village Golf Club',        date: '2026-06-04' },
+  { name: 'RBC Canadian Open',                  course: 'Hamilton Golf & Country Club',       date: '2026-06-11' },
+  { name: 'U.S. Open',                          course: 'Oakmont Country Club',               date: '2026-06-18' },
+  { name: 'Travelers Championship',             course: 'TPC River Highlands',                date: '2026-06-25' },
+  { name: 'Rocket Mortgage Classic',            course: 'Detroit Golf Club',                  date: '2026-07-02' },
+  { name: 'John Deere Classic',                 course: 'TPC Deere Run',                      date: '2026-07-09' },
+  { name: 'The Open Championship',              course: 'Royal Portrush Golf Club',           date: '2026-07-16' },
+  { name: 'Barracuda Championship',             course: 'Tahoe Mountain Club',                date: '2026-07-16' },
+  { name: 'Genesis Scottish Open',              course: 'The Renaissance Club',               date: '2026-07-09' },
+  { name: '3M Open',                            course: 'TPC Twin Cities',                    date: '2026-07-23' },
+  { name: 'Olympic Men\'s Golf',                course: 'Real Club de Golf de Sevilla',       date: '2026-07-30' },
+  { name: 'Wyndham Championship',               course: 'Sedgefield Country Club',            date: '2026-08-06' },
+  { name: 'FedEx St. Jude Championship',        course: 'TPC Southwind',                      date: '2026-08-13' },
+  { name: 'BMW Championship',                   course: 'Aronimink Golf Club',                date: '2026-08-20' },
+  { name: 'TOUR Championship',                  course: 'East Lake Golf Club',                date: '2026-08-27' },
+]
+
 // ─── Login Screen ─────────────────────────────────────────────────────────────
 function LoginScreen({ onLogin }: { onLogin: (name: string) => void }) {
   return (
@@ -272,6 +314,50 @@ function LeaderboardTab({
 }
 
 // ─── Picks Tab ────────────────────────────────────────────────────────────────
+const ROUND_LABELS = ['R1', 'R2', 'R3', 'R4']
+
+function ScorecardRow({ g, par }: { g: any; par: number }) {
+  const rounds: (number | null)[] = g.displayRounds ?? g.rounds ?? [null, null, null, null]
+  const totalStrokes = rounds.reduce((sum: number, r: number | null) => sum + (r ?? 0), 0)
+  const played = rounds.filter((r: number | null) => r !== null).length
+  const totalPar = par * played
+
+  return (
+    <tr style={{ borderTop: '1px solid var(--border)' }}>
+      <td style={{ padding: '11px 18px', minWidth: 160 }}>
+        <div style={{ fontWeight: 500, fontSize: 13 }}>{g.name}</div>
+        <div style={{ display: 'flex', gap: 6, marginTop: 3 }}>
+          <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: 'var(--text-dim)' }}>#{g.position}</span>
+          {g.thru !== '—' && <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: 'var(--text-dim)' }}>· Thru {g.thru}</span>}
+          {g.status === 'cut' && <span className="badge badge-red" style={{ fontSize: 9, padding: '1px 6px' }}>CUT*</span>}
+          {g.status === 'wd'  && <span className="badge badge-gray" style={{ fontSize: 9, padding: '1px 6px' }}>WD*</span>}
+        </div>
+      </td>
+      {rounds.map((r: number | null, i: number) => {
+        const roundPar = r !== null ? r - par : null
+        return (
+          <td key={i} style={{ padding: '11px 10px', textAlign: 'center', borderLeft: '1px solid var(--border)' }}>
+            <div style={{ fontFamily: 'DM Mono', fontSize: 15, fontWeight: 500 }}>
+              {r ?? '—'}
+            </div>
+            <div className={`score ${scoreClass(roundPar)}`} style={{ fontSize: 10, marginTop: 1 }}>
+              {roundPar !== null ? toRelScore(roundPar) : ''}
+            </div>
+          </td>
+        )
+      })}
+      <td style={{ padding: '11px 14px', textAlign: 'center', borderLeft: '1px solid var(--border-bright)' }}>
+        <div style={{ fontFamily: 'DM Mono', fontSize: 15, fontWeight: 600 }}>
+          {played > 0 ? totalStrokes : '—'}
+        </div>
+        <div className={`score ${scoreClass(g.score)}`} style={{ fontSize: 10, marginTop: 1 }}>
+          {g.score !== null ? toRelScore(g.score) : ''}
+        </div>
+      </td>
+    </tr>
+  )
+}
+
 function PicksTab({ standings, pickMap, liveData, tournament }: {
   standings: PlayerStanding[]
   pickMap: Record<string, string[]>
@@ -283,50 +369,120 @@ function PicksTab({ standings, pickMap, liveData, tournament }: {
     <div className="empty-state card"><div className="empty-icon">🏌️</div><p>Draft hasn't happened yet.</p></div>
   )
 
+  const par = liveData[0]?.par ?? 72
+
   return (
     <div>
       <div className="page-header">
         <div className="page-title">Picks · {tournament.name}</div>
+        <div style={{ fontSize: 12, color: 'var(--text-dim)', fontFamily: 'DM Mono' }}>Par {par} · *CUT/WD rounds are repeated</div>
       </div>
-      <div className="picks-grid">
-        {PLAYERS.map((player) => {
-          const playerPicks = pickMap[player] || []
-          const s = standings.find((x) => x.player === player)
-          return (
-            <div key={player} className="player-card">
-              <div className="player-card-header">
-                <strong style={{ fontSize: 15 }}>{player}</strong>
-                <span className={`score ${scoreClass(s?.totalScore)}`} style={{ fontSize: 18 }}>
-                  {s ? toRelScore(s.totalScore) : '—'}
-                </span>
-              </div>
-              {playerPicks.length === 0 ? (
-                <div style={{ padding: '20px 18px', color: 'var(--text-dim)', fontSize: 13 }}>No picks yet</div>
-              ) : playerPicks.map((name) => {
-                const g = liveData.find((d) => d.name.toLowerCase() === name.toLowerCase())
-                  ?? { name, score: null, today: null, thru: '—', position: '—', status: 'active' as const }
-                return (
-                  <div key={name} className="golfer-row">
-                    <div>
-                      <div style={{ fontWeight: 500, fontSize: 13 }}>{g.name}</div>
-                      <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: 'var(--text-dim)' }}>Thru {g.thru}</div>
-                    </div>
-                    <div className={`score ${scoreClass(g.today)}`} style={{ fontSize: 13 }}>{toRelScore(g.today)}</div>
-                    <div className={`score ${scoreClass(g.score)}`} style={{ fontSize: 14 }}>{toRelScore(g.score)}</div>
-                    <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: 'var(--text-dim)' }}>#{g.position}</div>
+
+      {PLAYERS.map((player) => {
+        const playerPicks = pickMap[player] || []
+        const s = standings.find((x) => x.player === player)
+        if (playerPicks.length === 0) return null
+
+        // Build golfer rows with live data merged in
+        const golferRows = s?.golfers ?? playerPicks.map((name) => {
+          const g = liveData.find((d) => d.name.toLowerCase() === name.toLowerCase())
+            ?? { name, score: null, today: null, thru: '—', position: '—', status: 'active' as const, rounds: [null,null,null,null], par }
+          return { ...g, adjScore: g.score ?? 0, displayRounds: g.rounds }
+        })
+
+        // Per-round totals across all 4 golfers
+        const roundTotals: (number | null)[] = [0, 0, 0, 0].map((_, ri) => {
+          const vals = golferRows.map((g: any) => (g.displayRounds ?? g.rounds ?? [])[ri])
+          if (vals.every((v: any) => v === null)) return null
+          return vals.reduce((sum: number, v: any) => sum + (v ?? 0), 0)
+        })
+        const grandTotalStrokes = roundTotals.reduce((sum, v) => sum + (v ?? 0), 0)
+        const playedRounds = roundTotals.filter(v => v !== null).length
+
+        return (
+          <div key={player} className="card mb-24">
+            <div className="card-header" style={{ background: 'var(--surface2)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div className="user-avatar" style={{ width: 36, height: 36, fontSize: 14 }}>{player[0]}</div>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: 16 }}>{player}</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-dim)', fontFamily: 'DM Mono' }}>
+                    {playerPicks.length} golfers picked
                   </div>
-                )
-              })}
-              {s && (s.hasWinner || s.hasTop3) && (
-                <div style={{ padding: '10px 18px', borderTop: '1px solid var(--border)', display: 'flex', gap: 6 }}>
-                  {s.hasWinner && <span className="badge badge-gold">🏆 Winner</span>}
-                  {s.hasTop3   && <span className="badge badge-green">Top 3</span>}
                 </div>
-              )}
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontFamily: 'DM Mono', fontSize: 24, fontWeight: 600 }} className={`score ${scoreClass(s?.totalScore)}`}>
+                  {s ? toRelScore(s.totalScore) : '—'}
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--text-dim)', fontFamily: 'DM Mono' }}>
+                  {grandTotalStrokes > 0 ? `${grandTotalStrokes} strokes` : ''}
+                </div>
+              </div>
             </div>
-          )
-        })}
-      </div>
+
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                    <th style={{ padding: '8px 18px', textAlign: 'left', fontFamily: 'DM Mono', fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-dim)', fontWeight: 500 }}>
+                      Golfer
+                    </th>
+                    {ROUND_LABELS.map((r) => (
+                      <th key={r} style={{ padding: '8px 10px', textAlign: 'center', fontFamily: 'DM Mono', fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-dim)', fontWeight: 500, borderLeft: '1px solid var(--border)', minWidth: 60 }}>
+                        {r}
+                      </th>
+                    ))}
+                    <th style={{ padding: '8px 14px', textAlign: 'center', fontFamily: 'DM Mono', fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-dim)', fontWeight: 500, borderLeft: '1px solid var(--border-bright)', minWidth: 70 }}>
+                      Total
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {golferRows.map((g: any) => (
+                    <ScorecardRow key={g.name} g={g} par={par} />
+                  ))}
+
+                  {/* Team totals row */}
+                  <tr style={{ borderTop: '2px solid var(--border-bright)', background: 'var(--surface2)' }}>
+                    <td style={{ padding: '12px 18px', fontFamily: 'DM Mono', fontSize: 11, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>
+                      Combined
+                    </td>
+                    {roundTotals.map((rt, i) => {
+                      const rtPar = rt !== null ? rt - (par * 4) : null
+                      return (
+                        <td key={i} style={{ padding: '12px 10px', textAlign: 'center', borderLeft: '1px solid var(--border)' }}>
+                          <div style={{ fontFamily: 'DM Mono', fontSize: 15, fontWeight: 700 }}>
+                            {rt ?? '—'}
+                          </div>
+                          <div className={`score ${scoreClass(rtPar)}`} style={{ fontSize: 10, marginTop: 1 }}>
+                            {rtPar !== null ? toRelScore(rtPar) : ''}
+                          </div>
+                        </td>
+                      )
+                    })}
+                    <td style={{ padding: '12px 14px', textAlign: 'center', borderLeft: '1px solid var(--border-bright)' }}>
+                      <div style={{ fontFamily: 'DM Mono', fontSize: 16, fontWeight: 700 }}>
+                        {grandTotalStrokes > 0 ? grandTotalStrokes : '—'}
+                      </div>
+                      <div className={`score ${scoreClass(s?.totalScore)}`} style={{ fontSize: 10, marginTop: 1 }}>
+                        {s ? toRelScore(s.totalScore) : ''}
+                      </div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            {s && (s.hasWinner || s.hasTop3) && (
+              <div style={{ padding: '10px 18px', borderTop: '1px solid var(--border)', display: 'flex', gap: 6, background: 'var(--surface2)' }}>
+                {s.hasWinner && <span className="badge badge-gold">🏆 Has Tournament Winner</span>}
+                {s.hasTop3   && <span className="badge badge-green">🔝 Has Top 3 Golfer</span>}
+              </div>
+            )}
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -619,18 +775,20 @@ function AdminTab({
   onClearTournament: () => Promise<void>
   onClearPicks: () => Promise<void>
 }) {
-  const [form, setForm] = useState({ name: '', course: '', date: '' })
+  const [selectedEvent, setSelectedEvent] = useState('')
   const [draftOrderInput, setDraftOrderInput] = useState(PLAYERS.join(', '))
   const [saving, setSaving] = useState(false)
   const [finalizing, setFinalizing] = useState(false)
   const [msg, setMsg] = useState('')
 
+  const selectedTournament = PGA_SCHEDULE.find((e) => e.name === selectedEvent)
+
   const handleSetup = async () => {
-    if (!form.name) return
+    if (!selectedTournament) return
     setSaving(true)
     const orderArr = draftOrderInput.split(',').map((s) => s.trim()).filter(Boolean)
-    await onSetupTournament({ ...form, draft_order: orderArr })
-    setForm({ name: '', course: '', date: '' })
+    await onSetupTournament({ ...selectedTournament, draft_order: orderArr })
+    setSelectedEvent('')
     setMsg('✅ Tournament activated!')
     setSaving(false)
     setTimeout(() => setMsg(''), 3000)
@@ -644,6 +802,11 @@ function AdminTab({
     setTimeout(() => setMsg(''), 4000)
   }
 
+  // Group schedule into upcoming vs past
+  const today = new Date().toISOString().slice(0, 10)
+  const upcoming = PGA_SCHEDULE.filter((e) => e.date >= today)
+  const past = PGA_SCHEDULE.filter((e) => e.date < today)
+
   return (
     <div>
       <div className="page-header">
@@ -655,32 +818,51 @@ function AdminTab({
       <div className="grid-2">
         <div>
           <div className="card mb-24">
-            <div className="card-header"><div className="card-title">New Tournament</div></div>
+            <div className="card-header"><div className="card-title">Activate Tournament</div></div>
             <div className="card-body">
               <div className="form-group">
-                <label className="form-label">Tournament Name</label>
-                <input className="form-input" placeholder="e.g. The Players Championship"
-                  value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
+                <label className="form-label">Select Event</label>
+                <select
+                  className="form-select"
+                  value={selectedEvent}
+                  onChange={(e) => setSelectedEvent(e.target.value)}
+                >
+                  <option value="">— Pick a tournament —</option>
+                  {upcoming.length > 0 && (
+                    <optgroup label="📅 Upcoming">
+                      {upcoming.map((e) => (
+                        <option key={e.name} value={e.name}>{e.name}</option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {past.length > 0 && (
+                    <optgroup label="✓ Past">
+                      {past.map((e) => (
+                        <option key={e.name} value={e.name}>{e.name}</option>
+                      ))}
+                    </optgroup>
+                  )}
+                </select>
               </div>
-              <div className="form-group">
-                <label className="form-label">Course</label>
-                <input className="form-input" placeholder="e.g. TPC Sawgrass"
-                  value={form.course} onChange={(e) => setForm((f) => ({ ...f, course: e.target.value }))} />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Date</label>
-                <input className="form-input" type="date"
-                  value={form.date} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))} />
-              </div>
+
+              {selectedTournament && (
+                <div className="alert alert-gold" style={{ marginBottom: 16 }}>
+                  <div>
+                    <div style={{ fontWeight: 600 }}>{selectedTournament.name}</div>
+                    <div style={{ fontSize: 12, marginTop: 2 }}>{selectedTournament.course} · {selectedTournament.date}</div>
+                  </div>
+                </div>
+              )}
+
               <div className="form-group">
                 <label className="form-label">Draft Order (comma-separated)</label>
                 <input className="form-input"
                   value={draftOrderInput} onChange={(e) => setDraftOrderInput(e.target.value)} />
                 <div style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 6 }}>
-                  Snake draft will reverse on even rounds. First player listed picks first.
+                  Snake draft reverses on even rounds. First player listed picks first.
                 </div>
               </div>
-              <button className="btn btn-green" onClick={handleSetup} disabled={saving || !form.name}>
+              <button className="btn btn-green" onClick={handleSetup} disabled={saving || !selectedTournament}>
                 {saving ? '⏳ Saving…' : '⛳ Activate Tournament'}
               </button>
             </div>
@@ -801,7 +983,7 @@ export default function App() {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   const [bootstrapped, setBootstrapped] = useState(false)
 
-  const isAdmin = currentPlayer === 'Eric' // Change to whoever should be admin
+  const isAdmin = ['Eric', 'Chase'].includes(currentPlayer ?? '')
 
   // ── Load from localStorage on mount ──
   useEffect(() => {
