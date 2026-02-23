@@ -89,7 +89,7 @@ const NAV_ITEMS = [
 ]
 
 function Sidebar({
-  currentPlayer, tab, setTab, isAdmin, onLogout, tournament
+  currentPlayer, tab, setTab, isAdmin, onLogout, tournament, isOpen, onClose
 }: {
   currentPlayer: string
   tab: string
@@ -97,9 +97,27 @@ function Sidebar({
   isAdmin: boolean
   onLogout: () => void
   tournament: Tournament | null
+  isOpen: boolean
+  onClose: () => void
 }) {
   return (
-    <div className="sidebar">
+    <>
+      {isOpen && (
+        <div
+          onClick={onClose}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 99 }}
+        />
+      )}
+    <div className={`sidebar${isOpen ? ' open' : ''}`}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 16px 0', marginBottom: -8 }}>
+        <div style={{ display: 'none' }} className="mobile-only-close" />
+        <button
+          onClick={onClose}
+          style={{ marginLeft: 'auto', background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 22, lineHeight: 1, display: 'none' }}
+          className="sidebar-close-btn"
+          aria-label="Close menu"
+        >✕</button>
+      </div>
       <div className="sidebar-logo">
         <h1>Fairway <span>Picks</span></h1>
         <p>PGA Tour Pick'em</p>
@@ -111,7 +129,7 @@ function Sidebar({
           <button
             key={item.key}
             className={`nav-item ${tab === item.key ? 'active' : ''}`}
-            onClick={() => setTab(item.key)}
+            onClick={() => { setTab(item.key); onClose() }}
           >
             <span className="nav-icon">{item.icon}</span>
             {item.label}
@@ -146,6 +164,7 @@ function Sidebar({
         </div>
       </div>
     </div>
+    </>
   )
 }
 
@@ -794,7 +813,7 @@ function AdminTab({
   onClearPicks: () => Promise<void>
 }) {
   const [selectedEvent, setSelectedEvent] = useState('')
-  const [draftOrderInput, setDraftOrderInput] = useState(PLAYERS.join(', '))
+  const [participants, setParticipants] = useState<string[]>(PLAYERS as unknown as string[])
   const [saving, setSaving] = useState(false)
   const [finalizing, setFinalizing] = useState(false)
   const [msg, setMsg] = useState('')
@@ -802,10 +821,9 @@ function AdminTab({
   const selectedTournament = PGA_SCHEDULE.find((e) => e.name === selectedEvent)
 
   const handleSetup = async () => {
-    if (!selectedTournament) return
+    if (!selectedTournament || participants.length < 2) return
     setSaving(true)
-    const orderArr = draftOrderInput.split(',').map((s) => s.trim()).filter(Boolean)
-    await onSetupTournament({ ...selectedTournament, draft_order: orderArr })
+    await onSetupTournament({ ...selectedTournament, draft_order: participants })
     setSelectedEvent('')
     setMsg('✅ Tournament activated!')
     setSaving(false)
@@ -873,14 +891,39 @@ function AdminTab({
               )}
 
               <div className="form-group">
-                <label className="form-label">Draft Order (comma-separated)</label>
-                <input className="form-input"
-                  value={draftOrderInput} onChange={(e) => setDraftOrderInput(e.target.value)} />
-                <div style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 6 }}>
-                  Snake draft reverses on even rounds. First player listed picks first.
+                <label className="form-label">Participants This Week</label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 4 }}>
+                  {(PLAYERS as unknown as string[]).map((p) => {
+                    const checked = participants.includes(p)
+                    return (
+                      <button
+                        key={p}
+                        type="button"
+                        onClick={() => setParticipants(prev =>
+                          prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p]
+                        )}
+                        style={{
+                          padding: '6px 14px',
+                          borderRadius: '100px',
+                          border: `1px solid ${checked ? 'rgba(74,222,128,0.4)' : 'var(--border)'}`,
+                          background: checked ? 'var(--green-dim)' : 'var(--surface2)',
+                          color: checked ? 'var(--green)' : 'var(--text-dim)',
+                          cursor: 'pointer',
+                          fontSize: 13,
+                          fontWeight: 600,
+                          transition: 'all 0.15s',
+                        }}
+                      >
+                        {checked ? '✓ ' : ''}{p}
+                      </button>
+                    )
+                  })}
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 8 }}>
+                  {participants.length} players · snake draft order: {participants.join(' → ')}
                 </div>
               </div>
-              <button className="btn btn-green" onClick={handleSetup} disabled={saving || !selectedTournament}>
+              <button className="btn btn-green" onClick={handleSetup} disabled={saving || !selectedTournament || participants.length < 2}>
                 {saving ? '⏳ Saving…' : '⛳ Activate Tournament'}
               </button>
             </div>
@@ -1000,6 +1043,7 @@ export default function App() {
   const [loading, setLoading] = useState(false)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   const [bootstrapped, setBootstrapped] = useState(false)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
 
   const isAdmin = ['Eric', 'Chase'].includes(currentPlayer ?? '')
 
@@ -1057,7 +1101,7 @@ export default function App() {
     if (!tournament) return
     setLoading(true)
     try {
-      const res = await fetch(`/api/scores${tournament?.name ? '?tournament=' + encodeURIComponent(tournament.name) : ''}`)
+      const res = await fetch('/api/scores')
       const data: GolferScore[] = await res.json()
       setLiveData(data)
       setLastUpdated(new Date())
@@ -1180,7 +1224,16 @@ export default function App() {
         isAdmin={isAdmin}
         onLogout={handleLogout}
         tournament={tournament}
+        isOpen={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
       />
+      <button
+        className="hamburger-btn"
+        onClick={() => setSidebarOpen(true)}
+        aria-label="Open menu"
+      >
+        <span /><span /><span />
+      </button>
       <main className="main-content">
         {tab === 'live'    && <LeaderboardTab tournament={tournament} standings={standings} liveData={liveData} pickMap={pickMap} loading={loading} lastUpdated={lastUpdated} onRefresh={fetchScores} money={weekMoney} />}
         {tab === 'picks'   && <PicksTab standings={standings} pickMap={pickMap} liveData={liveData} tournament={tournament} />}
