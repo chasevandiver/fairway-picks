@@ -56,7 +56,8 @@ export function computeStandings(
       if (g.status === 'wd' && g.score !== null) adjScore = g.score * 2
 
       // Build display rounds: for cut/wd, fill in repeated rounds
-      const displayRounds = [...(g.rounds || [null, null, null, null])]
+      const gAny = g as any
+      const displayRounds = [...(gAny.rounds || [null, null, null, null])]
       if (g.status === 'cut' || g.status === 'wd') {
         displayRounds[2] = displayRounds[0]
         displayRounds[3] = displayRounds[1]
