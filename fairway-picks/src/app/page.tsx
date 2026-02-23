@@ -396,7 +396,7 @@ function PicksTab({ standings, pickMap, liveData, tournament }: {
           if (vals.every((v: any) => v === null)) return null
           return vals.reduce((sum: number, v: any) => sum + (v ?? 0), 0)
         })
-        const grandTotalStrokes = roundTotals.reduce((sum, v) => sum + (v ?? 0), 0)
+        const grandTotalStrokes = roundTotals.reduce((sum: number, v) => sum + (v ?? 0), 0)
         const playedRounds = roundTotals.filter(v => v !== null).length
 
         return (
