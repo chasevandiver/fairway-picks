@@ -1057,7 +1057,7 @@ export default function App() {
     if (!tournament) return
     setLoading(true)
     try {
-      const res = await fetch('/api/scores')
+      const res = await fetch(`/api/scores${tournament?.name ? '?tournament=' + encodeURIComponent(tournament.name) : ''}`)
       const data: GolferScore[] = await res.json()
       setLiveData(data)
       setLastUpdated(new Date())
