@@ -632,5 +632,71 @@ body {
   .sidebar.open { transform: translateX(0); }
   .hamburger-btn { display: flex; }
   .sidebar-close-btn { display: block; }
-  .main-content { margin-left: 0; padding: 20px; padding-top: 64px; }
+  .main-content { margin-left: 0; padding: 12px; padding-top: 64px; }
+
+  /* Page headers */
+  .page-header { margin-bottom: 16px; gap: 8px; }
+  .page-title { font-size: 1.4rem; }
+
+  /* Stats row — 2 columns on mobile */
+  .stats-row { grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+  .stat-box { padding: 14px 10px; }
+  .stat-val { font-size: 20px; }
+
+  /* Cards */
+  .card + .card { margin-top: 12px; }
+  .card-header { padding: 12px 14px; gap: 8px; }
+  .card-body { padding: 14px; }
+
+  /* ── Main leaderboard & history tables ── */
+  /* Wrap tables so they scroll horizontally on small screens */
+  .card > .table,
+  .card > div > .table {
+    font-size: 12px;
+  }
+  .table th { padding: 0 10px 10px; font-size: 9px; }
+  .table td { padding: 10px; font-size: 12px; }
+  .score { font-size: 12px; }
+  .badge { font-size: 10px; padding: 2px 7px; }
+
+  /* Hide lower-priority columns on leaderboard */
+  /* Player Standings: hide "Tour Win?" and "Top 3?" columns (cols 4 & 5) */
+  .table th:nth-child(4),
+  .table td:nth-child(4),
+  .table th:nth-child(5),
+  .table td:nth-child(5) { display: none; }
+
+  /* ── Picks scorecard table ── */
+  /* The scorecard tables are in overflowX:auto wrappers already in JSX,
+     but we make the cells more compact */
+  .golfer-row { padding: 8px 10px; gap: 6px; }
+
+  /* ── Money grid — 2 columns ── */
+  .money-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
+  .money-card { padding: 14px 10px; }
+  .money-amount { font-size: 22px; }
+
+  /* ── Draft ── */
+  .draft-picks-flow { gap: 4px; }
+  .draft-chip { padding: 4px 10px; font-size: 11px; }
+  .golfer-list { max-height: 280px; }
+
+  /* ── Grid helpers ── */
+  .grid-2 { grid-template-columns: 1fr; gap: 12px; }
+  .mb-24 { margin-bottom: 14px; }
+
+  /* ── Login card ── */
+  .login-card { padding: 28px 20px; }
+  .login-logo h1 { font-size: 1.8rem; }
+}
+
+/* ── Extra small (iPhone SE, 375px) ── */
+@media (max-width: 390px) {
+  .main-content { padding: 8px; padding-top: 60px; }
+  .stats-row { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .stat-val { font-size: 18px; }
+  .table th { padding: 0 6px 8px; font-size: 9px; }
+  .table td { padding: 8px 6px; font-size: 11px; }
+  .money-amount { font-size: 19px; }
+  .page-title { font-size: 1.2rem; }
 }
