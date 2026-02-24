@@ -97,27 +97,15 @@ function Sidebar({
   isAdmin: boolean
   onLogout: () => void
   tournament: Tournament | null
-  isOpen: boolean
-  onClose: () => void
+  isOpen?: boolean
+  onClose?: () => void
 }) {
+  const close = () => onClose?.()
   return (
     <>
-      {isOpen && (
-        <div
-          onClick={onClose}
-          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 99 }}
-        />
-      )}
-    <div className={`sidebar${isOpen ? ' open' : ''}`}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 16px 0', marginBottom: -8 }}>
-        <div style={{ display: 'none' }} className="mobile-only-close" />
-        <button
-          onClick={onClose}
-          style={{ marginLeft: 'auto', background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 22, lineHeight: 1, display: 'none' }}
-          className="sidebar-close-btn"
-          aria-label="Close menu"
-        >✕</button>
-      </div>
+      {isOpen && <div onClick={close} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.55)', zIndex:98 }} />}
+      <div className={`sidebar${isOpen ? ' open' : ''}`}>
+      <button onClick={close} className="sidebar-close-btn" aria-label="Close menu">✕</button>
       <div className="sidebar-logo">
         <h1>Fairway <span>Picks</span></h1>
         <p>PGA Tour Pick'em</p>
@@ -129,7 +117,7 @@ function Sidebar({
           <button
             key={item.key}
             className={`nav-item ${tab === item.key ? 'active' : ''}`}
-            onClick={() => { setTab(item.key); onClose() }}
+            onClick={() => { setTab(item.key); close() }}
           >
             <span className="nav-icon">{item.icon}</span>
             {item.label}
@@ -813,7 +801,7 @@ function AdminTab({
   onClearPicks: () => Promise<void>
 }) {
   const [selectedEvent, setSelectedEvent] = useState('')
-  const [participants, setParticipants] = useState<string[]>(PLAYERS as unknown as string[])
+  const [participants, setParticipants] = useState<string[]>([...PLAYERS])
   const [saving, setSaving] = useState(false)
   const [finalizing, setFinalizing] = useState(false)
   const [msg, setMsg] = useState('')
@@ -891,36 +879,26 @@ function AdminTab({
               )}
 
               <div className="form-group">
-                <label className="form-label">Participants This Week</label>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 4 }}>
-                  {(PLAYERS as unknown as string[]).map((p) => {
-                    const checked = participants.includes(p)
+                <label className="form-label">Who is Participating?</label>
+                <div style={{ display:'flex', flexWrap:'wrap', gap:8, marginTop:6 }}>
+                  {PLAYERS.map((p) => {
+                    const on = participants.includes(p)
                     return (
-                      <button
-                        key={p}
-                        type="button"
-                        onClick={() => setParticipants(prev =>
-                          prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p]
-                        )}
+                      <button key={p} type="button"
+                        onClick={() => setParticipants(prev => on ? prev.filter(x=>x!==p) : [...prev,p])}
                         style={{
-                          padding: '6px 14px',
-                          borderRadius: '100px',
-                          border: `1px solid ${checked ? 'rgba(74,222,128,0.4)' : 'var(--border)'}`,
-                          background: checked ? 'var(--green-dim)' : 'var(--surface2)',
-                          color: checked ? 'var(--green)' : 'var(--text-dim)',
-                          cursor: 'pointer',
-                          fontSize: 13,
-                          fontWeight: 600,
-                          transition: 'all 0.15s',
+                          padding:'7px 16px', borderRadius:'100px', cursor:'pointer',
+                          border:`1px solid ${on ? 'rgba(74,222,128,0.4)' : 'var(--border)'}`,
+                          background: on ? 'var(--green-dim)' : 'var(--surface2)',
+                          color: on ? 'var(--green)' : 'var(--text-dim)',
+                          fontSize:13, fontWeight:600, transition:'all 0.15s',
                         }}
-                      >
-                        {checked ? '✓ ' : ''}{p}
-                      </button>
+                      >{on ? '✓ ' : ''}{p}</button>
                     )
                   })}
                 </div>
-                <div style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 8 }}>
-                  {participants.length} players · snake draft order: {participants.join(' → ')}
+                <div style={{ fontSize:12, color:'var(--text-dim)', marginTop:8, fontFamily:'DM Mono' }}>
+                  {participants.length} players · draft: {participants.join(' → ')}
                 </div>
               </div>
               <button className="btn btn-green" onClick={handleSetup} disabled={saving || !selectedTournament || participants.length < 2}>
@@ -1217,6 +1195,9 @@ export default function App() {
 
   return (
     <div className="app-shell">
+      <button className="hamburger-btn" onClick={() => setSidebarOpen(true)} aria-label="Open menu">
+        <span /><span /><span />
+      </button>
       <Sidebar
         currentPlayer={currentPlayer}
         tab={tab}
@@ -1227,13 +1208,6 @@ export default function App() {
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
       />
-      <button
-        className="hamburger-btn"
-        onClick={() => setSidebarOpen(true)}
-        aria-label="Open menu"
-      >
-        <span /><span /><span />
-      </button>
       <main className="main-content">
         {tab === 'live'    && <LeaderboardTab tournament={tournament} standings={standings} liveData={liveData} pickMap={pickMap} loading={loading} lastUpdated={lastUpdated} onRefresh={fetchScores} money={weekMoney} />}
         {tab === 'picks'   && <PicksTab standings={standings} pickMap={pickMap} liveData={liveData} tournament={tournament} />}
