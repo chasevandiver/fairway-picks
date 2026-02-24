@@ -1488,7 +1488,7 @@ const ALL_STATS = [
   { player: 'Hayden',  first: 28, second: 26, third: 30, majors: 2.5, winners: 12, top3: 24, cut: 65 },
   { player: 'Andrew',  first: 18, second: 27, third: 14, majors: 2,   winners: 14, top3: 22, cut: 61 },
   { player: 'Brennan', first: 13, second: 7,  third: 7,  majors: 2.5, winners: 6,  top3: 9,  cut: 19 },
-  { player: 'Eric',    first: 1,  second: 0,  third: 0,  majors: 0,   winners: 0,  top3: 0,  cut: 0  },
+  { player: 'Eric',    first: 0,  second: 0,  third: 0,  majors: 0,   winners: 0,  top3: 0,  cut: 0  },
 ]
 
 function StatsTab({ history }: { history: any[] }) {
