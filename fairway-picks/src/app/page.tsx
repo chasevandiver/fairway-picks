@@ -2623,7 +2623,6 @@ export default function App() {
           </button>
         ))}
       </nav>
-      </main>
     </div>
   )
 }
