@@ -226,6 +226,7 @@ function LeaderboardTab({
               <span className="badge badge-indigo">🔝 Top 3</span>
             </div>
           </div>
+          <div style={{ overflowX: 'auto' }}>
           <table className="table">
             <thead>
               <tr>
@@ -258,6 +259,7 @@ function LeaderboardTab({
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
 
@@ -270,6 +272,7 @@ function LeaderboardTab({
               <span style={{ fontFamily: 'DM Mono', fontSize: 12, color: 'var(--text-dim)' }}>ESPN · Live</span>
             </div>
           </div>
+          <div style={{ overflowX: 'auto' }}>
           <table className="table">
             <thead>
               <tr>
@@ -307,6 +310,7 @@ function LeaderboardTab({
               })}
             </tbody>
           </table>
+          </div>
         </div>
       )}
     </div>
@@ -1000,6 +1004,7 @@ function HistoryTab({ history, isAdmin, onDeleteTournament, onEditResult }: {
               </button>
             )}
           </div>
+          <div style={{ overflowX: 'auto' }}>
           <table className="table">
             <thead>
               <tr>
@@ -1067,6 +1072,7 @@ function HistoryTab({ history, isAdmin, onDeleteTournament, onEditResult }: {
               })}
             </tbody>
           </table>
+          </div>
         </div>
       ))}
     </div>
