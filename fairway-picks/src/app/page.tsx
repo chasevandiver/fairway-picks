@@ -1006,8 +1006,9 @@ function AdminTab({
 }
 
 // ─── History Tab ──────────────────────────────────────────────────────────────
-function HistoryTab({ history, isAdmin, onDeleteTournament, onEditResult }: {
+function HistoryTab({ history, golferHistory, isAdmin, onDeleteTournament, onEditResult }: {
   history: any[]
+  golferHistory: any[]
   isAdmin: boolean
   onDeleteTournament: (tournamentId: string, moneyByPlayer: Record<string, number>) => Promise<void>
   onEditResult: (tournamentId: string, playerName: string, field: 'total_score' | 'money_won', value: number) => Promise<void>
@@ -1015,6 +1016,8 @@ function HistoryTab({ history, isAdmin, onDeleteTournament, onEditResult }: {
   const [editing, setEditing] = useState<{ tid: string; player: string; field: string } | null>(null)
   const [editVal, setEditVal] = useState('')
   const [deleting, setDeleting] = useState<string | null>(null)
+  const [subtab, setSubtab] = useState<'tournaments' | 'golfers'>('tournaments')
+  const [selectedPlayer, setSelectedPlayer] = useState<string>(PLAYERS[0])
 
   if (!history.length) return (
     <div className="empty-state card">
@@ -1049,7 +1052,158 @@ function HistoryTab({ history, isAdmin, onDeleteTournament, onEditResult }: {
         <div className="page-title">History</div>
         {isAdmin && <div style={{ fontSize: 12, color: 'var(--text-dim)', fontFamily: 'DM Mono' }}>Click any score or $ to edit</div>}
       </div>
-      {history.map((h: any, i: number) => (
+
+      {/* Subtab toggle */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 24 }}>
+        {(['tournaments', 'golfers'] as const).map(t => (
+          <button key={t} onClick={() => setSubtab(t)} style={{
+            padding: '8px 20px', borderRadius: 8, border: '1px solid',
+            fontFamily: 'DM Mono', fontSize: 12, fontWeight: 600, cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.06em',
+            background: subtab === t ? 'var(--green-dim)' : 'var(--surface2)',
+            borderColor: subtab === t ? 'rgba(74,222,128,0.3)' : 'var(--border)',
+            color: subtab === t ? 'var(--green)' : 'var(--text-dim)',
+          }}>
+            {t === 'tournaments' ? '📅 Tournaments' : '🏌️ Golfer Log'}
+          </button>
+        ))}
+      </div>
+
+      {subtab === 'golfers' && (
+        <div>
+          {/* Player selector */}
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 24 }}>
+            {PLAYERS.map(p => (
+              <button key={p} onClick={() => setSelectedPlayer(p)} style={{
+                padding: '8px 18px', borderRadius: 8, border: '1px solid',
+                fontFamily: 'Sora', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                background: selectedPlayer === p ? 'var(--green-dim)' : 'var(--surface)',
+                borderColor: selectedPlayer === p ? 'rgba(74,222,128,0.3)' : 'var(--border)',
+                color: selectedPlayer === p ? 'var(--green)' : 'var(--text-dim)',
+              }}>
+                {p}
+              </button>
+            ))}
+          </div>
+
+          {/* Golfer log for selected player */}
+          {(() => {
+            const playerPicks = golferHistory.filter((g: any) => g.player_name === selectedPlayer)
+            if (playerPicks.length === 0) return (
+              <div className="empty-state card"><div className="empty-icon">🏌️</div><p>No golfer history yet for {selectedPlayer}. Finalize a tournament to record results.</p></div>
+            )
+
+            // Group by golfer name, sort by most picked
+            const byGolfer: Record<string, any[]> = {}
+            for (const g of playerPicks) {
+              if (!byGolfer[g.golfer_name]) byGolfer[g.golfer_name] = []
+              byGolfer[g.golfer_name].push(g)
+            }
+            const sortedGolfers = Object.entries(byGolfer).sort((a, b) => b[1].length - a[1].length)
+
+            return (
+              <div>
+                {/* Summary cards */}
+                <div className="stats-row mb-24">
+                  <div className="stat-box">
+                    <div className="stat-val">{playerPicks.length}</div>
+                    <div className="stat-label">Total Picks</div>
+                  </div>
+                  <div className="stat-box">
+                    <div className="stat-val">{Object.keys(byGolfer).length}</div>
+                    <div className="stat-label">Unique Golfers</div>
+                  </div>
+                  <div className="stat-box">
+                    <div className="stat-val" style={{ color: 'var(--gold)' }}>
+                      {playerPicks.filter((g: any) => parseInt((g.position||'').replace(/^T/,'')) === 1).length}
+                    </div>
+                    <div className="stat-label">Tour Wins</div>
+                  </div>
+                  <div className="stat-box">
+                    <div className="stat-val" style={{ color: 'var(--red)' }}>
+                      {playerPicks.filter((g: any) => g.status === 'cut' || g.status === 'wd').length}
+                    </div>
+                    <div className="stat-label">Cuts</div>
+                  </div>
+                </div>
+
+                {/* Per-golfer cards */}
+                {sortedGolfers.map(([golferName, entries]) => {
+                  const avgScore = entries.reduce((s: number, g: any) => s + (g.adj_score ?? 0), 0) / entries.length
+                  return (
+                    <div key={golferName} className="card mb-24">
+                      <div className="card-header" style={{ background: 'var(--surface2)' }}>
+                        <div>
+                          <div style={{ fontWeight: 700, fontSize: 16 }}>{golferName}</div>
+                          <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: 'var(--text-dim)', marginTop: 2 }}>
+                            Picked {entries.length}× · Avg adj score {avgScore > 0 ? '+' : ''}{avgScore.toFixed(1)}
+                          </div>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          {entries.filter((g: any) => parseInt((g.position||'').replace(/^T/,'')) <= 3 && !isNaN(parseInt((g.position||'').replace(/^T/,'')))).length > 0 && (
+                            <span className="badge badge-gold">🏆 {entries.filter((g: any) => parseInt((g.position||'').replace(/^T/,'')) <= 3 && !isNaN(parseInt((g.position||'').replace(/^T/,'')))).length}× Top 3</span>
+                          )}
+                        </div>
+                      </div>
+                      <table className="table">
+                        <thead>
+                          <tr>
+                            <th>Tournament</th>
+                            <th>Date</th>
+                            <th>Finish</th>
+                            <th>Score</th>
+                            <th>R1</th>
+                            <th>R2</th>
+                            <th>R3</th>
+                            <th>R4</th>
+                            <th>Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {entries.map((g: any, i: number) => {
+                            const pos = g.position || '—'
+                            const posNum = parseInt(pos.replace(/^T/, ''))
+                            const isCut = g.status === 'cut' || g.status === 'wd'
+                            const rounds: (number|null)[] = g.rounds || [null,null,null,null]
+                            return (
+                              <tr key={i} className="row">
+                                <td>
+                                  <div style={{ fontWeight: 500 }}>{g.tournaments?.name || '—'}</div>
+                                  {g.tournaments?.is_major && <span className="badge badge-gold" style={{ marginTop: 3 }}>Major</span>}
+                                </td>
+                                <td><span style={{ fontFamily: 'DM Mono', fontSize: 12, color: 'var(--text-dim)' }}>{g.tournaments?.date || '—'}</span></td>
+                                <td>
+                                  <span className={`rank ${posNum === 1 ? 'rank-1' : posNum === 2 ? 'rank-2' : posNum === 3 ? 'rank-3' : ''}`}>
+                                    {isCut ? <span className="badge badge-red">✂ CUT</span> : pos}
+                                  </span>
+                                </td>
+                                <td><span className={`score ${scoreClass(g.adj_score)}`}>{toRelScore(g.adj_score)}</span></td>
+                                {rounds.map((r: number|null, ri: number) => (
+                                  <td key={ri}>
+                                    <span style={{ fontFamily: 'DM Mono', fontSize: 13, color: isCut && ri >= 2 ? 'var(--text-dim)' : 'var(--text)', fontStyle: isCut && ri >= 2 ? 'italic' : 'normal' }}>
+                                      {r ?? '—'}
+                                    </span>
+                                  </td>
+                                ))}
+                                <td>
+                                  {g.status === 'cut' && <span className="badge badge-red">CUT</span>}
+                                  {g.status === 'wd'  && <span className="badge badge-gray">WD</span>}
+                                  {g.status === 'active' && <span className="badge badge-green">Active</span>}
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )
+                })}
+              </div>
+            )
+          })()}
+        </div>
+      )}
+
+      {subtab === 'tournaments' && history.map((h: any, i: number) => (
         <div key={i} className="card">
           <div className="card-header">
             <div>
@@ -1228,6 +1382,7 @@ function HistoryTab({ history, isAdmin, onDeleteTournament, onEditResult }: {
 
         </div>
       ))}
+      }
     </div>
   )
 }
@@ -1582,6 +1737,7 @@ export default function App() {
   const [liveData, setLiveData] = useState<GolferScore[]>([])
   const [seasonMoney, setSeasonMoney] = useState<SeasonMoney[]>([])
   const [history, setHistory] = useState<any[]>([])
+  const [golferHistory, setGolferHistory] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   const [bootstrapped, setBootstrapped] = useState(false)
@@ -1653,6 +1809,13 @@ export default function App() {
       }
       setHistory(Object.values(grouped))
     }
+
+    // Load golfer-level history
+    const { data: gr } = await supabase
+      .from('golfer_results')
+      .select('*, tournaments(name, date, is_major)')
+      .order('created_at', { ascending: false })
+    if (gr) setGolferHistory(gr)
   }, [])
 
   useEffect(() => {
@@ -1751,6 +1914,24 @@ export default function App() {
     }))
     await supabase.from('results').upsert(resultRows, { onConflict: 'tournament_id,player_name' })
 
+    // Save individual golfer results
+    const golferRows: any[] = []
+    for (const s of standings) {
+      for (const g of s.golfers) {
+        golferRows.push({
+          tournament_id: tournament.id,
+          player_name: s.player,
+          golfer_name: g.name,
+          position: g.position ?? '—',
+          score: g.score ?? null,
+          adj_score: g.adjScore ?? null,
+          status: g.status ?? 'active',
+          rounds: g.rounds ?? [],
+        })
+      }
+    }
+    await supabase.from('golfer_results').upsert(golferRows, { onConflict: 'tournament_id,player_name,golfer_name' })
+
     // Update season money
     for (const player of PLAYERS) {
       const delta = money[player] || 0
@@ -1848,7 +2029,7 @@ export default function App() {
         {tab === 'picks'   && <PicksTab standings={standings} pickMap={pickMap} liveData={liveData} tournament={tournament} />}
         {tab === 'money'   && <MoneyTab seasonMoney={seasonMoney} weekMoney={weekMoney} tournament={tournament} history={history} />}
         {tab === 'draft'   && <DraftTab tournament={tournament} picks={picks} liveData={liveData} currentPlayer={currentPlayer} isAdmin={isAdmin} onPickMade={handlePickMade} />}
-        {tab === 'history' && <HistoryTab history={history} isAdmin={isAdmin} onDeleteTournament={handleDeleteTournament} onEditResult={handleEditResult} />}
+        {tab === 'history' && <HistoryTab history={history} golferHistory={golferHistory} isAdmin={isAdmin} onDeleteTournament={handleDeleteTournament} onEditResult={handleEditResult} />}
         {tab === 'stats'   && <StatsTab history={history} />}
         {tab === 'admin'   && isAdmin && <AdminTab tournament={tournament} standings={standings} weekMoney={weekMoney} onSetupTournament={handleSetupTournament} onFinalize={handleFinalize} onClearTournament={handleClearTournament} onClearPicks={handleClearPicks} />}
       </main>
