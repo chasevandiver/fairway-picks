@@ -1140,30 +1140,10 @@ const ALL_STATS = [
   { player: 'Eric',    first: 1,  second: 0,  third: 0,  majors: 0,   winners: 0,  top3: 0,  cut: 0  },
 ]
 
-function StatBar({ value, max, color }: { value: number; max: number; color: string }) {
-  const pct = max > 0 ? Math.round((value / max) * 100) : 0
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-      <div style={{ flex: 1, height: 6, background: 'var(--surface2)', borderRadius: 3, overflow: 'hidden' }}>
-        <div style={{ width: `${pct}%`, height: '100%', background: color, borderRadius: 3, transition: 'width 0.4s ease' }} />
-      </div>
-      <span style={{ fontFamily: 'DM Mono', fontSize: 12, color: 'var(--text-mid)', width: 28, textAlign: 'right' }}>{value}</span>
-    </div>
-  )
-}
-
 function StatsTab() {
   const [activeYear, setActiveYear] = useState<number | 'all'>('all')
   const years = [2020, 2021, 2022, 2023, 2024, 2025]
-  const filteredMajors = activeYear === 'all' ? MAJORS_HISTORY : MAJORS_HISTORY.filter(m => m.year === activeYear)
-
-  const maxFirst   = Math.max(...ALL_STATS.map(s => s.first))
-  const maxSecond  = Math.max(...ALL_STATS.map(s => s.second))
-  const maxThird   = Math.max(...ALL_STATS.map(s => s.third))
-  const maxWinners = Math.max(...ALL_STATS.map(s => s.winners))
-  const maxTop3    = Math.max(...ALL_STATS.map(s => s.top3))
-  const maxCut     = Math.max(...ALL_STATS.map(s => s.cut))
-  const maxMajors  = Math.max(...ALL_STATS.map(s => s.majors))
+  const maxCut = Math.max(...ALL_STATS.map(s => s.cut))
 
   // Major wins per player
   const majorsByPlayer: Record<string, number> = {}
@@ -1207,43 +1187,50 @@ function StatsTab() {
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
-              <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                {['Player','🥇 1st','🥈 2nd','🥉 3rd','🏆 Majors','🎯 Winners','🔝 Top 3 (no W)','✂️ Cuts'].map((h, i) => (
-                  <th key={i} style={{ padding: '8px 16px', textAlign: i === 0 ? 'left' : 'center', fontFamily: 'DM Mono', fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-dim)', fontWeight: 500, whiteSpace: 'nowrap' }}>{h}</th>
+              <tr style={{ borderBottom: '2px solid var(--border)' }}>
+                {[
+                  { label: 'Player', color: 'var(--text-dim)' },
+                  { label: '🥇 1st', color: 'var(--gold)' },
+                  { label: '🥈 2nd', color: '#c0c0c0' },
+                  { label: '🥉 3rd', color: '#cd7f32' },
+                  { label: '🏆 Majors', color: '#c084fc' },
+                  { label: '🎯 Winners', color: 'var(--green)' },
+                  { label: '🔝 Top 3', color: 'var(--indigo)' },
+                  { label: '✂️ Cuts', color: 'var(--red)' },
+                ].map((h, i) => (
+                  <th key={i} style={{ padding: '10px 20px', textAlign: i === 0 ? 'left' : 'center', fontFamily: 'DM Mono', fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: h.color, fontWeight: 600, whiteSpace: 'nowrap' }}>{h.label}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {ALL_STATS.map((s, i) => (
-                <tr key={s.player} style={{ borderTop: '1px solid var(--border)', background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.01)' }}>
-                  <td style={{ padding: '14px 16px' }}>
+                <tr key={s.player} style={{ borderTop: '1px solid var(--border)', background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.015)' }}>
+                  <td style={{ padding: '14px 20px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                       <div className="user-avatar" style={{ width: 30, height: 30, fontSize: 12 }}>{s.player[0]}</div>
                       <span style={{ fontWeight: 600 }}>{s.player}</span>
                     </div>
                   </td>
-                  <td style={{ padding: '14px 16px' }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                      <StatBar value={s.first} max={maxFirst} color="var(--gold)" />
-                    </div>
+                  <td style={{ padding: '14px 20px', textAlign: 'center' }}>
+                    <span style={{ fontFamily: 'DM Mono', fontSize: 16, fontWeight: 700, color: 'var(--gold)' }}>{s.first || '—'}</span>
                   </td>
-                  <td style={{ padding: '14px 16px' }}>
-                    <StatBar value={s.second} max={maxSecond} color="#c0c0c0" />
+                  <td style={{ padding: '14px 20px', textAlign: 'center' }}>
+                    <span style={{ fontFamily: 'DM Mono', fontSize: 16, fontWeight: 700, color: '#c0c0c0' }}>{s.second || '—'}</span>
                   </td>
-                  <td style={{ padding: '14px 16px' }}>
-                    <StatBar value={s.third} max={maxThird} color="#cd7f32" />
+                  <td style={{ padding: '14px 20px', textAlign: 'center' }}>
+                    <span style={{ fontFamily: 'DM Mono', fontSize: 16, fontWeight: 700, color: '#cd7f32' }}>{s.third || '—'}</span>
                   </td>
-                  <td style={{ padding: '14px 16px', textAlign: 'center' }}>
-                    <span style={{ fontFamily: 'DM Mono', fontSize: 15, fontWeight: 700, color: '#c084fc' }}>{s.majors || '—'}</span>
+                  <td style={{ padding: '14px 20px', textAlign: 'center' }}>
+                    <span style={{ fontFamily: 'DM Mono', fontSize: 16, fontWeight: 700, color: '#c084fc' }}>{s.majors || '—'}</span>
                   </td>
-                  <td style={{ padding: '14px 16px' }}>
-                    <StatBar value={s.winners} max={maxWinners} color="var(--green)" />
+                  <td style={{ padding: '14px 20px', textAlign: 'center' }}>
+                    <span style={{ fontFamily: 'DM Mono', fontSize: 16, fontWeight: 700, color: 'var(--green)' }}>{s.winners || '—'}</span>
                   </td>
-                  <td style={{ padding: '14px 16px' }}>
-                    <StatBar value={s.top3} max={maxTop3} color="var(--indigo)" />
+                  <td style={{ padding: '14px 20px', textAlign: 'center' }}>
+                    <span style={{ fontFamily: 'DM Mono', fontSize: 16, fontWeight: 700, color: 'var(--indigo)' }}>{s.top3 || '—'}</span>
                   </td>
-                  <td style={{ padding: '14px 16px' }}>
-                    <StatBar value={s.cut} max={maxCut} color="var(--red)" />
+                  <td style={{ padding: '14px 20px', textAlign: 'center' }}>
+                    <span style={{ fontFamily: 'DM Mono', fontSize: 16, fontWeight: 700, color: 'var(--red)' }}>{s.cut || '—'}</span>
                   </td>
                 </tr>
               ))}
@@ -1280,38 +1267,49 @@ function StatsTab() {
             ))}
           </div>
         </div>
-        <div style={{ padding: '20px 24px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 12 }}>
-          {filteredMajors.map((m, i) => {
-            const style = MAJOR_COLORS[m.name] ?? MAJOR_COLORS['The Open']
+        <div style={{ padding: '20px 24px', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 0 }}>
+          {/* Column headers */}
+          {(['Masters', 'PGA Championship', 'US Open', 'The Open'] as const).map(majorName => {
+            const s = MAJOR_COLORS[majorName]
+            const logos: Record<string, string> = { 'Masters': '🌲', 'PGA Championship': '🏆', 'US Open': '🦅', 'The Open': '🏴󠁧󠁢󠁳󠁣󠁴󠁿' }
             return (
-              <div key={i} style={{
-                background: style.bg,
-                border: `1px solid ${style.border}`,
-                borderRadius: 10,
-                padding: '14px 16px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 12,
+              <div key={majorName} style={{
+                padding: '10px 14px 14px',
+                borderBottom: `2px solid ${s.border}`,
+                textAlign: 'center',
               }}>
-                <div style={{ fontSize: 28, lineHeight: 1, flexShrink: 0 }}>{m.logo}</div>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 10, fontFamily: 'DM Mono', textTransform: 'uppercase', letterSpacing: '0.08em', color: style.text, marginBottom: 2 }}>
-                    {m.year} · {m.name}
-                  </div>
-                  <div style={{ fontWeight: 700, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {m.winner}
-                  </div>
-                </div>
-                <div style={{
-                  marginLeft: 'auto', width: 28, height: 28, borderRadius: '50%',
-                  background: style.border, display: 'flex', alignItems: 'center',
-                  justifyContent: 'center', fontWeight: 700, fontSize: 12, color: style.text, flexShrink: 0
-                }}>
-                  {m.winner[0]}
-                </div>
+                <div style={{ fontSize: 24, marginBottom: 4 }}>{logos[majorName]}</div>
+                <div style={{ fontFamily: 'DM Mono', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em', color: s.text, fontWeight: 600 }}>{majorName}</div>
               </div>
             )
           })}
+
+          {/* Rows by year */}
+          {(activeYear === 'all' ? years : [activeYear as number]).map(year => (
+            (['Masters', 'PGA Championship', 'US Open', 'The Open'] as const).map(majorName => {
+              const major = MAJORS_HISTORY.find(m => m.year === year && m.name === majorName)
+              const s = MAJOR_COLORS[majorName]
+              return (
+                <div key={`${year}-${majorName}`} style={{
+                  padding: '10px 14px',
+                  borderBottom: '1px solid var(--border)',
+                  borderRight: majorName !== 'The Open' ? '1px solid var(--border)' : undefined,
+                  background: major ? s.bg : 'transparent',
+                  minHeight: 64,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'center',
+                }}>
+                  <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: 'var(--text-dim)', marginBottom: 3 }}>{year}</div>
+                  {major ? (
+                    <div style={{ fontWeight: 700, fontSize: 13, color: s.text }}>{major.winner}</div>
+                  ) : (
+                    <div style={{ color: 'var(--border-bright)', fontSize: 12 }}>—</div>
+                  )}
+                </div>
+              )
+            })
+          ))}
         </div>
 
         {/* Major wins leaderboard */}
