@@ -2,11 +2,9 @@ import { NextResponse } from 'next/server'
 import { fetchLiveScores } from '@/lib/espn'
 
 export const runtime = 'edge'
-export const revalidate = 0
+export const revalidate = 120
 
-export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url)
-  const tournamentName = searchParams.get('tournament') || undefined
-  const scores = await fetchLiveScores(tournamentName)
+export async function GET() {
+  const scores = await fetchLiveScores()
   return NextResponse.json(scores)
 }
