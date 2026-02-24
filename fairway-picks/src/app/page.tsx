@@ -89,7 +89,7 @@ const NAV_ITEMS = [
 ]
 
 function Sidebar({
-  currentPlayer, tab, setTab, isAdmin, onLogout, tournament, isOpen, onClose
+  currentPlayer, tab, setTab, isAdmin, onLogout, tournament
 }: {
   currentPlayer: string
   tab: string
@@ -97,15 +97,9 @@ function Sidebar({
   isAdmin: boolean
   onLogout: () => void
   tournament: Tournament | null
-  isOpen?: boolean
-  onClose?: () => void
 }) {
-  const close = () => onClose?.()
   return (
-    <>
-      {isOpen && <div onClick={close} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.55)', zIndex:98 }} />}
-      <div className={`sidebar${isOpen ? ' open' : ''}`}>
-      <button onClick={close} className="sidebar-close-btn" aria-label="Close menu">✕</button>
+    <div className="sidebar">
       <div className="sidebar-logo">
         <h1>Fairway <span>Picks</span></h1>
         <p>PGA Tour Pick'em</p>
@@ -117,7 +111,7 @@ function Sidebar({
           <button
             key={item.key}
             className={`nav-item ${tab === item.key ? 'active' : ''}`}
-            onClick={() => { setTab(item.key); close() }}
+            onClick={() => setTab(item.key)}
           >
             <span className="nav-icon">{item.icon}</span>
             {item.label}
@@ -152,7 +146,6 @@ function Sidebar({
         </div>
       </div>
     </div>
-    </>
   )
 }
 
@@ -801,7 +794,7 @@ function AdminTab({
   onClearPicks: () => Promise<void>
 }) {
   const [selectedEvent, setSelectedEvent] = useState('')
-  const [participants, setParticipants] = useState<string[]>([...PLAYERS])
+  const [draftOrderInput, setDraftOrderInput] = useState(PLAYERS.join(', '))
   const [saving, setSaving] = useState(false)
   const [finalizing, setFinalizing] = useState(false)
   const [msg, setMsg] = useState('')
@@ -809,9 +802,10 @@ function AdminTab({
   const selectedTournament = PGA_SCHEDULE.find((e) => e.name === selectedEvent)
 
   const handleSetup = async () => {
-    if (!selectedTournament || participants.length < 2) return
+    if (!selectedTournament) return
     setSaving(true)
-    await onSetupTournament({ ...selectedTournament, draft_order: participants })
+    const orderArr = draftOrderInput.split(',').map((s) => s.trim()).filter(Boolean)
+    await onSetupTournament({ ...selectedTournament, draft_order: orderArr })
     setSelectedEvent('')
     setMsg('✅ Tournament activated!')
     setSaving(false)
@@ -879,29 +873,14 @@ function AdminTab({
               )}
 
               <div className="form-group">
-                <label className="form-label">Who is Participating?</label>
-                <div style={{ display:'flex', flexWrap:'wrap', gap:8, marginTop:6 }}>
-                  {PLAYERS.map((p) => {
-                    const on = participants.includes(p)
-                    return (
-                      <button key={p} type="button"
-                        onClick={() => setParticipants(prev => on ? prev.filter(x=>x!==p) : [...prev,p])}
-                        style={{
-                          padding:'7px 16px', borderRadius:'100px', cursor:'pointer',
-                          border:`1px solid ${on ? 'rgba(74,222,128,0.4)' : 'var(--border)'}`,
-                          background: on ? 'var(--green-dim)' : 'var(--surface2)',
-                          color: on ? 'var(--green)' : 'var(--text-dim)',
-                          fontSize:13, fontWeight:600, transition:'all 0.15s',
-                        }}
-                      >{on ? '✓ ' : ''}{p}</button>
-                    )
-                  })}
-                </div>
-                <div style={{ fontSize:12, color:'var(--text-dim)', marginTop:8, fontFamily:'DM Mono' }}>
-                  {participants.length} players · draft: {participants.join(' → ')}
+                <label className="form-label">Draft Order (comma-separated)</label>
+                <input className="form-input"
+                  value={draftOrderInput} onChange={(e) => setDraftOrderInput(e.target.value)} />
+                <div style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 6 }}>
+                  Snake draft reverses on even rounds. First player listed picks first.
                 </div>
               </div>
-              <button className="btn btn-green" onClick={handleSetup} disabled={saving || !selectedTournament || participants.length < 2}>
+              <button className="btn btn-green" onClick={handleSetup} disabled={saving || !selectedTournament}>
                 {saving ? '⏳ Saving…' : '⛳ Activate Tournament'}
               </button>
             </div>
@@ -961,7 +940,16 @@ function AdminTab({
 }
 
 // ─── History Tab ──────────────────────────────────────────────────────────────
-function HistoryTab({ history }: { history: any[] }) {
+function HistoryTab({ history, isAdmin, onDeleteTournament, onEditResult }: {
+  history: any[]
+  isAdmin: boolean
+  onDeleteTournament: (tournamentId: string, moneyByPlayer: Record<string, number>) => Promise<void>
+  onEditResult: (tournamentId: string, playerName: string, field: 'total_score' | 'money_won', value: number) => Promise<void>
+}) {
+  const [editing, setEditing] = useState<{ tid: string; player: string; field: string } | null>(null)
+  const [editVal, setEditVal] = useState('')
+  const [deleting, setDeleting] = useState<string | null>(null)
+
   if (!history.length) return (
     <div className="empty-state card">
       <div className="empty-icon">📈</div>
@@ -969,14 +957,48 @@ function HistoryTab({ history }: { history: any[] }) {
     </div>
   )
 
+  const startEdit = (tid: string, player: string, field: string, current: any) => {
+    setEditing({ tid, player, field })
+    setEditVal(String(current))
+  }
+
+  const commitEdit = async () => {
+    if (!editing) return
+    const num = parseInt(editVal)
+    if (isNaN(num)) { setEditing(null); return }
+    await onEditResult(editing.tid, editing.player, editing.field as any, num)
+    setEditing(null)
+  }
+
+  const handleDelete = async (h: any) => {
+    if (!confirm(`Delete "${h.tournament_name}" from history? This will also reverse season money.`)) return
+    setDeleting(h.tournament_id)
+    await onDeleteTournament(h.tournament_id, h.money || {})
+    setDeleting(null)
+  }
+
   return (
     <div>
-      <div className="page-header"><div className="page-title">History</div></div>
+      <div className="page-header">
+        <div className="page-title">History</div>
+        {isAdmin && <div style={{ fontSize: 12, color: 'var(--text-dim)', fontFamily: 'DM Mono' }}>Click any score or $ to edit</div>}
+      </div>
       {history.map((h: any, i: number) => (
         <div key={i} className="card">
           <div className="card-header">
-            <div className="card-title">{h.tournament_name}</div>
-            <span style={{ fontFamily: 'DM Mono', fontSize: 12, color: 'var(--text-dim)' }}>{h.date}</span>
+            <div>
+              <div className="card-title">{h.tournament_name}</div>
+              <div style={{ fontFamily: 'DM Mono', fontSize: 12, color: 'var(--text-dim)', marginTop: 2 }}>{h.date}</div>
+            </div>
+            {isAdmin && (
+              <button
+                className="btn btn-danger btn-sm"
+                onClick={() => handleDelete(h)}
+                disabled={deleting === h.tournament_id}
+              >
+                {deleting === h.tournament_id ? '⏳' : '🗑'} Delete
+              </button>
+            )}
           </div>
           <table className="table">
             <thead>
@@ -988,18 +1010,61 @@ function HistoryTab({ history }: { history: any[] }) {
               </tr>
             </thead>
             <tbody>
-              {(h.standings || []).map((s: any) => (
-                <tr key={s.player} className="row">
-                  <td><span className={`rank rank-${s.rank}`}>#{s.rank}</span></td>
-                  <td><strong>{s.player}</strong></td>
-                  <td><span className={`score ${scoreClass(s.score)}`}>{toRelScore(s.score)}</span></td>
-                  <td>
-                    <span className={`score ${(h.money?.[s.player] || 0) > 0 ? 'under' : (h.money?.[s.player] || 0) < 0 ? 'over' : 'even'}`}>
-                      {formatMoney(h.money?.[s.player] || 0)}
-                    </span>
-                  </td>
-                </tr>
-              ))}
+              {(h.standings || []).map((s: any) => {
+                const moneyVal = h.money?.[s.player] || 0
+                const isEditingScore = isAdmin && editing?.tid === h.tournament_id && editing?.player === s.player && editing?.field === 'total_score'
+                const isEditingMoney = isAdmin && editing?.tid === h.tournament_id && editing?.player === s.player && editing?.field === 'money_won'
+                return (
+                  <tr key={s.player} className="row">
+                    <td><span className={`rank rank-${s.rank}`}>#{s.rank}</span></td>
+                    <td><strong>{s.player}</strong></td>
+                    <td>
+                      {isEditingScore ? (
+                        <input
+                          autoFocus
+                          type="number"
+                          value={editVal}
+                          onChange={e => setEditVal(e.target.value)}
+                          onBlur={commitEdit}
+                          onKeyDown={e => { if (e.key === 'Enter') commitEdit(); if (e.key === 'Escape') setEditing(null) }}
+                          style={{ width: 70, background: 'var(--surface2)', border: '1px solid var(--green)', borderRadius: 4, color: 'var(--text)', padding: '2px 6px', fontFamily: 'DM Mono', fontSize: 13, textAlign: 'center' }}
+                        />
+                      ) : (
+                        <span
+                          className={`score ${scoreClass(s.score)}`}
+                          onClick={() => isAdmin && startEdit(h.tournament_id, s.player, 'total_score', s.score)}
+                          style={isAdmin ? { cursor: 'pointer', borderBottom: '1px dashed var(--text-dim)' } : {}}
+                          title={isAdmin ? 'Click to edit score' : ''}
+                        >
+                          {toRelScore(s.score)}
+                        </span>
+                      )}
+                    </td>
+                    <td>
+                      {isEditingMoney ? (
+                        <input
+                          autoFocus
+                          type="number"
+                          value={editVal}
+                          onChange={e => setEditVal(e.target.value)}
+                          onBlur={commitEdit}
+                          onKeyDown={e => { if (e.key === 'Enter') commitEdit(); if (e.key === 'Escape') setEditing(null) }}
+                          style={{ width: 80, background: 'var(--surface2)', border: '1px solid var(--green)', borderRadius: 4, color: 'var(--text)', padding: '2px 6px', fontFamily: 'DM Mono', fontSize: 13, textAlign: 'center' }}
+                        />
+                      ) : (
+                        <span
+                          className={`score ${moneyVal > 0 ? 'under' : moneyVal < 0 ? 'over' : 'even'}`}
+                          onClick={() => isAdmin && startEdit(h.tournament_id, s.player, 'money_won', moneyVal)}
+                          style={isAdmin ? { cursor: 'pointer', borderBottom: '1px dashed var(--text-dim)' } : {}}
+                          title={isAdmin ? 'Click to edit winnings' : ''}
+                        >
+                          {formatMoney(moneyVal)}
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>
@@ -1021,7 +1086,6 @@ export default function App() {
   const [loading, setLoading] = useState(false)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   const [bootstrapped, setBootstrapped] = useState(false)
-  const [sidebarOpen, setSidebarOpen] = useState(false)
 
   const isAdmin = ['Eric', 'Chase'].includes(currentPlayer ?? '')
 
@@ -1034,14 +1098,25 @@ export default function App() {
 
   // ── Fetch DB data when logged in ──
   const loadData = useCallback(async () => {
-    const [{ data: t }, { data: p }, { data: sm }] = await Promise.all([
+    const [{ data: t }, { data: sm }] = await Promise.all([
       supabase.from('tournaments').select('*').eq('status', 'active').single(),
-      supabase.from('picks').select('*').order('pick_order'),
       supabase.from('season_money').select('*'),
     ])
-    if (t) setTournament(t)
-    if (p) setPicks(p)
     if (sm) setSeasonMoney(sm)
+
+    // Only load picks for the active tournament
+    if (t) {
+      setTournament(t)
+      const { data: p } = await supabase
+        .from('picks').select('*')
+        .eq('tournament_id', t.id)
+        .order('pick_order')
+      if (p) setPicks(p)
+      else setPicks([])
+    } else {
+      setTournament(null)
+      setPicks([])
+    }
 
     // Load history: join results + tournaments
     const { data: results } = await supabase
@@ -1124,10 +1199,15 @@ export default function App() {
   }
 
   const handleSetupTournament = async (data: { name: string; course: string; date: string; draft_order: string[] }) => {
-    // Deactivate old tournaments
-    await supabase.from('tournaments').update({ status: 'finalized' }).eq('status', 'active')
+    // Get current active tournament so we can clear its picks
+    const { data: oldT } = await supabase.from('tournaments').select('id').eq('status', 'active').single()
+    if (oldT) {
+      await supabase.from('picks').delete().eq('tournament_id', oldT.id)
+      await supabase.from('tournaments').update({ status: 'finalized' }).eq('id', oldT.id)
+    }
     const { data: t } = await supabase.from('tournaments').insert({ ...data, status: 'active' }).select().single()
     if (t) setTournament(t)
+    setPicks([])
     await loadData()
   }
 
@@ -1190,14 +1270,54 @@ export default function App() {
     setPicks([])
   }
 
+  const handleDeleteTournament = async (tournamentId: string, moneyByPlayer: Record<string, number>) => {
+    // Reverse season money for this tournament
+    for (const player of PLAYERS) {
+      const delta = moneyByPlayer[player] || 0
+      if (delta === 0) continue
+      const current = seasonMoney.find((sm) => sm.player_name === player)?.total || 0
+      await supabase.from('season_money').upsert({
+        player_name: player,
+        total: current - delta,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'player_name' })
+    }
+    // Delete results and tournament (picks cascade-delete)
+    await supabase.from('results').delete().eq('tournament_id', tournamentId)
+    await supabase.from('tournaments').delete().eq('id', tournamentId)
+    await loadData()
+  }
+
+  const handleEditResult = async (tournamentId: string, playerName: string, field: 'total_score' | 'money_won', value: number) => {
+    await supabase.from('results')
+      .update({ [field]: value })
+      .eq('tournament_id', tournamentId)
+      .eq('player_name', playerName)
+
+    // If editing money_won, recalculate season totals from scratch
+    if (field === 'money_won') {
+      const { data: allResults } = await supabase.from('results').select('player_name, money_won')
+      if (allResults) {
+        const totals: Record<string, number> = {}
+        PLAYERS.forEach(p => totals[p] = 0)
+        for (const r of allResults) { totals[r.player_name] = (totals[r.player_name] || 0) + (r.money_won || 0) }
+        for (const player of PLAYERS) {
+          await supabase.from('season_money').upsert({
+            player_name: player,
+            total: totals[player],
+            updated_at: new Date().toISOString(),
+          }, { onConflict: 'player_name' })
+        }
+      }
+    }
+    await loadData()
+  }
+
   if (!bootstrapped) return <div className="loading-screen"><div className="spin" style={{ fontSize: 32 }}>⛳</div>Loading…</div>
   if (!currentPlayer) return <LoginScreen onLogin={handleLogin} />
 
   return (
     <div className="app-shell">
-      <button className="hamburger-btn" onClick={() => setSidebarOpen(true)} aria-label="Open menu">
-        <span /><span /><span />
-      </button>
       <Sidebar
         currentPlayer={currentPlayer}
         tab={tab}
@@ -1205,15 +1325,13 @@ export default function App() {
         isAdmin={isAdmin}
         onLogout={handleLogout}
         tournament={tournament}
-        isOpen={sidebarOpen}
-        onClose={() => setSidebarOpen(false)}
       />
       <main className="main-content">
         {tab === 'live'    && <LeaderboardTab tournament={tournament} standings={standings} liveData={liveData} pickMap={pickMap} loading={loading} lastUpdated={lastUpdated} onRefresh={fetchScores} money={weekMoney} />}
         {tab === 'picks'   && <PicksTab standings={standings} pickMap={pickMap} liveData={liveData} tournament={tournament} />}
         {tab === 'money'   && <MoneyTab seasonMoney={seasonMoney} weekMoney={weekMoney} tournament={tournament} history={history} />}
         {tab === 'draft'   && <DraftTab tournament={tournament} picks={picks} liveData={liveData} currentPlayer={currentPlayer} isAdmin={isAdmin} onPickMade={handlePickMade} />}
-        {tab === 'history' && <HistoryTab history={history} />}
+        {tab === 'history' && <HistoryTab history={history} isAdmin={isAdmin} onDeleteTournament={handleDeleteTournament} onEditResult={handleEditResult} />}
         {tab === 'admin'   && isAdmin && <AdminTab tournament={tournament} standings={standings} weekMoney={weekMoney} onSetupTournament={handleSetupTournament} onFinalize={handleFinalize} onClearTournament={handleClearTournament} onClearPicks={handleClearPicks} />}
       </main>
     </div>
