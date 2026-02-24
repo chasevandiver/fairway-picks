@@ -1120,6 +1120,87 @@ function HistoryTab({ history, isAdmin, onDeleteTournament, onEditResult }: {
             </tbody>
           </table>
           </div>
+
+          {/* ── Payout Breakdown ── */}
+          {(() => {
+            const standings = h.standings || []
+            const money = h.money || {}
+            // Find who won each category
+            const strokeWinner = [...standings].sort((a, b) => a.score - b.score)[0]
+            const tourWinners = standings.filter((s: any) => s.has_winner)
+            const top3Players = standings.filter((s: any) => s.has_top3 && !s.has_winner)
+
+            // Build line-item debts: { from, to, amount, reason }
+            const debts: { from: string; to: string; amount: number; reason: string }[] = []
+
+            // Stroke win payouts
+            if (strokeWinner) {
+              PLAYERS.filter(p => p !== strokeWinner.player).forEach(p => {
+                debts.push({ from: p, to: strokeWinner.player, amount: PAYOUT_RULES.lowestStrokes, reason: '🏆 Low Strokes' })
+              })
+            }
+            // Tour winner payouts
+            tourWinners.forEach((w: any) => {
+              PLAYERS.filter(p => p !== w.player).forEach(p => {
+                debts.push({ from: p, to: w.player, amount: PAYOUT_RULES.outrightWinner, reason: '🎯 Tour Win' })
+              })
+            })
+            // Top 3 payouts
+            top3Players.forEach((w: any) => {
+              PLAYERS.filter(p => p !== w.player).forEach(p => {
+                debts.push({ from: p, to: w.player, amount: PAYOUT_RULES.top3, reason: '🔝 Top 3' })
+              })
+            })
+
+            if (debts.length === 0) return null
+
+            // Group by debtor: show what each player owes and to whom
+            const byDebtor: Record<string, { to: string; amount: number; reason: string }[]> = {}
+            debts.forEach(d => {
+              if (!byDebtor[d.from]) byDebtor[d.from] = []
+              byDebtor[d.from].push({ to: d.to, amount: d.amount, reason: d.reason })
+            })
+
+            const losers = PLAYERS.filter(p => (money[p] || 0) < 0)
+            if (losers.length === 0) return null
+
+            return (
+              <div style={{ borderTop: '1px solid var(--border)', padding: '14px 24px', background: 'rgba(0,0,0,0.15)' }}>
+                <div style={{ fontFamily: 'DM Mono', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-dim)', marginBottom: 12 }}>
+                  Payout Breakdown
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {losers.map(loser => {
+                    const items = byDebtor[loser] || []
+                    return (
+                      <div key={loser} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 90 }}>
+                          <div className="user-avatar" style={{ width: 24, height: 24, fontSize: 10 }}>{loser[0]}</div>
+                          <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--red)' }}>{loser}</span>
+                          <span style={{ fontFamily: 'DM Mono', fontSize: 12, color: 'var(--red)' }}>owes</span>
+                        </div>
+                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                          {items.map((item, i) => (
+                            <span key={i} style={{
+                              display: 'inline-flex', alignItems: 'center', gap: 4,
+                              background: 'var(--surface2)', border: '1px solid var(--border)',
+                              borderRadius: 6, padding: '3px 8px', fontSize: 12,
+                            }}>
+                              <span style={{ color: 'var(--text-dim)', fontSize: 10 }}>{item.reason}</span>
+                              <span style={{ fontFamily: 'DM Mono', color: 'var(--red)', fontWeight: 700 }}>${item.amount}</span>
+                              <span style={{ color: 'var(--text-dim)' }}>→</span>
+                              <span style={{ fontWeight: 600 }}>{item.to}</span>
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })()}
+
         </div>
       ))}
     </div>
