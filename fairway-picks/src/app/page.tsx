@@ -362,7 +362,7 @@ function ScorecardRow({ g, par }: { g: any; par: number }) {
         </div>
         {isCut && (
           <div style={{ fontSize: 10, color: 'var(--red)', fontFamily: 'DM Mono', marginTop: 3, opacity: 0.7 }}>
-            R3 & R4 repeated from R1 & R2
+            R3 & R4 = avg of R1+R2
           </div>
         )}
       </td>
@@ -419,7 +419,7 @@ function PicksTab({ standings, pickMap, liveData, tournament }: {
     <div>
       <div className="page-header">
         <div className="page-title">Picks · {tournament.name}</div>
-        <div style={{ fontSize: 12, color: 'var(--text-dim)', fontFamily: 'DM Mono' }}>Par {par} · *CUT/WD rounds are repeated</div>
+        <div style={{ fontSize: 12, color: 'var(--text-dim)', fontFamily: 'DM Mono' }}>Par {par} · *CUT/WD rounds use avg of R1+R2</div>
       </div>
 
       {PLAYERS.map((player) => {
@@ -989,7 +989,7 @@ function AdminTab({
                 ['🏆 Lowest Total Strokes', `$${PAYOUT_RULES.lowestStrokes} from each other player`],
                 ['🎯 Outright Tournament Winner', `$${PAYOUT_RULES.outrightWinner} from each other player`],
                 ['🔝 Top 3 Golfer (incl. ties)', `$${PAYOUT_RULES.top3} from each other player`],
-                ['✂️ Cut Golfer', 'Rounds 3 & 4 score = repeat of rounds 1 & 2'],
+                ['✂️ Cut Golfer', 'R3 & R4 = average of R1 & R2 (rounded up)'],
                 ['🚫 WD Golfer', 'Remaining rounds filled from last played round'],
               ].map(([rule, desc]) => (
                 <div key={rule} style={{ padding: '11px 0', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', gap: 12 }}>
