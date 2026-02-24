@@ -33,60 +33,56 @@ export async function fetchLiveScores(): Promise<GolferScore[]> {
     const raw = competitions[0]?.competitors || []
     if (raw.length < 5) return MOCK_DATA
 
-    const competitors: GolferScore[] = raw.map((c: any) => {
-      // ── Status ──
+    // First pass: collect scores to compute positions and detect ties
+    const scoreValues: number[] = raw.map((c: any) => {
+      const v = parseFloat(c.score ?? '999')
+      return isNaN(v) ? 999 : v
+    })
+
+    const getPosition = (idx: number, statusStr: string): string => {
+      if (statusStr.includes('cut')) return 'CUT'
+      if (statusStr.includes('wd'))  return 'WD'
+      const myScore = scoreValues[idx]
+      const tiedCount = scoreValues.filter((s, i) => {
+        const st = (raw[i].status?.type?.name || '').toLowerCase()
+        return !st.includes('cut') && !st.includes('wd') && s === myScore
+      }).length
+      const rank = scoreValues.filter((s, i) => {
+        const st = (raw[i].status?.type?.name || '').toLowerCase()
+        return !st.includes('cut') && !st.includes('wd') && s < myScore
+      }).length + 1
+      return tiedCount > 1 ? `T${rank}` : `${rank}`
+    }
+
+    const competitors: GolferScore[] = raw.map((c: any, idx: number) => {
       const statusRaw = (c.status?.type?.name || '').toLowerCase()
       const status: 'active' | 'cut' | 'wd' =
         statusRaw.includes('cut') ? 'cut' :
         statusRaw.includes('wd')  ? 'wd'  : 'active'
 
-      // ── Position ──
-      const position: string =
-        c.status?.position?.displayName ||
-        c.status?.position?.id ||
-        '—'
+      const position = getPosition(idx, statusRaw)
 
-      // ── Total score to par ──
-      // ESPN returns scoreToPar as a stat or in the score field
-      const stats: any[] = c.statistics || []
-      const scoreToParStat = stats.find((s: any) =>
-        s.name === 'scoreToPar' || s.abbreviation === 'SCORE'
-      )
+      // Total score to par — ESPN sends as string in c.score e.g. "-16"
       let score: number | null = null
-      if (scoreToParStat) {
-        const v = parseInt(scoreToParStat.displayValue?.replace('E', '0'))
+      if (c.score !== undefined && c.score !== null) {
+        const v = parseFloat(c.score)
         if (!isNaN(v)) score = v
       }
-      // fallback: c.score is sometimes the total strokes, convert to par
-      if (score === null && c.score !== undefined) {
-        const raw = parseInt(c.score)
-        if (!isNaN(raw)) {
-          // if it looks like strokes (60-80 range per round * rounds), convert
-          score = raw > 50 ? raw - (PAR * 4) : raw
-        }
-      }
 
-      // ── Round-by-round linescores ──
+      // Round-by-round: l.value = raw strokes as float e.g. 63.0
       const lines: any[] = c.linescores || []
       const rounds: (number | null)[] = [null, null, null, null]
-
       lines.forEach((l: any, i: number) => {
         if (i >= 4) return
-        // displayValue is raw strokes like "69", value is to-par like "-3"
-        const dv = l.displayValue
-        if (dv && dv !== '--' && dv !== 'E' && dv !== '') {
-          const n = parseInt(dv)
-          // Raw strokes are typically between 60-85
-          if (!isNaN(n) && n >= 60 && n <= 90) {
-            rounds[i] = n
-          } else if (!isNaN(n) && Math.abs(n) <= 20) {
-            // It's a to-par value, convert to strokes
-            rounds[i] = PAR + n
-          }
+        const strokes = l.value
+        if (strokes !== undefined && strokes !== null) {
+          const n = Math.round(strokes)
+          if (n >= 55 && n <= 95) rounds[i] = n
         }
       })
 
-      // ── Thru ──
+      // Thru
+      const stats: any[] = c.statistics || []
       const thruStat = stats.find((s: any) => s.name === 'thru' || s.abbreviation === 'THRU')
       const thruVal = thruStat?.displayValue
       const thru: string =
@@ -94,35 +90,23 @@ export async function fetchLiveScores(): Promise<GolferScore[]> {
         status === 'wd'  ? 'WD'  :
         thruVal && thruVal !== '--' ? thruVal : '—'
 
-      // ── Today (current round to par) ──
-      const todayStat = stats.find((s: any) =>
-        s.name === 'toPar' || s.name === 'today' || s.abbreviation === 'TODAY'
-      )
+      // Today — derive from last played round
       let today: number | null = null
-      if (todayStat) {
-        const tv = todayStat.displayValue?.replace('E', '0')
-        const n = parseInt(tv)
-        if (!isNaN(n)) today = n
-      }
-      // Fallback: derive today from last played round
-      if (today === null) {
-        const lastRound = [...rounds].reverse().find(r => r !== null)
-        if (lastRound !== null && lastRound !== undefined) today = lastRound - PAR
+      for (let i = rounds.length - 1; i >= 0; i--) {
+        if (rounds[i] !== null) { today = (rounds[i] as number) - PAR; break }
       }
 
-      // For cut/WD golfers: store only actual played rounds (R1, R2, null, null).
-      // scoring.ts mirrors R3=R1 and R4=R2 for display, and doubles the score.
+      // Cut/WD: store only R1+R2, scoring.ts mirrors and doubles
       if (status === 'cut' || status === 'wd') {
         rounds[2] = null
         rounds[3] = null
-        // score = actual 2-round to-par (NOT doubled — scoring.ts doubles it)
         if (rounds[0] !== null && rounds[1] !== null) {
           score = rounds[0] + rounds[1] - PAR * 2
         }
       }
 
       return {
-        name: c.athlete?.displayName || 'Unknown',
+        name: c.athlete?.displayName || c.athlete?.fullName || 'Unknown',
         position,
         score,
         today,
