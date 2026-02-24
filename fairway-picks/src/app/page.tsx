@@ -2575,14 +2575,16 @@ export default function App() {
 
   return (
     <div className="app-shell">
-      {/* Hamburger button — mobile only */}
-      <button className="hamburger-btn" onClick={() => setSidebarOpen(true)}>
-        <span /><span /><span />
-      </button>
+      {/* Hamburger button — mobile only, hide when sidebar open */}
+      {!sidebarOpen && (
+        <button className="hamburger-btn" onClick={() => setSidebarOpen(true)}>
+          <span /><span /><span />
+        </button>
+      )}
       <Sidebar
         currentPlayer={currentPlayer}
         tab={tab}
-        setTab={setTab}
+        setTab={(t) => { setTab(t); setSidebarOpen(false) }}
         isAdmin={isAdmin}
         onLogout={handleLogout}
         tournament={tournament}
@@ -2598,6 +2600,29 @@ export default function App() {
         {tab === 'stats'   && <StatsTab history={history} />}
         {tab === 'recap'   && <SeasonRecapTab history={history} golferHistory={golferHistory} seasonMoney={seasonMoney} />}
         {tab === 'admin'   && isAdmin && <AdminTab tournament={tournament} standings={standings} weekMoney={weekMoney} onSetupTournament={handleSetupTournament} onFinalize={handleFinalize} onClearTournament={handleClearTournament} onClearPicks={handleClearPicks} />}
+      </main>
+
+      {/* ── Bottom tab bar — mobile only ── */}
+      <nav className="bottom-tab-bar">
+        {[
+          { key: 'live',    icon: '⛳', label: 'Live' },
+          { key: 'picks',   icon: '🏌️', label: 'Picks' },
+          { key: 'draft',   icon: '📋', label: 'Draft' },
+          { key: 'money',   icon: '💰', label: 'Money' },
+          { key: 'history', icon: '📈', label: 'History' },
+          { key: 'stats',   icon: '🏅', label: 'Stats' },
+          ...(isAdmin ? [{ key: 'admin', icon: '⚙️', label: 'Admin' }] : []),
+        ].map(item => (
+          <button
+            key={item.key}
+            className={`bottom-tab-btn ${tab === item.key ? 'active' : ''}`}
+            onClick={() => setTab(item.key)}
+          >
+            <span className="bottom-tab-icon">{item.icon}</span>
+            <span className="bottom-tab-label">{item.label}</span>
+          </button>
+        ))}
+      </nav>
       </main>
     </div>
   )
