@@ -2611,6 +2611,7 @@ export default function App() {
           { key: 'money',   icon: '💰', label: 'Money' },
           { key: 'history', icon: '📈', label: 'History' },
           { key: 'stats',   icon: '🏅', label: 'Stats' },
+          { key: 'recap',   icon: '🏆', label: 'Recap' },
           ...(isAdmin ? [{ key: 'admin', icon: '⚙️', label: 'Admin' }] : []),
         ].map(item => (
           <button
