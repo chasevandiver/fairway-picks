@@ -661,11 +661,7 @@ body {
   .badge { font-size: 10px; padding: 2px 7px; }
 
   /* Hide lower-priority columns on leaderboard */
-  /* Player Standings: hide "Tour Win?" and "Top 3?" columns (cols 4 & 5) */
-  .table th:nth-child(4),
-  .table td:nth-child(4),
-  .table th:nth-child(5),
-  .table td:nth-child(5) { display: none; }
+  /* Tables scroll horizontally — all columns visible, just swipe */
 
   /* ── Picks scorecard table ── */
   /* The scorecard tables are in overflowX:auto wrappers already in JSX,
