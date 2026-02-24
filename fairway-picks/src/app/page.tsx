@@ -831,7 +831,7 @@ function AdminTab({
   onClearPicks: () => Promise<void>
 }) {
   const [selectedEvent, setSelectedEvent] = useState('')
-  const [draftOrderInput, setDraftOrderInput] = useState(PLAYERS.join(', '))
+  const [participants, setParticipants] = useState<string[]>(PLAYERS)
   const [isMajor, setIsMajor] = useState(false)
   const [saving, setSaving] = useState(false)
   const [finalizing, setFinalizing] = useState(false)
@@ -847,11 +847,14 @@ function AdminTab({
     }
   }, [selectedTournament?.name])
 
+  const toggleParticipant = (p: string) => {
+    setParticipants(prev => prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p])
+  }
+
   const handleSetup = async () => {
     if (!selectedTournament) return
     setSaving(true)
-    const orderArr = draftOrderInput.split(',').map((s) => s.trim()).filter(Boolean)
-    await onSetupTournament({ ...selectedTournament, draft_order: orderArr, is_major: isMajor })
+    await onSetupTournament({ ...selectedTournament, draft_order: participants, is_major: isMajor })
     setSelectedEvent('')
     setIsMajor(false)
     setMsg('✅ Tournament activated!')
@@ -920,11 +923,39 @@ function AdminTab({
               )}
 
               <div className="form-group">
-                <label className="form-label">Draft Order (comma-separated)</label>
-                <input className="form-input"
-                  value={draftOrderInput} onChange={(e) => setDraftOrderInput(e.target.value)} />
-                <div style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 6 }}>
-                  Snake draft reverses on even rounds. First player listed picks first.
+                <label className="form-label">Participants & Draft Order</label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {PLAYERS.map((p, idx) => {
+                    const checked = participants.includes(p)
+                    const order = participants.indexOf(p)
+                    return (
+                      <div key={p} onClick={() => toggleParticipant(p)} style={{
+                        display: 'flex', alignItems: 'center', gap: 10,
+                        padding: '8px 12px', borderRadius: 8, cursor: 'pointer',
+                        background: checked ? 'var(--green-dim)' : 'var(--surface2)',
+                        border: `1px solid ${checked ? 'rgba(74,222,128,0.25)' : 'var(--border)'}`,
+                        transition: 'all 0.15s',
+                      }}>
+                        <div style={{
+                          width: 18, height: 18, borderRadius: 4, flexShrink: 0,
+                          border: `2px solid ${checked ? 'var(--green)' : 'var(--border-bright)'}`,
+                          background: checked ? 'var(--green)' : 'transparent',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        }}>
+                          {checked && <span style={{ color: '#0a0c0f', fontSize: 11, fontWeight: 900 }}>✓</span>}
+                        </div>
+                        <span style={{ fontWeight: 600, fontSize: 14, color: checked ? 'var(--green)' : 'var(--text-dim)', flex: 1 }}>{p}</span>
+                        {checked && (
+                          <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: 'var(--text-dim)' }}>
+                            Pick #{order + 1}
+                          </span>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 8 }}>
+                  Check order = draft order. Snake draft reverses on even rounds.
                 </div>
               </div>
               <div className="form-group">
@@ -1006,12 +1037,13 @@ function AdminTab({
 }
 
 // ─── History Tab ──────────────────────────────────────────────────────────────
-function HistoryTab({ history, golferHistory, isAdmin, onDeleteTournament, onEditResult }: {
+function HistoryTab({ history, golferHistory, isAdmin, onDeleteTournament, onEditResult, onDeleteResult }: {
   history: any[]
   golferHistory: any[]
   isAdmin: boolean
   onDeleteTournament: (tournamentId: string, moneyByPlayer: Record<string, number>) => Promise<void>
   onEditResult: (tournamentId: string, playerName: string, field: 'total_score' | 'money_won', value: number) => Promise<void>
+  onDeleteResult: (tournamentId: string, playerName: string, moneyWon: number) => Promise<void>
 }) {
   const [editing, setEditing] = useState<{ tid: string; player: string; field: string } | null>(null)
   const [editVal, setEditVal] = useState('')
@@ -1228,6 +1260,7 @@ function HistoryTab({ history, golferHistory, isAdmin, onDeleteTournament, onEdi
                 <th>Player</th>
                 <th>Score</th>
                 <th>Winnings</th>
+                {isAdmin && <th></th>}
               </tr>
             </thead>
             <tbody>
@@ -1283,6 +1316,18 @@ function HistoryTab({ history, golferHistory, isAdmin, onDeleteTournament, onEdi
                         </span>
                       )}
                     </td>
+                    {isAdmin && (
+                      <td>
+                        <button
+                          className="btn btn-danger btn-sm"
+                          onClick={() => {
+                            if (confirm(`Remove ${s.player} from this tournament? Their money will be reversed.`))
+                              onDeleteResult(h.tournament_id, s.player, moneyVal)
+                          }}
+                          title="Remove this player's result"
+                        >✕</button>
+                      </td>
+                    )}
                   </tr>
                 )
               })}
@@ -1370,7 +1415,6 @@ function HistoryTab({ history, golferHistory, isAdmin, onDeleteTournament, onEdi
                       <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
                         {group.payers.map((payer, pi) => (
                           <span key={payer} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                            <div className="user-avatar" style={{ width: 24, height: 24, fontSize: 10 }}>{payer[0]}</div>
                             <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--red)' }}>{payer}</span>
                             {pi < group.payers.length - 1 && <span style={{ color: 'var(--text-dim)', fontSize: 11, margin: '0 2px' }}>&</span>}
                           </span>
@@ -1387,7 +1431,6 @@ function HistoryTab({ history, golferHistory, isAdmin, onDeleteTournament, onEdi
                           }}>
                             <span style={{ fontFamily: 'DM Mono', color: 'var(--red)', fontWeight: 700 }}>${item.amount}</span>
                             <span style={{ color: 'var(--text-dim)', fontSize: 11 }}>→</span>
-                            <div className="user-avatar" style={{ width: 20, height: 20, fontSize: 9 }}>{item.to[0]}</div>
                             <span style={{ fontWeight: 600 }}>{item.to}</span>
                           </span>
                         ))}
@@ -1998,6 +2041,32 @@ export default function App() {
     await loadData()
   }
 
+  const handleDeleteResult = async (tournamentId: string, playerName: string, moneyWon: number) => {
+    // Delete the result row
+    await supabase.from('results').delete()
+      .eq('tournament_id', tournamentId)
+      .eq('player_name', playerName)
+    // Delete golfer results for this player in this tournament
+    await supabase.from('golfer_results').delete()
+      .eq('tournament_id', tournamentId)
+      .eq('player_name', playerName)
+    // Reverse season money — recalculate from scratch
+    const { data: allResults } = await supabase.from('results').select('player_name, money_won')
+    if (allResults) {
+      const totals: Record<string, number> = {}
+      PLAYERS.forEach(p => totals[p] = 0)
+      for (const r of allResults) { totals[r.player_name] = (totals[r.player_name] || 0) + (r.money_won || 0) }
+      for (const player of PLAYERS) {
+        await supabase.from('season_money').upsert({
+          player_name: player,
+          total: totals[player],
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'player_name' })
+      }
+    }
+    await loadData()
+  }
+
   const handleEditResult = async (tournamentId: string, playerName: string, field: 'total_score' | 'money_won', value: number) => {
     await supabase.from('results')
       .update({ [field]: value })
@@ -2047,7 +2116,7 @@ export default function App() {
         {tab === 'picks'   && <PicksTab standings={standings} pickMap={pickMap} liveData={liveData} tournament={tournament} />}
         {tab === 'money'   && <MoneyTab seasonMoney={seasonMoney} weekMoney={weekMoney} tournament={tournament} history={history} />}
         {tab === 'draft'   && <DraftTab tournament={tournament} picks={picks} liveData={liveData} currentPlayer={currentPlayer} isAdmin={isAdmin} onPickMade={handlePickMade} />}
-        {tab === 'history' && <HistoryTab history={history} golferHistory={golferHistory} isAdmin={isAdmin} onDeleteTournament={handleDeleteTournament} onEditResult={handleEditResult} />}
+        {tab === 'history' && <HistoryTab history={history} golferHistory={golferHistory} isAdmin={isAdmin} onDeleteTournament={handleDeleteTournament} onEditResult={handleEditResult} onDeleteResult={handleDeleteResult} />}
         {tab === 'stats'   && <StatsTab history={history} />}
         {tab === 'admin'   && isAdmin && <AdminTab tournament={tournament} standings={standings} weekMoney={weekMoney} onSetupTournament={handleSetupTournament} onFinalize={handleFinalize} onClearTournament={handleClearTournament} onClearPicks={handleClearPicks} />}
       </main>
