@@ -1401,7 +1401,6 @@ function HistoryTab({ history, golferHistory, isAdmin, onDeleteTournament, onEdi
 
         </div>
       ))}
-      }
     </div>
   )
 }
