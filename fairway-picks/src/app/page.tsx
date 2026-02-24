@@ -339,42 +339,63 @@ function LeaderboardTab({
 const ROUND_LABELS = ['R1', 'R2', 'R3', 'R4']
 
 function ScorecardRow({ g, par }: { g: any; par: number }) {
+  const isCut = g.status === 'cut' || g.status === 'wd'
   const rounds: (number | null)[] = g.displayRounds ?? g.rounds ?? [null, null, null, null]
   const totalStrokes = rounds.reduce((sum: number, r: number | null) => sum + (r ?? 0), 0)
   const played = rounds.filter((r: number | null) => r !== null).length
-  const totalPar = par * played
 
   return (
-    <tr style={{ borderTop: '1px solid var(--border)' }}>
+    <tr style={{ borderTop: '1px solid var(--border)', background: isCut ? 'rgba(248,113,113,0.04)' : 'transparent' }}>
       <td style={{ padding: '11px 18px', minWidth: 160 }}>
-        <div style={{ fontWeight: 500, fontSize: 13 }}>{g.name}</div>
-        <div style={{ display: 'flex', gap: 6, marginTop: 3 }}>
+        <div style={{ fontWeight: 500, fontSize: 13, color: isCut ? 'var(--text-mid)' : 'var(--text)' }}>{g.name}</div>
+        <div style={{ display: 'flex', gap: 6, marginTop: 3, alignItems: 'center' }}>
           <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: 'var(--text-dim)' }}>#{g.position}</span>
-          {g.thru !== '—' && <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: 'var(--text-dim)' }}>· Thru {g.thru}</span>}
-          {g.status === 'cut' && <span className="badge badge-red" style={{ fontSize: 9, padding: '1px 6px' }}>CUT*</span>}
-          {g.status === 'wd'  && <span className="badge badge-gray" style={{ fontSize: 9, padding: '1px 6px' }}>WD*</span>}
+          {g.status === 'cut' && <span className="badge badge-red" style={{ fontSize: 9, padding: '2px 7px', letterSpacing: '0.05em' }}>✂ CUT</span>}
+          {g.status === 'wd'  && <span className="badge badge-gray" style={{ fontSize: 9, padding: '2px 7px' }}>WD</span>}
+          {!isCut && g.thru && g.thru !== '—' && g.thru !== 'F' && (
+            <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: 'var(--text-dim)' }}>· Thru {g.thru}</span>
+          )}
+          {!isCut && g.thru === 'F' && (
+            <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: 'var(--green)' }}>· F</span>
+          )}
         </div>
+        {isCut && (
+          <div style={{ fontSize: 10, color: 'var(--red)', fontFamily: 'DM Mono', marginTop: 3, opacity: 0.7 }}>
+            R3 & R4 repeated from R1 & R2
+          </div>
+        )}
       </td>
       {rounds.map((r: number | null, i: number) => {
+        const isMirrored = isCut && (i === 2 || i === 3)
         const roundPar = r !== null ? r - par : null
         return (
-          <td key={i} style={{ padding: '11px 10px', textAlign: 'center', borderLeft: '1px solid var(--border)' }}>
-            <div style={{ fontFamily: 'DM Mono', fontSize: 15, fontWeight: 500 }}>
+          <td key={i} style={{
+            padding: '11px 10px', textAlign: 'center', borderLeft: '1px solid var(--border)',
+            background: isMirrored ? 'rgba(248,113,113,0.06)' : 'transparent',
+          }}>
+            <div style={{
+              fontFamily: 'DM Mono', fontSize: 15, fontWeight: 500,
+              color: isMirrored ? 'var(--text-dim)' : 'var(--text)',
+              fontStyle: isMirrored ? 'italic' : 'normal',
+            }}>
               {r ?? '—'}
             </div>
-            <div className={`score ${scoreClass(roundPar)}`} style={{ fontSize: 10, marginTop: 1 }}>
+            <div className={`score ${scoreClass(roundPar)}`} style={{ fontSize: 10, marginTop: 1, opacity: isMirrored ? 0.6 : 1 }}>
               {roundPar !== null ? toRelScore(roundPar) : ''}
             </div>
           </td>
         )
       })}
       <td style={{ padding: '11px 14px', textAlign: 'center', borderLeft: '1px solid var(--border-bright)' }}>
-        <div style={{ fontFamily: 'DM Mono', fontSize: 15, fontWeight: 600 }}>
+        <div style={{ fontFamily: 'DM Mono', fontSize: 15, fontWeight: 600, color: isCut ? 'var(--text-mid)' : 'var(--text)' }}>
           {played > 0 ? totalStrokes : '—'}
         </div>
-        <div className={`score ${scoreClass(g.score)}`} style={{ fontSize: 10, marginTop: 1 }}>
-          {g.score !== null ? toRelScore(g.score) : ''}
+        <div className={`score ${scoreClass(g.adjScore ?? g.score)}`} style={{ fontSize: 10, marginTop: 1 }}>
+          {(g.adjScore ?? g.score) !== null ? toRelScore(g.adjScore ?? g.score) : ''}
         </div>
+        {isCut && (
+          <div style={{ fontSize: 9, color: 'var(--red)', fontFamily: 'DM Mono', marginTop: 2, opacity: 0.7 }}>×2 penalty</div>
+        )}
       </td>
     </tr>
   )
@@ -413,13 +434,13 @@ function PicksTab({ standings, pickMap, liveData, tournament }: {
           if (g.status === 'cut' || g.status === 'wd') { dr[2] = dr[0]; dr[3] = dr[1] }
           return { ...g, adjScore: g.score ?? 0, displayRounds: dr }
         })).map((g: any) => {
-          // Ensure displayRounds always has cut/wd rounds repeated, regardless of source
-          if (g.status === 'cut' || g.status === 'wd') {
-            const dr = [...(g.displayRounds ?? g.rounds ?? [null,null,null,null])]
-            dr[2] = dr[0]; dr[3] = dr[1]
-            return { ...g, displayRounds: dr }
-          }
-          return g
+          // Always merge fresh status from liveData so cut badges show correctly
+          const live = liveData.find((d: any) => d.name.toLowerCase() === g.name.toLowerCase())
+          const status = live?.status ?? g.status ?? 'active'
+          const isCut = status === 'cut' || status === 'wd'
+          const dr = [...(g.displayRounds ?? g.rounds ?? [null,null,null,null])]
+          if (isCut) { dr[2] = dr[0]; dr[3] = dr[1] }
+          return { ...g, status, displayRounds: dr }
         })
 
         // Per-round totals across all 4 golfers
