@@ -1227,7 +1227,7 @@ function StatsTab({ history }: { history: any[] }) {
   })
 
   const allMajors = [...MAJORS_HISTORY, ...liveMajors]
-  const years = [...new Set([2020, 2021, 2022, 2023, 2024, 2025, ...liveMajors.map(m => m.year)])].sort()
+  const years = Array.from(new Set([2020, 2021, 2022, 2023, 2024, 2025, ...liveMajors.map(m => m.year)])).sort()
 
   const maxCut = Math.max(...mergedStats.map(s => s.cut))
 
