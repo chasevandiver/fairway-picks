@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { createClient } from '@/lib/supabase'
 import {
   toRelScore, scoreClass, formatMoney, moneyClass,
@@ -52,6 +52,59 @@ const PGA_SCHEDULE = [
   { name: 'BMW Championship',                   course: 'Aronimink Golf Club',                date: '2026-08-20' },
   { name: 'TOUR Championship',                  course: 'East Lake Golf Club',                date: '2026-08-27' },
 ]
+
+// ─── Skeleton Screen ─────────────────────────────────────────────────────────
+function SkeletonScreen() {
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 32 }}>
+        <div>
+          <div className="skeleton skeleton-title" style={{ width: 280 }} />
+          <div className="skeleton skeleton-text" style={{ width: 180 }} />
+        </div>
+      </div>
+      <div className="stats-row mb-24">
+        {[1,2,3,4].map(i => <div key={i} className="skeleton skeleton-stat" />)}
+      </div>
+      <div className="skeleton skeleton-card" />
+      <div className="skeleton skeleton-card" style={{ height: 320 }} />
+    </div>
+  )
+}
+
+// ─── Animated Money Counter ───────────────────────────────────────────────────
+function AnimatedMoney({ value, className, style }: { value: number; className?: string; style?: React.CSSProperties }) {
+  const [displayed, setDisplayed] = useState(0)
+  const [key, setKey] = useState(0)
+  const prevRef = React.useRef(0)
+
+  useEffect(() => {
+    if (value === prevRef.current) return
+    const start = prevRef.current
+    const end = value
+    const duration = 700
+    const startTime = performance.now()
+    prevRef.current = end
+    setKey(k => k + 1)
+
+    const step = (now: number) => {
+      const elapsed = now - startTime
+      const progress = Math.min(elapsed / duration, 1)
+      // ease out cubic
+      const eased = 1 - Math.pow(1 - progress, 3)
+      setDisplayed(Math.round(start + (end - start) * eased))
+      if (progress < 1) requestAnimationFrame(step)
+    }
+    requestAnimationFrame(step)
+  }, [value])
+
+  const formatted = displayed === 0 ? '$0' : displayed > 0 ? `+$${displayed}` : `-$${Math.abs(displayed)}`
+  return (
+    <span key={key} className={`count-up ${className || ''}`} style={style}>
+      {formatted}
+    </span>
+  )
+}
 
 // ─── Login Screen ─────────────────────────────────────────────────────────────
 function LoginScreen({ onLogin }: { onLogin: (name: string) => void }) {
@@ -170,7 +223,7 @@ function Sidebar({
 
 // ─── Leaderboard Tab ──────────────────────────────────────────────────────────
 function LeaderboardTab({
-  tournament, standings, liveData, pickMap, loading, lastUpdated, onRefresh, money
+  tournament, standings, liveData, pickMap, loading, lastUpdated, onRefresh, money, flashMap
 }: {
   tournament: Tournament | null
   standings: PlayerStanding[]
@@ -180,6 +233,7 @@ function LeaderboardTab({
   lastUpdated: Date | null
   onRefresh: () => void
   money: Record<string, number>
+  flashMap: Record<string, 'up' | 'down'>
 }) {
   if (!tournament) return (
     <div className="empty-state card">
@@ -207,6 +261,41 @@ function LeaderboardTab({
           </button>
         </div>
       </div>
+
+      {/* ── Tournament Progress Bar ── */}
+      {(() => {
+        const allFinished = liveData.length > 0 && liveData.filter(g => g.status === 'active').every(g => g.thru === 'F')
+        const roundsPlayed = liveData.length > 0
+          ? Math.max(...liveData.map(g => {
+              const r = g.rounds || []
+              return r.filter((v: any) => v !== null).length
+            }))
+          : 0
+        const currentRound = allFinished ? Math.min(roundsPlayed, 4) : Math.max(roundsPlayed, 1)
+        const steps = [
+          { label: 'Round 1', short: 'R1' },
+          { label: 'Round 2', short: 'R2' },
+          { label: 'Round 3', short: 'R3' },
+          { label: 'Round 4', short: 'R4' },
+        ]
+        if (liveData.length === 0) return null
+        return (
+          <div className="tournament-progress mb-24">
+            {steps.map((s, i) => {
+              const stepNum = i + 1
+              const isDone = stepNum < currentRound || (allFinished && stepNum <= currentRound)
+              const isActive = stepNum === currentRound && !allFinished
+              const isFinal = allFinished && stepNum === 4
+              return (
+                <div key={i} className={`progress-step ${isDone ? 'done' : ''} ${isActive ? 'active' : ''} ${isFinal ? 'done' : ''}`}>
+                  {isActive && <div className="progress-dot" />}
+                  {isDone || isFinal ? '✓ ' : ''}{s.label}
+                </div>
+              )
+            })}
+          </div>
+        )
+      })()}
 
       <div className="stats-row mb-24">
         <div className="stat-box">
@@ -409,7 +498,7 @@ function LeaderboardTab({
                       {g.status === 'cut' && <span className="badge badge-red" style={{ marginLeft: 8 }}>CUT</span>}
                       {g.status === 'wd'  && <span className="badge badge-gray" style={{ marginLeft: 8 }}>WD</span>}
                     </td>
-                    <td><span className={`score ${scoreClass(g.score)}`}>{toRelScore(g.score)}</span></td>
+                    <td><span className={`score ${scoreClass(g.score)} ${flashMap[g.name] === "up" ? "score-flash-up" : flashMap[g.name] === "down" ? "score-flash-down" : ""}`}>{toRelScore(g.score)}</span></td>
                     <td><span className={`score ${scoreClass(g.today)}`}>{toRelScore(g.today)}</span></td>
                     <td><span style={{ fontFamily: 'DM Mono', fontSize: 13, color: 'var(--text-dim)' }}>{g.thru}</span></td>
                     <td>
@@ -654,14 +743,12 @@ function MoneyTab({ seasonMoney, weekMoney, tournament, history }: {
       <div className="mb-24">
         <h3 style={{ fontFamily: 'DM Serif Display', fontSize: 20, marginBottom: 16 }}>Season Standings</h3>
         <div className="money-grid">
-          {sorted.map((sm) => {
+          {sorted.map((sm, i) => {
             const v = sm.total
             return (
-              <div key={sm.player_name} className="money-card">
+              <div key={sm.player_name} className={`money-card ${i === 0 ? 'gradient-card-gold leader-glow' : i === 1 ? 'gradient-card-green' : i === 2 ? 'gradient-card-indigo' : ''}`}>
                 <div style={{ fontWeight: 600, fontSize: 15 }}>{sm.player_name}</div>
-                <div className={`money-amount ${moneyClass(v)}`}>
-                  {v > 0 ? '+' : ''}{v < 0 ? '-' : ''}${Math.abs(v)}
-                </div>
+                <AnimatedMoney value={v} className={`money-amount ${moneyClass(v)}`} />
                 <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Season</div>
               </div>
             )
@@ -2129,9 +2216,7 @@ function SeasonRecapTab({ history, golferHistory, seasonMoney }: {
 
       {/* Season leader banner */}
       {leader && (
-        <div style={{
-          background: 'linear-gradient(135deg, rgba(245,158,11,0.15), rgba(74,222,128,0.08))',
-          border: '1px solid rgba(245,158,11,0.3)',
+        <div className="card gradient-card-gold leader-glow" style={{
           borderRadius: 12, padding: '20px 24px', marginBottom: 24,
           display: 'flex', alignItems: 'center', gap: 16,
         }}>
@@ -2274,15 +2359,26 @@ export default function App() {
   const [tournament, setTournament] = useState<Tournament | null>(null)
   const [picks, setPicks] = useState<Pick[]>([])
   const [liveData, setLiveData] = useState<GolferScore[]>([])
+  const [prevScores, setPrevScores] = useState<Record<string, number | null>>({})
+  const [flashMap, setFlashMap] = useState<Record<string, 'up' | 'down'>>({})
   const [seasonMoney, setSeasonMoney] = useState<SeasonMoney[]>([])
   const [history, setHistory] = useState<any[]>([])
   const [golferHistory, setGolferHistory] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
+  const [dataLoaded, setDataLoaded] = useState(false)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   const [bootstrapped, setBootstrapped] = useState(false)
+  const [tabKey, setTabKey] = useState(0)
 
   const isAdmin = ['Eric', 'Chase'].includes(currentPlayer ?? '')
   const [sidebarOpen, setSidebarOpen] = useState(false)
+
+  // Tab change with animation reset
+  const handleTabChange = useCallback((t: string) => {
+    setTab(t)
+    setTabKey(k => k + 1)
+    setSidebarOpen(false)
+  }, [])
 
   // ── Load from localStorage on mount ──
   useEffect(() => {
@@ -2355,6 +2451,7 @@ export default function App() {
       .select('*, tournaments(name, date, is_major)')
       .order('created_at', { ascending: false })
     if (gr) setGolferHistory(gr)
+    setDataLoaded(true)
   }, [])
 
   useEffect(() => {
@@ -2368,7 +2465,21 @@ export default function App() {
     try {
       const res = await fetch('/api/scores')
       const data: GolferScore[] = await res.json()
-      setLiveData(data)
+      // Detect score changes for flash animation
+      setLiveData(prev => {
+        const newFlash: Record<string, 'up' | 'down'> = {}
+        for (const g of data) {
+          const old = prev.find(p => p.name === g.name)
+          if (old && old.score !== null && g.score !== null && old.score !== g.score) {
+            newFlash[g.name] = g.score < old.score ? 'up' : 'down'
+          }
+        }
+        if (Object.keys(newFlash).length > 0) {
+          setFlashMap(newFlash)
+          setTimeout(() => setFlashMap({}), 1400)
+        }
+        return data
+      })
       setLastUpdated(new Date())
     } catch {}
     setLoading(false)
@@ -2584,7 +2695,7 @@ export default function App() {
       <Sidebar
         currentPlayer={currentPlayer}
         tab={tab}
-        setTab={(t) => { setTab(t); setSidebarOpen(false) }}
+        setTab={handleTabChange}
         isAdmin={isAdmin}
         onLogout={handleLogout}
         tournament={tournament}
@@ -2592,14 +2703,20 @@ export default function App() {
         onClose={() => setSidebarOpen(false)}
       />
       <main className="main-content">
-        {tab === 'live'    && <LeaderboardTab tournament={tournament} standings={standings} liveData={liveData} pickMap={pickMap} loading={loading} lastUpdated={lastUpdated} onRefresh={fetchScores} money={weekMoney} />}
-        {tab === 'picks'   && <PicksTab standings={standings} pickMap={pickMap} liveData={liveData} tournament={tournament} />}
-        {tab === 'money'   && <MoneyTab seasonMoney={seasonMoney} weekMoney={weekMoney} tournament={tournament} history={history} />}
-        {tab === 'draft'   && <DraftTab tournament={tournament} picks={picks} liveData={liveData} currentPlayer={currentPlayer} isAdmin={isAdmin} onPickMade={handlePickMade} />}
-        {tab === 'history' && <HistoryTab history={history} golferHistory={golferHistory} isAdmin={isAdmin} onDeleteTournament={handleDeleteTournament} onEditResult={handleEditResult} onDeleteResult={handleDeleteResult} />}
-        {tab === 'stats'   && <StatsTab history={history} />}
-        {tab === 'recap'   && <SeasonRecapTab history={history} golferHistory={golferHistory} seasonMoney={seasonMoney} />}
-        {tab === 'admin'   && isAdmin && <AdminTab tournament={tournament} standings={standings} weekMoney={weekMoney} onSetupTournament={handleSetupTournament} onFinalize={handleFinalize} onClearTournament={handleClearTournament} onClearPicks={handleClearPicks} />}
+        {!dataLoaded ? (
+          <SkeletonScreen />
+        ) : (
+          <div key={tabKey} className="tab-content">
+            {tab === 'live'    && <LeaderboardTab tournament={tournament} standings={standings} liveData={liveData} pickMap={pickMap} loading={loading} lastUpdated={lastUpdated} onRefresh={fetchScores} money={weekMoney} flashMap={flashMap} />}
+            {tab === 'picks'   && <PicksTab standings={standings} pickMap={pickMap} liveData={liveData} tournament={tournament} />}
+            {tab === 'money'   && <MoneyTab seasonMoney={seasonMoney} weekMoney={weekMoney} tournament={tournament} history={history} />}
+            {tab === 'draft'   && <DraftTab tournament={tournament} picks={picks} liveData={liveData} currentPlayer={currentPlayer} isAdmin={isAdmin} onPickMade={handlePickMade} />}
+            {tab === 'history' && <HistoryTab history={history} golferHistory={golferHistory} isAdmin={isAdmin} onDeleteTournament={handleDeleteTournament} onEditResult={handleEditResult} onDeleteResult={handleDeleteResult} />}
+            {tab === 'stats'   && <StatsTab history={history} />}
+            {tab === 'recap'   && <SeasonRecapTab history={history} golferHistory={golferHistory} seasonMoney={seasonMoney} />}
+            {tab === 'admin'   && isAdmin && <AdminTab tournament={tournament} standings={standings} weekMoney={weekMoney} onSetupTournament={handleSetupTournament} onFinalize={handleFinalize} onClearTournament={handleClearTournament} onClearPicks={handleClearPicks} />}
+          </div>
+        )}
       </main>
 
       {/* ── Bottom tab bar — mobile only ── */}
@@ -2617,7 +2734,7 @@ export default function App() {
           <button
             key={item.key}
             className={`bottom-tab-btn ${tab === item.key ? 'active' : ''}`}
-            onClick={() => setTab(item.key)}
+            onClick={() => handleTabChange(item.key)}
           >
             <span className="bottom-tab-icon">{item.icon}</span>
             <span className="bottom-tab-label">{item.label}</span>
