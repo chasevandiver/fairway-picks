@@ -89,7 +89,7 @@ const NAV_ITEMS = [
 ]
 
 function Sidebar({
-  currentPlayer, tab, setTab, isAdmin, onLogout, tournament
+  currentPlayer, tab, setTab, isAdmin, onLogout, tournament, isOpen, onClose
 }: {
   currentPlayer: string
   tab: string
@@ -97,9 +97,25 @@ function Sidebar({
   isAdmin: boolean
   onLogout: () => void
   tournament: Tournament | null
+  isOpen: boolean
+  onClose: () => void
 }) {
   return (
-    <div className="sidebar">
+    <>
+      {/* Overlay for mobile */}
+      {isOpen && (
+        <div
+          onClick={onClose}
+          style={{
+            display: 'none',
+            position: 'fixed', inset: 0, zIndex: 99,
+            background: 'rgba(0,0,0,0.5)',
+          }}
+          className="sidebar-overlay"
+        />
+      )}
+    <div className={`sidebar${isOpen ? ' open' : ''}`}>
+      <button className="sidebar-close-btn" onClick={onClose} style={{ display: 'none' }}>✕</button>
       <div className="sidebar-logo">
         <h1>Fairway <span>Picks</span></h1>
         <p>PGA Tour Pick'em</p>
@@ -111,7 +127,7 @@ function Sidebar({
           <button
             key={item.key}
             className={`nav-item ${tab === item.key ? 'active' : ''}`}
-            onClick={() => setTab(item.key)}
+            onClick={() => { setTab(item.key); onClose() }}
           >
             <span className="nav-icon">{item.icon}</span>
             {item.label}
@@ -146,6 +162,7 @@ function Sidebar({
         </div>
       </div>
     </div>
+    </>
   )
 }
 
@@ -1094,6 +1111,7 @@ export default function App() {
   const [bootstrapped, setBootstrapped] = useState(false)
 
   const isAdmin = ['Eric', 'Chase'].includes(currentPlayer ?? '')
+  const [sidebarOpen, setSidebarOpen] = useState(false)
 
   // ── Load from localStorage on mount ──
   useEffect(() => {
@@ -1324,6 +1342,10 @@ export default function App() {
 
   return (
     <div className="app-shell">
+      {/* Hamburger button — mobile only */}
+      <button className="hamburger-btn" onClick={() => setSidebarOpen(true)}>
+        <span /><span /><span />
+      </button>
       <Sidebar
         currentPlayer={currentPlayer}
         tab={tab}
@@ -1331,6 +1353,8 @@ export default function App() {
         isAdmin={isAdmin}
         onLogout={handleLogout}
         tournament={tournament}
+        isOpen={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
       />
       <main className="main-content">
         {tab === 'live'    && <LeaderboardTab tournament={tournament} standings={standings} liveData={liveData} pickMap={pickMap} loading={loading} lastUpdated={lastUpdated} onRefresh={fetchScores} money={weekMoney} />}
