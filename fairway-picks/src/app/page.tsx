@@ -810,25 +810,35 @@ function AdminTab({
   tournament: Tournament | null
   standings: PlayerStanding[]
   weekMoney: Record<string, number>
-  onSetupTournament: (data: { name: string; course: string; date: string; draft_order: string[] }) => Promise<void>
+  onSetupTournament: (data: { name: string; course: string; date: string; draft_order: string[]; is_major: boolean }) => Promise<void>
   onFinalize: () => Promise<void>
   onClearTournament: () => Promise<void>
   onClearPicks: () => Promise<void>
 }) {
   const [selectedEvent, setSelectedEvent] = useState('')
   const [draftOrderInput, setDraftOrderInput] = useState(PLAYERS.join(', '))
+  const [isMajor, setIsMajor] = useState(false)
   const [saving, setSaving] = useState(false)
   const [finalizing, setFinalizing] = useState(false)
   const [msg, setMsg] = useState('')
 
   const selectedTournament = PGA_SCHEDULE.find((e) => e.name === selectedEvent)
 
+  // Auto-detect majors when tournament is selected
+  const MAJOR_NAMES = ['Masters', 'PGA Championship', 'U.S. Open', 'The Open Championship', 'US Open']
+  useEffect(() => {
+    if (selectedTournament) {
+      setIsMajor(MAJOR_NAMES.some(m => selectedTournament.name.includes(m)))
+    }
+  }, [selectedTournament?.name])
+
   const handleSetup = async () => {
     if (!selectedTournament) return
     setSaving(true)
     const orderArr = draftOrderInput.split(',').map((s) => s.trim()).filter(Boolean)
-    await onSetupTournament({ ...selectedTournament, draft_order: orderArr })
+    await onSetupTournament({ ...selectedTournament, draft_order: orderArr, is_major: isMajor })
     setSelectedEvent('')
+    setIsMajor(false)
     setMsg('✅ Tournament activated!')
     setSaving(false)
     setTimeout(() => setMsg(''), 3000)
@@ -902,8 +912,27 @@ function AdminTab({
                   Snake draft reverses on even rounds. First player listed picks first.
                 </div>
               </div>
+              <div className="form-group">
+                <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+                  <div
+                    onClick={() => setIsMajor(!isMajor)}
+                    style={{
+                      width: 20, height: 20, borderRadius: 4, border: `2px solid ${isMajor ? 'var(--green)' : 'var(--border-bright)'}`,
+                      background: isMajor ? 'var(--green)' : 'transparent',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      cursor: 'pointer', flexShrink: 0, transition: 'all 0.15s',
+                    }}
+                  >
+                    {isMajor && <span style={{ color: '#0a0c0f', fontSize: 13, fontWeight: 900, lineHeight: 1 }}>✓</span>}
+                  </div>
+                  <div>
+                    <div style={{ fontWeight: 600, fontSize: 14 }}>⛳ Major Championship</div>
+                    <div style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 2 }}>Masters, PGA Championship, US Open, or The Open</div>
+                  </div>
+                </label>
+              </div>
               <button className="btn btn-green" onClick={handleSetup} disabled={saving || !selectedTournament}>
-                {saving ? '⏳ Saving…' : '⛳ Activate Tournament'}
+                {saving ? '⏳ Saving…' : `${isMajor ? '⛳ Activate Major' : '⛳ Activate Tournament'}`}
               </button>
             </div>
           </div>
@@ -1140,15 +1169,72 @@ const ALL_STATS = [
   { player: 'Eric',    first: 1,  second: 0,  third: 0,  majors: 0,   winners: 0,  top3: 0,  cut: 0  },
 ]
 
-function StatsTab() {
+function StatsTab({ history }: { history: any[] }) {
   const [activeYear, setActiveYear] = useState<number | 'all'>('all')
-  const years = [2020, 2021, 2022, 2023, 2024, 2025]
-  const maxCut = Math.max(...ALL_STATS.map(s => s.cut))
 
-  // Major wins per player
+  // ── Merge hardcoded baseline + live Supabase results ──
+  // Live results come from finalized tournaments stored in DB (2026+)
+  const liveStatsByPlayer: Record<string, { first: number; second: number; third: number; winners: number; top3: number; cut: number; majors: number }> = {}
+  PLAYERS.forEach(p => liveStatsByPlayer[p] = { first: 0, second: 0, third: 0, winners: 0, top3: 0, cut: 0, majors: 0 })
+
+  const liveMajors: typeof MAJORS_HISTORY = []
+
+  for (const h of history) {
+    const isMajor = h.is_major === true
+    for (const s of (h.standings || [])) {
+      const p = s.player
+      if (!liveStatsByPlayer[p]) continue
+      if (s.rank === 1) liveStatsByPlayer[p].first++
+      if (s.rank === 2) liveStatsByPlayer[p].second++
+      if (s.rank === 3) liveStatsByPlayer[p].third++
+      liveStatsByPlayer[p].cut += s.golfers_cut || 0
+    }
+    if (h.money) {
+      for (const p of PLAYERS) {
+        if (!liveStatsByPlayer[p]) continue
+        const r = (h.standings || []).find((s: any) => s.player === p)
+        if (r?.has_winner) liveStatsByPlayer[p].winners++
+        if (r?.has_top3 && !r?.has_winner) liveStatsByPlayer[p].top3++
+      }
+    }
+    if (isMajor && h.winner_player) {
+      const majorType = (['Masters', 'PGA Championship', 'US Open', 'The Open'] as const)
+        .find(m => h.tournament_name?.includes(m)) ?? 'The Open'
+      const logos: Record<string, string> = { 'Masters': '🌲', 'PGA Championship': '🏆', 'US Open': '🦅', 'The Open': '🏴󠁧󠁢󠁳󠁣󠁴󠁿' }
+      liveMajors.push({
+        year: new Date(h.date).getFullYear(),
+        name: majorType,
+        winner: h.winner_player,
+        logo: logos[majorType],
+      })
+      liveStatsByPlayer[h.winner_player].majors++
+    }
+  }
+
+  // Merge: baseline hardcoded + live
+  const mergedStats = ALL_STATS.map(base => {
+    const live = liveStatsByPlayer[base.player] || {}
+    return {
+      player: base.player,
+      first:   base.first   + (live.first   || 0),
+      second:  base.second  + (live.second  || 0),
+      third:   base.third   + (live.third   || 0),
+      majors:  base.majors  + (live.majors  || 0),
+      winners: base.winners + (live.winners || 0),
+      top3:    base.top3    + (live.top3    || 0),
+      cut:     base.cut     + (live.cut     || 0),
+    }
+  })
+
+  const allMajors = [...MAJORS_HISTORY, ...liveMajors]
+  const years = [...new Set([2020, 2021, 2022, 2023, 2024, 2025, ...liveMajors.map(m => m.year)])].sort()
+
+  const maxCut = Math.max(...mergedStats.map(s => s.cut))
+
+  // Major wins per player (merged)
   const majorsByPlayer: Record<string, number> = {}
   PLAYERS.forEach(p => majorsByPlayer[p] = 0)
-  MAJORS_HISTORY.forEach(m => {
+  allMajors.forEach(m => {
     for (const p of PLAYERS) {
       if (m.winner.includes(p)) majorsByPlayer[p] += m.winner.includes('Tie') ? 0.5 : 1
     }
@@ -1167,9 +1253,9 @@ function StatsTab() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 12, marginBottom: 28 }}>
         {[
           { label: 'Seasons Played', val: 6, color: 'var(--green)' },
-          { label: 'Tournaments', val: ALL_STATS[0].first + ALL_STATS[0].second + ALL_STATS[0].third, color: 'var(--gold)' },
-          { label: 'Majors Tracked', val: MAJORS_HISTORY.length, color: '#c084fc' },
-          { label: 'Total Cuts', val: ALL_STATS.reduce((s,p)=>s+p.cut,0), color: 'var(--red)' },
+          { label: 'Tournaments', val: mergedStats[0].first + mergedStats[0].second + mergedStats[0].third, color: 'var(--gold)' },
+          { label: 'Majors Tracked', val: allMajors.length, color: '#c084fc' },
+          { label: 'Total Cuts', val: mergedStats.reduce((s,p)=>s+p.cut,0), color: 'var(--red)' },
         ].map(s => (
           <div key={s.label} className="stat-box">
             <div className="stat-val" style={{ color: s.color }}>{s.val}</div>
@@ -1203,7 +1289,7 @@ function StatsTab() {
               </tr>
             </thead>
             <tbody>
-              {ALL_STATS.map((s, i) => (
+              {mergedStats.map((s, i) => (
                 <tr key={s.player} style={{ borderTop: '1px solid var(--border)', background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.015)' }}>
                   <td style={{ padding: '14px 20px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -1287,7 +1373,7 @@ function StatsTab() {
           {/* Rows by year */}
           {(activeYear === 'all' ? years : [activeYear as number]).map(year => (
             (['Masters', 'PGA Championship', 'US Open', 'The Open'] as const).map(majorName => {
-              const major = MAJORS_HISTORY.find(m => m.year === year && m.name === majorName)
+              const major = allMajors.find(m => m.year === year && m.name === majorName)
               const s = MAJOR_COLORS[majorName]
               return (
                 <div key={`${year}-${majorName}`} style={{
@@ -1339,7 +1425,7 @@ function StatsTab() {
         <div className="card">
           <div className="card-header"><div className="card-title">🏅 Podium Finishes</div></div>
           <div style={{ padding: '20px 24px' }}>
-            {ALL_STATS.map(s => (
+            {mergedStats.map(s => (
               <div key={s.player} style={{ marginBottom: 16 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6, alignItems: 'center' }}>
                   <span style={{ fontWeight: 600, fontSize: 13 }}>{s.player}</span>
@@ -1362,7 +1448,7 @@ function StatsTab() {
         <div className="card">
           <div className="card-header"><div className="card-title">✂️ Cuts Taken</div></div>
           <div style={{ padding: '20px 24px' }}>
-            {[...ALL_STATS].sort((a,b) => b.cut - a.cut).map(s => (
+            {[...mergedStats].sort((a,b) => b.cut - a.cut).map(s => (
               <div key={s.player} style={{ marginBottom: 14 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
                   <span style={{ fontWeight: 600, fontSize: 13 }}>{s.player}</span>
@@ -1429,7 +1515,7 @@ export default function App() {
     // Load history: join results + tournaments
     const { data: results } = await supabase
       .from('results')
-      .select('*, tournaments(name, date)')
+      .select('*, tournaments(name, date, is_major)')
       .order('created_at', { ascending: false })
 
     if (results) {
@@ -1442,12 +1528,22 @@ export default function App() {
             tournament_id: tid,
             tournament_name: r.tournaments?.name,
             date: r.tournaments?.date,
+            is_major: r.tournaments?.is_major || false,
             standings: [],
             money: {},
+            winner_player: null,
           }
         }
-        grouped[tid].standings.push({ player: r.player_name, score: r.total_score, rank: r.rank })
+        grouped[tid].standings.push({
+          player: r.player_name,
+          score: r.total_score,
+          rank: r.rank,
+          has_winner: r.has_winner,
+          has_top3: r.has_top3,
+          golfers_cut: r.golfers_cut || 0,
+        })
         grouped[tid].money[r.player_name] = r.money_won
+        if (r.has_winner) grouped[tid].winner_player = r.player_name
       }
       setHistory(Object.values(grouped))
     }
@@ -1506,7 +1602,7 @@ export default function App() {
     setTab('live')
   }
 
-  const handleSetupTournament = async (data: { name: string; course: string; date: string; draft_order: string[] }) => {
+  const handleSetupTournament = async (data: { name: string; course: string; date: string; draft_order: string[]; is_major: boolean }) => {
     // Get current active tournament so we can clear its picks
     const { data: oldT } = await supabase.from('tournaments').select('id').eq('status', 'active').single()
     if (oldT) {
@@ -1545,6 +1641,7 @@ export default function App() {
       has_winner: s.hasWinner,
       has_top3: s.hasTop3,
       money_won: money[s.player] || 0,
+      golfers_cut: s.golfers.filter((g: any) => g.status === 'cut' || g.status === 'wd').length,
     }))
     await supabase.from('results').upsert(resultRows, { onConflict: 'tournament_id,player_name' })
 
@@ -1646,7 +1743,7 @@ export default function App() {
         {tab === 'money'   && <MoneyTab seasonMoney={seasonMoney} weekMoney={weekMoney} tournament={tournament} history={history} />}
         {tab === 'draft'   && <DraftTab tournament={tournament} picks={picks} liveData={liveData} currentPlayer={currentPlayer} isAdmin={isAdmin} onPickMade={handlePickMade} />}
         {tab === 'history' && <HistoryTab history={history} isAdmin={isAdmin} onDeleteTournament={handleDeleteTournament} onEditResult={handleEditResult} />}
-        {tab === 'stats'   && <StatsTab />}
+        {tab === 'stats'   && <StatsTab history={history} />}
         {tab === 'admin'   && isAdmin && <AdminTab tournament={tournament} standings={standings} weekMoney={weekMoney} onSetupTournament={handleSetupTournament} onFinalize={handleFinalize} onClearTournament={handleClearTournament} onClearPicks={handleClearPicks} />}
       </main>
     </div>
