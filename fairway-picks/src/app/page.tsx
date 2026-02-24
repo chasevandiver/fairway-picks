@@ -85,6 +85,7 @@ const NAV_ITEMS = [
   { key: 'money',   icon: '💰', label: 'Money' },
   { key: 'draft',   icon: '📋', label: 'Draft' },
   { key: 'history', icon: '📈', label: 'History' },
+  { key: 'stats',   icon: '🏅', label: 'Stats' },
   { key: 'admin',   icon: '⚙️', label: 'Admin',   adminOnly: true },
 ]
 
@@ -1096,6 +1097,291 @@ function HistoryTab({ history, isAdmin, onDeleteTournament, onEditResult }: {
   )
 }
 
+// ─── Stats Tab ────────────────────────────────────────────────────────────────
+const MAJORS_HISTORY = [
+  { year: 2020, name: 'Masters',        winner: 'Chase',         logo: '🌲' },
+  { year: 2020, name: 'PGA Championship', winner: 'Max',         logo: '🏆' },
+  { year: 2020, name: 'US Open',        winner: 'Chase',         logo: '🦅' },
+  { year: 2021, name: 'Masters',        winner: 'Chase',         logo: '🌲' },
+  { year: 2021, name: 'PGA Championship', winner: 'Hayden',      logo: '🏆' },
+  { year: 2021, name: 'US Open',        winner: 'Chase',         logo: '🦅' },
+  { year: 2021, name: 'The Open',       winner: 'Chase',         logo: '🏴󠁧󠁢󠁳󠁣󠁴󠁿' },
+  { year: 2022, name: 'Masters',        winner: 'Chase',         logo: '🌲' },
+  { year: 2022, name: 'PGA Championship', winner: 'Hayden',      logo: '🏆' },
+  { year: 2022, name: 'US Open',        winner: 'Chase',         logo: '🦅' },
+  { year: 2022, name: 'The Open',       winner: 'Chase',         logo: '🏴󠁧󠁢󠁳󠁣󠁴󠁿' },
+  { year: 2023, name: 'Masters',        winner: 'JHall',         logo: '🌲' },
+  { year: 2023, name: 'PGA Championship', winner: 'Andrew',      logo: '🏆' },
+  { year: 2023, name: 'US Open',        winner: 'Brennan',       logo: '🦅' },
+  { year: 2023, name: 'The Open',       winner: 'Brennan/Hayden (Tie)', logo: '🏴󠁧󠁢󠁳󠁣󠁴󠁿' },
+  { year: 2024, name: 'Masters',        winner: 'Brennan',       logo: '🌲' },
+  { year: 2024, name: 'PGA Championship', winner: 'Max',         logo: '🏆' },
+  { year: 2024, name: 'US Open',        winner: 'Andrew',        logo: '🦅' },
+  { year: 2024, name: 'The Open',       winner: 'Max',           logo: '🏴󠁧󠁢󠁳󠁣󠁴󠁿' },
+  { year: 2025, name: 'Masters',        winner: 'Andrew',        logo: '🌲' },
+  { year: 2025, name: 'PGA Championship', winner: 'Max',         logo: '🏆' },
+  { year: 2025, name: 'US Open',        winner: 'Max',           logo: '🦅' },
+  { year: 2025, name: 'The Open',       winner: 'Max',           logo: '🏴󠁧󠁢󠁳󠁣󠁴󠁿' },
+]
+
+const MAJOR_COLORS: Record<string, { bg: string; border: string; text: string; label: string }> = {
+  'Masters':          { bg: 'rgba(34,197,94,0.10)',  border: 'rgba(34,197,94,0.3)',  text: '#4ade80', label: 'Masters' },
+  'PGA Championship': { bg: 'rgba(245,158,11,0.10)', border: 'rgba(245,158,11,0.3)', text: '#f59e0b', label: 'PGA' },
+  'US Open':          { bg: 'rgba(99,179,237,0.10)', border: 'rgba(99,179,237,0.3)', text: '#60a5fa', label: 'US Open' },
+  'The Open':         { bg: 'rgba(192,132,252,0.10)',border: 'rgba(192,132,252,0.3)',text: '#c084fc', label: 'The Open' },
+}
+
+const ALL_STATS = [
+  { player: 'Chase',   first: 19, second: 25, third: 26, majors: 8,   winners: 10, top3: 18, cut: 68 },
+  { player: 'Max',     first: 33, second: 23, third: 22, majors: 6,   winners: 15, top3: 28, cut: 50 },
+  { player: 'Hayden',  first: 28, second: 26, third: 30, majors: 2.5, winners: 12, top3: 24, cut: 65 },
+  { player: 'Andrew',  first: 18, second: 27, third: 14, majors: 2,   winners: 14, top3: 22, cut: 61 },
+  { player: 'Brennan', first: 13, second: 7,  third: 7,  majors: 2.5, winners: 6,  top3: 9,  cut: 19 },
+  { player: 'Eric',    first: 1,  second: 0,  third: 0,  majors: 0,   winners: 0,  top3: 0,  cut: 0  },
+]
+
+function StatBar({ value, max, color }: { value: number; max: number; color: string }) {
+  const pct = max > 0 ? Math.round((value / max) * 100) : 0
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+      <div style={{ flex: 1, height: 6, background: 'var(--surface2)', borderRadius: 3, overflow: 'hidden' }}>
+        <div style={{ width: `${pct}%`, height: '100%', background: color, borderRadius: 3, transition: 'width 0.4s ease' }} />
+      </div>
+      <span style={{ fontFamily: 'DM Mono', fontSize: 12, color: 'var(--text-mid)', width: 28, textAlign: 'right' }}>{value}</span>
+    </div>
+  )
+}
+
+function StatsTab() {
+  const [activeYear, setActiveYear] = useState<number | 'all'>('all')
+  const years = [2020, 2021, 2022, 2023, 2024, 2025]
+  const filteredMajors = activeYear === 'all' ? MAJORS_HISTORY : MAJORS_HISTORY.filter(m => m.year === activeYear)
+
+  const maxFirst   = Math.max(...ALL_STATS.map(s => s.first))
+  const maxSecond  = Math.max(...ALL_STATS.map(s => s.second))
+  const maxThird   = Math.max(...ALL_STATS.map(s => s.third))
+  const maxWinners = Math.max(...ALL_STATS.map(s => s.winners))
+  const maxTop3    = Math.max(...ALL_STATS.map(s => s.top3))
+  const maxCut     = Math.max(...ALL_STATS.map(s => s.cut))
+  const maxMajors  = Math.max(...ALL_STATS.map(s => s.majors))
+
+  // Major wins per player
+  const majorsByPlayer: Record<string, number> = {}
+  PLAYERS.forEach(p => majorsByPlayer[p] = 0)
+  MAJORS_HISTORY.forEach(m => {
+    for (const p of PLAYERS) {
+      if (m.winner.includes(p)) majorsByPlayer[p] += m.winner.includes('Tie') ? 0.5 : 1
+    }
+  })
+
+  return (
+    <div>
+      <div className="page-header">
+        <div>
+          <div className="page-title">League Stats</div>
+          <div className="page-sub">All-time records since 2020</div>
+        </div>
+      </div>
+
+      {/* ── Summary Stat Cards ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 12, marginBottom: 28 }}>
+        {[
+          { label: 'Seasons Played', val: 6, color: 'var(--green)' },
+          { label: 'Tournaments', val: ALL_STATS[0].first + ALL_STATS[0].second + ALL_STATS[0].third, color: 'var(--gold)' },
+          { label: 'Majors Tracked', val: MAJORS_HISTORY.length, color: '#c084fc' },
+          { label: 'Total Cuts', val: ALL_STATS.reduce((s,p)=>s+p.cut,0), color: 'var(--red)' },
+        ].map(s => (
+          <div key={s.label} className="stat-box">
+            <div className="stat-val" style={{ color: s.color }}>{s.val}</div>
+            <div className="stat-label">{s.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* ── Main Stats Table ── */}
+      <div className="card mb-24">
+        <div className="card-header">
+          <div className="card-title">All-Time Player Stats</div>
+          <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: 'var(--text-dim)' }}>2020 – 2026 · All events</span>
+        </div>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                {['Player','🥇 1st','🥈 2nd','🥉 3rd','🏆 Majors','🎯 Winners','🔝 Top 3 (no W)','✂️ Cuts'].map((h, i) => (
+                  <th key={i} style={{ padding: '8px 16px', textAlign: i === 0 ? 'left' : 'center', fontFamily: 'DM Mono', fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-dim)', fontWeight: 500, whiteSpace: 'nowrap' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {ALL_STATS.map((s, i) => (
+                <tr key={s.player} style={{ borderTop: '1px solid var(--border)', background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.01)' }}>
+                  <td style={{ padding: '14px 16px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <div className="user-avatar" style={{ width: 30, height: 30, fontSize: 12 }}>{s.player[0]}</div>
+                      <span style={{ fontWeight: 600 }}>{s.player}</span>
+                    </div>
+                  </td>
+                  <td style={{ padding: '14px 16px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      <StatBar value={s.first} max={maxFirst} color="var(--gold)" />
+                    </div>
+                  </td>
+                  <td style={{ padding: '14px 16px' }}>
+                    <StatBar value={s.second} max={maxSecond} color="#c0c0c0" />
+                  </td>
+                  <td style={{ padding: '14px 16px' }}>
+                    <StatBar value={s.third} max={maxThird} color="#cd7f32" />
+                  </td>
+                  <td style={{ padding: '14px 16px', textAlign: 'center' }}>
+                    <span style={{ fontFamily: 'DM Mono', fontSize: 15, fontWeight: 700, color: '#c084fc' }}>{s.majors || '—'}</span>
+                  </td>
+                  <td style={{ padding: '14px 16px' }}>
+                    <StatBar value={s.winners} max={maxWinners} color="var(--green)" />
+                  </td>
+                  <td style={{ padding: '14px 16px' }}>
+                    <StatBar value={s.top3} max={maxTop3} color="var(--indigo)" />
+                  </td>
+                  <td style={{ padding: '14px 16px' }}>
+                    <StatBar value={s.cut} max={maxCut} color="var(--red)" />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* ── Majors Wall ── */}
+      <div className="card mb-24">
+        <div className="card-header" style={{ flexWrap: 'wrap', gap: 12 }}>
+          <div className="card-title">⛳ Majors Wall</div>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            <button
+              onClick={() => setActiveYear('all')}
+              style={{
+                padding: '4px 12px', borderRadius: 100, fontSize: 11, fontFamily: 'DM Mono', cursor: 'pointer', border: '1px solid',
+                background: activeYear === 'all' ? 'var(--green-dim)' : 'var(--surface2)',
+                borderColor: activeYear === 'all' ? 'rgba(74,222,128,0.3)' : 'var(--border)',
+                color: activeYear === 'all' ? 'var(--green)' : 'var(--text-dim)',
+              }}
+            >All</button>
+            {years.map(y => (
+              <button
+                key={y}
+                onClick={() => setActiveYear(y)}
+                style={{
+                  padding: '4px 12px', borderRadius: 100, fontSize: 11, fontFamily: 'DM Mono', cursor: 'pointer', border: '1px solid',
+                  background: activeYear === y ? 'var(--gold-dim)' : 'var(--surface2)',
+                  borderColor: activeYear === y ? 'rgba(245,158,11,0.3)' : 'var(--border)',
+                  color: activeYear === y ? 'var(--gold)' : 'var(--text-dim)',
+                }}
+              >{y}</button>
+            ))}
+          </div>
+        </div>
+        <div style={{ padding: '20px 24px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 12 }}>
+          {filteredMajors.map((m, i) => {
+            const style = MAJOR_COLORS[m.name] ?? MAJOR_COLORS['The Open']
+            return (
+              <div key={i} style={{
+                background: style.bg,
+                border: `1px solid ${style.border}`,
+                borderRadius: 10,
+                padding: '14px 16px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 12,
+              }}>
+                <div style={{ fontSize: 28, lineHeight: 1, flexShrink: 0 }}>{m.logo}</div>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 10, fontFamily: 'DM Mono', textTransform: 'uppercase', letterSpacing: '0.08em', color: style.text, marginBottom: 2 }}>
+                    {m.year} · {m.name}
+                  </div>
+                  <div style={{ fontWeight: 700, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {m.winner}
+                  </div>
+                </div>
+                <div style={{
+                  marginLeft: 'auto', width: 28, height: 28, borderRadius: '50%',
+                  background: style.border, display: 'flex', alignItems: 'center',
+                  justifyContent: 'center', fontWeight: 700, fontSize: 12, color: style.text, flexShrink: 0
+                }}>
+                  {m.winner[0]}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+
+        {/* Major wins leaderboard */}
+        <div style={{ borderTop: '1px solid var(--border)', padding: '16px 24px' }}>
+          <div style={{ fontFamily: 'DM Mono', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-dim)', marginBottom: 12 }}>Major Wins Leaderboard</div>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            {Object.entries(majorsByPlayer)
+              .sort((a, b) => b[1] - a[1])
+              .filter(([, v]) => v > 0)
+              .map(([player, count]) => (
+                <div key={player} style={{
+                  display: 'flex', alignItems: 'center', gap: 8,
+                  background: 'var(--surface2)', border: '1px solid var(--border)',
+                  borderRadius: 8, padding: '8px 14px',
+                }}>
+                  <div className="user-avatar" style={{ width: 26, height: 26, fontSize: 11 }}>{player[0]}</div>
+                  <span style={{ fontWeight: 600, fontSize: 13 }}>{player}</span>
+                  <span style={{ fontFamily: 'DM Mono', fontSize: 14, fontWeight: 700, color: '#c084fc', marginLeft: 4 }}>{count}</span>
+                </div>
+              ))}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Podium Finishes breakdown ── */}
+      <div className="grid-2">
+        <div className="card">
+          <div className="card-header"><div className="card-title">🏅 Podium Finishes</div></div>
+          <div style={{ padding: '20px 24px' }}>
+            {ALL_STATS.map(s => (
+              <div key={s.player} style={{ marginBottom: 16 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6, alignItems: 'center' }}>
+                  <span style={{ fontWeight: 600, fontSize: 13 }}>{s.player}</span>
+                  <div style={{ display: 'flex', gap: 10 }}>
+                    <span title="1st" style={{ fontFamily: 'DM Mono', fontSize: 12, color: 'var(--gold)' }}>🥇{s.first}</span>
+                    <span title="2nd" style={{ fontFamily: 'DM Mono', fontSize: 12, color: '#c0c0c0' }}>🥈{s.second}</span>
+                    <span title="3rd" style={{ fontFamily: 'DM Mono', fontSize: 12, color: '#cd7f32' }}>🥉{s.third}</span>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', height: 8, borderRadius: 4, overflow: 'hidden', gap: 1 }}>
+                  {s.first > 0 && <div style={{ flex: s.first, background: 'var(--gold)', borderRadius: '4px 0 0 4px' }} />}
+                  {s.second > 0 && <div style={{ flex: s.second, background: '#c0c0c0' }} />}
+                  {s.third > 0 && <div style={{ flex: s.third, background: '#cd7f32', borderRadius: '0 4px 4px 0' }} />}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="card-header"><div className="card-title">✂️ Cuts Taken</div></div>
+          <div style={{ padding: '20px 24px' }}>
+            {[...ALL_STATS].sort((a,b) => b.cut - a.cut).map(s => (
+              <div key={s.player} style={{ marginBottom: 14 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                  <span style={{ fontWeight: 600, fontSize: 13 }}>{s.player}</span>
+                  <span style={{ fontFamily: 'DM Mono', fontSize: 12, color: 'var(--red)' }}>{s.cut}</span>
+                </div>
+                <div style={{ height: 6, background: 'var(--surface2)', borderRadius: 3, overflow: 'hidden' }}>
+                  <div style={{ width: `${maxCut > 0 ? (s.cut/maxCut)*100 : 0}%`, height: '100%', background: 'var(--red)', borderRadius: 3 }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Root App ─────────────────────────────────────────────────────────────────
 export default function App() {
   const supabase = createClient()
@@ -1362,6 +1648,7 @@ export default function App() {
         {tab === 'money'   && <MoneyTab seasonMoney={seasonMoney} weekMoney={weekMoney} tournament={tournament} history={history} />}
         {tab === 'draft'   && <DraftTab tournament={tournament} picks={picks} liveData={liveData} currentPlayer={currentPlayer} isAdmin={isAdmin} onPickMade={handlePickMade} />}
         {tab === 'history' && <HistoryTab history={history} isAdmin={isAdmin} onDeleteTournament={handleDeleteTournament} onEditResult={handleEditResult} />}
+        {tab === 'stats'   && <StatsTab />}
         {tab === 'admin'   && isAdmin && <AdminTab tournament={tournament} standings={standings} weekMoney={weekMoney} onSetupTournament={handleSetupTournament} onFinalize={handleFinalize} onClearTournament={handleClearTournament} onClearPicks={handleClearPicks} />}
       </main>
     </div>
