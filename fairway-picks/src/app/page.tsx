@@ -1476,10 +1476,10 @@ const MAJORS_HISTORY = [
 ]
 
 const MAJOR_COLORS: Record<string, { bg: string; border: string; text: string; label: string }> = {
-  'Masters':          { bg: 'rgba(34,197,94,0.10)',  border: 'rgba(34,197,94,0.3)',  text: '#4ade80', label: 'Masters' },
-  'PGA Championship': { bg: 'rgba(245,158,11,0.10)', border: 'rgba(245,158,11,0.3)', text: '#f59e0b', label: 'PGA' },
-  'US Open':          { bg: 'rgba(99,179,237,0.10)', border: 'rgba(99,179,237,0.3)', text: '#60a5fa', label: 'US Open' },
-  'The Open':         { bg: 'rgba(192,132,252,0.10)',border: 'rgba(192,132,252,0.3)',text: '#c084fc', label: 'The Open' },
+  'Masters':          { bg: 'rgba(245,158,11,0.08)',  border: 'rgba(245,158,11,0.35)', text: '#f59e0b', label: 'Masters' },
+  'PGA Championship': { bg: 'rgba(99,179,237,0.08)',  border: 'rgba(99,179,237,0.3)',  text: '#60a5fa', label: 'PGA' },
+  'US Open':          { bg: 'rgba(248,113,113,0.08)', border: 'rgba(248,113,113,0.3)', text: '#f87171', label: 'US Open' },
+  'The Open':         { bg: 'rgba(192,132,252,0.08)', border: 'rgba(192,132,252,0.3)', text: '#c084fc', label: 'The Open' },
 }
 
 const ALL_STATS = [
@@ -1680,15 +1680,38 @@ function StatsTab({ history }: { history: any[] }) {
           {/* Column headers */}
           {(['Masters', 'PGA Championship', 'US Open', 'The Open'] as const).map(majorName => {
             const s = MAJOR_COLORS[majorName]
-            const logos: Record<string, string> = { 'Masters': '🌲', 'PGA Championship': '🏆', 'US Open': '🦅', 'The Open': '🏴󠁧󠁢󠁳󠁣󠁴󠁿' }
+            const isMasters = majorName === 'Masters'
             return (
               <div key={majorName} style={{
-                padding: '10px 14px 14px',
+                padding: '12px 14px 16px',
                 borderBottom: `2px solid ${s.border}`,
                 textAlign: 'center',
+                background: s.bg,
               }}>
-                <div style={{ fontSize: 24, marginBottom: 4 }}>{logos[majorName]}</div>
-                <div style={{ fontFamily: 'DM Mono', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em', color: s.text, fontWeight: 600 }}>{majorName}</div>
+                {isMasters ? (
+                  <div style={{
+                    fontFamily: "'Pinyon Script', cursive",
+                    fontSize: 28,
+                    color: '#f59e0b',
+                    lineHeight: 1.1,
+                    letterSpacing: '0.01em',
+                  }}>Masters</div>
+                ) : majorName === 'PGA Championship' ? (
+                  <div>
+                    <div style={{ fontFamily: 'DM Mono', fontSize: 18, fontWeight: 700, color: s.text, letterSpacing: '0.05em' }}>PGA</div>
+                    <div style={{ fontFamily: 'DM Mono', fontSize: 8, color: s.text, opacity: 0.7, letterSpacing: '0.15em', textTransform: 'uppercase', marginTop: 1 }}>Championship</div>
+                  </div>
+                ) : majorName === 'US Open' ? (
+                  <div>
+                    <div style={{ fontFamily: 'DM Serif Display', fontSize: 13, fontWeight: 700, color: s.text, letterSpacing: '0.08em', textTransform: 'uppercase' }}>U.S.</div>
+                    <div style={{ fontFamily: 'DM Serif Display', fontSize: 13, fontWeight: 700, color: s.text, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Open</div>
+                  </div>
+                ) : (
+                  <div>
+                    <div style={{ fontFamily: 'DM Serif Display', fontSize: 11, color: s.text, letterSpacing: '0.12em', textTransform: 'uppercase', opacity: 0.7 }}>The</div>
+                    <div style={{ fontFamily: 'DM Serif Display', fontSize: 15, fontWeight: 700, color: s.text, letterSpacing: '0.06em', textTransform: 'uppercase' }}>Open</div>
+                  </div>
+                )}
               </div>
             )
           })}
