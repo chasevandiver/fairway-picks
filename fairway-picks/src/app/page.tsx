@@ -339,7 +339,17 @@ function LeaderboardTab({
 const ROUND_LABELS = ['R1', 'R2', 'R3', 'R4']
 
 function ScorecardRow({ g, par }: { g: any; par: number }) {
-  const isCut = g.status === 'cut' || g.status === 'wd'
+  // Detect cut from status OR position/thru — whichever ESPN reliably provides
+  const isCut = g.status === 'cut'
+    || g.status === 'wd'
+    || String(g.position || '').toUpperCase() === 'CUT'
+    || String(g.position || '').toUpperCase() === 'WD'
+    || String(g.thru || '').toUpperCase() === 'CUT'
+    || String(g.thru || '').toUpperCase() === 'WD'
+  const isWD = g.status === 'wd'
+    || String(g.position || '').toUpperCase() === 'WD'
+    || String(g.thru || '').toUpperCase() === 'WD'
+
   const rounds: (number | null)[] = g.displayRounds ?? g.rounds ?? [null, null, null, null]
   const totalStrokes = rounds.reduce((sum: number, r: number | null) => sum + (r ?? 0), 0)
   const played = rounds.filter((r: number | null) => r !== null).length
@@ -350,8 +360,8 @@ function ScorecardRow({ g, par }: { g: any; par: number }) {
         <div style={{ fontWeight: 500, fontSize: 13, color: isCut ? 'var(--text-mid)' : 'var(--text)' }}>{g.name}</div>
         <div style={{ display: 'flex', gap: 6, marginTop: 3, alignItems: 'center' }}>
           <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: 'var(--text-dim)' }}>#{g.position}</span>
-          {g.status === 'cut' && <span className="badge badge-red" style={{ fontSize: 9, padding: '2px 7px', letterSpacing: '0.05em' }}>✂ CUT</span>}
-          {g.status === 'wd'  && <span className="badge badge-gray" style={{ fontSize: 9, padding: '2px 7px' }}>WD</span>}
+          {isCut && !isWD && <span className="badge badge-red" style={{ fontSize: 9, padding: '2px 7px', letterSpacing: '0.05em' }}>✂ CUT</span>}
+          {isWD           && <span className="badge badge-gray" style={{ fontSize: 9, padding: '2px 7px' }}>WD</span>}
           {!isCut && g.thru && g.thru !== '—' && g.thru !== 'F' && (
             <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: 'var(--text-dim)' }}>· Thru {g.thru}</span>
           )}
@@ -437,10 +447,13 @@ function PicksTab({ standings, pickMap, liveData, tournament }: {
           // Always merge fresh status from liveData so cut badges show correctly
           const live = liveData.find((d: any) => d.name.toLowerCase() === g.name.toLowerCase())
           const status = live?.status ?? g.status ?? 'active'
+          // Also detect cut from position/thru as fallback
           const isCut = status === 'cut' || status === 'wd'
+            || String(live?.position || g.position || '').toUpperCase() === 'CUT'
+            || String(live?.thru || g.thru || '').toUpperCase() === 'CUT'
           const dr = [...(g.displayRounds ?? g.rounds ?? [null,null,null,null])]
           if (isCut) { dr[2] = dr[0]; dr[3] = dr[1] }
-          return { ...g, status, displayRounds: dr }
+          return { ...g, status: isCut ? (status === 'wd' ? 'wd' : 'cut') : status, displayRounds: dr }
         })
 
         // Per-round totals across all 4 golfers
