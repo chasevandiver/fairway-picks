@@ -1346,21 +1346,40 @@ function HistoryTab({ history, golferHistory, isAdmin, onDeleteTournament, onEdi
               byPayer[p.from].push({ to: p.to, amount: p.amount })
             })
 
+            // Group payers who owe the exact same amounts to the same people
+            const patternKey = (items: { to: string; amount: number }[]) =>
+              [...items].sort((a,b) => a.to.localeCompare(b.to)).map(i => `${i.to}:${i.amount}`).join('|')
+
+            const groups: { payers: string[]; items: { to: string; amount: number }[] }[] = []
+            Object.entries(byPayer).forEach(([payer, items]) => {
+              const key = patternKey(items)
+              const existing = groups.find(g => patternKey(g.items) === key)
+              if (existing) existing.payers.push(payer)
+              else groups.push({ payers: [payer], items })
+            })
+
             return (
               <div style={{ borderTop: '1px solid var(--border)', padding: '14px 24px', background: 'rgba(0,0,0,0.15)' }}>
                 <div style={{ fontFamily: 'DM Mono', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-dim)', marginBottom: 12 }}>
                   Net Payouts
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {Object.entries(byPayer).map(([payer, items]) => (
-                    <div key={payer} style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 80 }}>
-                        <div className="user-avatar" style={{ width: 24, height: 24, fontSize: 10 }}>{payer[0]}</div>
-                        <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--red)' }}>{payer}</span>
-                        <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: 'var(--text-dim)' }}>pays</span>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {groups.map((group, gi) => (
+                    <div key={gi} style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                      {/* Payers */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
+                        {group.payers.map((payer, pi) => (
+                          <span key={payer} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                            <div className="user-avatar" style={{ width: 24, height: 24, fontSize: 10 }}>{payer[0]}</div>
+                            <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--red)' }}>{payer}</span>
+                            {pi < group.payers.length - 1 && <span style={{ color: 'var(--text-dim)', fontSize: 11, margin: '0 2px' }}>&</span>}
+                          </span>
+                        ))}
+                        <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: 'var(--text-dim)', marginLeft: 4 }}>each pay</span>
                       </div>
+                      {/* What they owe */}
                       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                        {items.map((item, i) => (
+                        {group.items.map((item, i) => (
                           <span key={i} style={{
                             display: 'inline-flex', alignItems: 'center', gap: 5,
                             background: 'var(--surface2)', border: '1px solid var(--border)',
