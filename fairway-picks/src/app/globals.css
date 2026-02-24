@@ -682,6 +682,17 @@ body {
   .grid-2 { grid-template-columns: 1fr; gap: 12px; }
   .mb-24 { margin-bottom: 14px; }
 
+  /* ── Stats table — tighten cells, enable horizontal scroll ── */
+  .stats-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .stats-table th { padding: 8px 10px; font-size: 9px; }
+  .stats-table td { padding: 10px 10px; }
+  .stats-table .player-cell { min-width: 80px; }
+  .stats-table .num-cell { min-width: 44px; font-size: 14px; }
+
+  /* ── Majors grid — scroll horizontally on mobile ── */
+  .majors-grid-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .majors-grid { min-width: 420px; }
+
   /* ── Login card ── */
   .login-card { padding: 28px 20px; }
   .login-logo h1 { font-size: 1.8rem; }
