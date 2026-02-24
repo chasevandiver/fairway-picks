@@ -1,6 +1,8 @@
 import type { Pick } from './types'
 import { PLAYERS, PAYOUT_RULES } from './types'
 
+const PAR = 72
+
 export function toRelScore(s: number | null | undefined): string {
   if (s === null || s === undefined || isNaN(s)) return '—'
   if (s === 0) return 'E'
@@ -50,12 +52,23 @@ export function computeStandings(liveData: any[], pickMap: Record<string, string
       const isWD  = g.status === 'wd'  || String(g.position).toUpperCase() === 'WD'
       const isCutOrWD = isCut || isWD
 
-      const adjScore = isCutOrWD && g.score !== null ? g.score * 2 : (g.score ?? 0)
+      const r1 = g.rounds?.[0] ?? null
+      const r2 = g.rounds?.[1] ?? null
+      let adjScore: number
+      if (isCutOrWD && r1 !== null && r2 !== null) {
+        const avg = Math.ceil((r1 + r2) / 2)
+        adjScore = (r1 + r2 + avg + avg) - PAR * 4
+      } else {
+        adjScore = g.score ?? 0
+      }
 
       const displayRounds = [...(g.rounds || [null, null, null, null])]
       if (isCutOrWD) {
-        displayRounds[2] = displayRounds[0]
-        displayRounds[3] = displayRounds[1]
+        const r1 = displayRounds[0] ?? 0
+        const r2 = displayRounds[1] ?? 0
+        const avg = Math.ceil((r1 + r2) / 2)
+        displayRounds[2] = avg
+        displayRounds[3] = avg
       }
 
       // Stamp status so ScorecardRow always has it
