@@ -755,3 +755,290 @@ body {
   .money-amount { font-size: 19px; }
   .page-title { font-size: 1.2rem; }
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   VISUAL POLISH — Animations, Transitions, Effects
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── Tab fade/slide transition ── */
+@keyframes tabEnter {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.tab-content {
+  animation: tabEnter 0.22s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* ── Skeleton loader ── */
+@keyframes shimmer {
+  0%   { background-position: -600px 0; }
+  100% { background-position: 600px 0; }
+}
+.skeleton {
+  background: linear-gradient(90deg,
+    var(--surface2) 25%,
+    rgba(255,255,255,0.06) 50%,
+    var(--surface2) 75%
+  );
+  background-size: 600px 100%;
+  animation: shimmer 1.4s infinite linear;
+  border-radius: 6px;
+}
+.skeleton-text  { height: 14px; margin-bottom: 8px; }
+.skeleton-title { height: 22px; margin-bottom: 12px; width: 60%; }
+.skeleton-row   { height: 48px; margin-bottom: 4px; border-radius: var(--radius-sm); }
+.skeleton-card  { height: 120px; border-radius: var(--radius); margin-bottom: 16px; }
+.skeleton-stat  { height: 80px; border-radius: var(--radius); }
+
+/* ── Score flash animations ── */
+@keyframes flashGreen {
+  0%   { background: rgba(74,222,128,0.35); color: #fff; }
+  100% { background: transparent; }
+}
+@keyframes flashRed {
+  0%   { background: rgba(248,113,113,0.35); color: #fff; }
+  100% { background: transparent; }
+}
+.score-flash-up   { animation: flashGreen 1.2s ease-out forwards; border-radius: 4px; padding: 0 3px; }
+.score-flash-down { animation: flashRed   1.2s ease-out forwards; border-radius: 4px; padding: 0 3px; }
+
+/* ── Card hover lift ── */
+.card {
+  transition: border-color 0.2s, box-shadow 0.2s, transform 0.2s;
+}
+@media (hover: hover) {
+  .card:hover {
+    border-color: var(--border-bright);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.35), 0 0 0 1px rgba(255,255,255,0.04);
+    transform: translateY(-2px);
+  }
+}
+
+/* ── Tournament progress bar ── */
+.tournament-progress {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  margin-bottom: 24px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  height: 44px;
+}
+.progress-step {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  position: relative;
+  height: 100%;
+  transition: all 0.3s;
+}
+.progress-step::after {
+  content: '›';
+  position: absolute;
+  right: -1px;
+  font-size: 18px;
+  color: var(--border);
+  z-index: 1;
+}
+.progress-step:last-child::after { display: none; }
+.progress-step.done {
+  background: rgba(74,222,128,0.08);
+  color: var(--green);
+}
+.progress-step.active {
+  background: var(--green-dim);
+  color: var(--green);
+  border-top: 2px solid var(--green);
+}
+.progress-step.active .progress-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 8px var(--green-glow);
+  animation: pulse 2s infinite;
+  flex-shrink: 0;
+}
+
+/* ── Gradient accent cards ── */
+.gradient-card-gold {
+  background: linear-gradient(135deg,
+    rgba(245,158,11,0.12) 0%,
+    rgba(74,222,128,0.06) 50%,
+    rgba(129,140,248,0.08) 100%
+  );
+  border-color: rgba(245,158,11,0.25) !important;
+}
+.gradient-card-green {
+  background: linear-gradient(135deg,
+    rgba(74,222,128,0.10) 0%,
+    rgba(129,140,248,0.06) 100%
+  );
+  border-color: rgba(74,222,128,0.2) !important;
+}
+.gradient-card-indigo {
+  background: linear-gradient(135deg,
+    rgba(129,140,248,0.10) 0%,
+    rgba(74,222,128,0.05) 100%
+  );
+  border-color: rgba(129,140,248,0.2) !important;
+}
+
+/* ── Animated number counter ── */
+@keyframes countUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.count-up {
+  display: inline-block;
+  animation: countUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* ── Glow on season leader card ── */
+.leader-glow {
+  box-shadow: 0 0 40px rgba(245,158,11,0.15), 0 4px 24px rgba(0,0,0,0.4);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   VISUAL POLISH — Animations, Transitions, Effects
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── Tab fade-in transition ── */
+@keyframes tabEnter {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.tab-content {
+  animation: tabEnter 0.2s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* ── Skeleton shimmer ── */
+@keyframes shimmer {
+  0%   { background-position: -600px 0; }
+  100% { background-position:  600px 0; }
+}
+.skeleton {
+  background: linear-gradient(90deg,
+    var(--surface2) 25%,
+    rgba(255,255,255,0.055) 50%,
+    var(--surface2) 75%
+  );
+  background-size: 600px 100%;
+  animation: shimmer 1.4s infinite linear;
+  border-radius: 6px;
+}
+.skeleton-text  { height: 13px; margin-bottom: 8px; }
+.skeleton-title { height: 24px; margin-bottom: 12px; width: 55%; }
+.skeleton-row   { height: 50px; margin-bottom: 4px; border-radius: var(--radius-sm); }
+.skeleton-card  { height: 120px; border-radius: var(--radius); margin-bottom: 16px; }
+.skeleton-stat  { height: 84px; border-radius: var(--radius); }
+
+/* ── Score flash ── */
+@keyframes flashGreen {
+  0%   { background: rgba(74,222,128,0.38); border-radius: 4px; }
+  80%  { background: rgba(74,222,128,0.10); }
+  100% { background: transparent; }
+}
+@keyframes flashRed {
+  0%   { background: rgba(248,113,113,0.38); border-radius: 4px; }
+  80%  { background: rgba(248,113,113,0.10); }
+  100% { background: transparent; }
+}
+.score-flash-up   { animation: flashGreen 1.3s ease-out forwards; padding: 1px 4px; border-radius: 4px; }
+.score-flash-down { animation: flashRed   1.3s ease-out forwards; padding: 1px 4px; border-radius: 4px; }
+
+/* ── Card hover lift ── */
+.card { transition: border-color 0.18s, box-shadow 0.18s, transform 0.18s; }
+@media (hover: hover) {
+  .card:hover {
+    border-color: var(--border-bright);
+    box-shadow: 0 8px 28px rgba(0,0,0,0.32), 0 0 0 1px rgba(255,255,255,0.03);
+    transform: translateY(-2px);
+  }
+}
+
+/* ── Tournament progress bar ── */
+.tournament-progress {
+  display: flex;
+  align-items: stretch;
+  margin-bottom: 24px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  height: 44px;
+}
+.progress-step {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  position: relative;
+  transition: all 0.3s;
+  border-right: 1px solid var(--border);
+}
+.progress-step:last-child { border-right: none; }
+.progress-step.done   { background: rgba(74,222,128,0.07); color: var(--green); }
+.progress-step.active {
+  background: var(--green-dim);
+  color: var(--green);
+  border-top: 2px solid var(--green);
+}
+.progress-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 8px var(--green-glow);
+  animation: pulse 2s infinite;
+  flex-shrink: 0;
+}
+@media (max-width: 480px) {
+  .progress-step { font-size: 9px; gap: 3px; }
+}
+
+/* ── Gradient accent cards ── */
+.gradient-card-gold {
+  background: linear-gradient(135deg,
+    rgba(245,158,11,0.13) 0%,
+    rgba(74,222,128,0.05) 50%,
+    rgba(129,140,248,0.07) 100%) !important;
+  border-color: rgba(245,158,11,0.28) !important;
+}
+.gradient-card-green {
+  background: linear-gradient(135deg,
+    rgba(74,222,128,0.09) 0%,
+    rgba(129,140,248,0.05) 100%) !important;
+  border-color: rgba(74,222,128,0.18) !important;
+}
+.gradient-card-indigo {
+  background: linear-gradient(135deg,
+    rgba(129,140,248,0.09) 0%,
+    rgba(74,222,128,0.04) 100%) !important;
+  border-color: rgba(129,140,248,0.18) !important;
+}
+.leader-glow {
+  box-shadow: 0 0 36px rgba(245,158,11,0.12), 0 4px 24px rgba(0,0,0,0.35) !important;
+}
+
+/* ── Animated number counter ── */
+@keyframes countUp {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.count-up { display: inline-block; animation: countUp 0.45s cubic-bezier(0.16,1,0.3,1) both; }
