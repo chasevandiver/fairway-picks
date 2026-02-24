@@ -33,70 +33,95 @@ export async function fetchLiveScores(): Promise<GolferScore[]> {
     const raw = competitions[0]?.competitors || []
     if (raw.length < 5) return MOCK_DATA
 
-    // First pass: collect scores to compute positions and detect ties
+    // First pass: get score values for position/tie calculation
     const scoreValues: number[] = raw.map((c: any) => {
       const v = parseFloat(c.score ?? '999')
       return isNaN(v) ? 999 : v
     })
 
-    const getPosition = (idx: number, statusStr: string): string => {
-      if (statusStr.includes('cut')) return 'CUT'
-      if (statusStr.includes('wd'))  return 'WD'
-      const myScore = scoreValues[idx]
-      const tiedCount = scoreValues.filter((s, i) => {
-        const st = (raw[i].status?.type?.name || '').toLowerCase()
-        return !st.includes('cut') && !st.includes('wd') && s === myScore
-      }).length
-      const rank = scoreValues.filter((s, i) => {
-        const st = (raw[i].status?.type?.name || '').toLowerCase()
-        return !st.includes('cut') && !st.includes('wd') && s < myScore
-      }).length + 1
-      return tiedCount > 1 ? `T${rank}` : `${rank}`
-    }
-
     const competitors: GolferScore[] = raw.map((c: any, idx: number) => {
-      const statusRaw = (c.status?.type?.name || '').toLowerCase()
-      const status: 'active' | 'cut' | 'wd' =
-        statusRaw.includes('cut') ? 'cut' :
-        statusRaw.includes('wd')  ? 'wd'  : 'active'
+      // ── Status: check multiple fields ESPN might use ──
+      const statusName = (c.status?.type?.name || '').toLowerCase()
+      const statusDesc = (c.status?.type?.description || '').toLowerCase()
+      const statusShort = (c.status?.type?.shortDetail || c.status?.type?.detail || '').toLowerCase()
 
-      const position = getPosition(idx, statusRaw)
+      const isCutRaw = statusName.includes('cut') || statusDesc.includes('cut') || statusShort.includes('cut')
+      const isWDRaw  = statusName.includes('wd')  || statusDesc.includes('withdraw') || statusShort.includes('wd')
 
-      // Total score to par — ESPN sends as string in c.score e.g. "-16"
+      // ── Round linescores: l.value = raw strokes as float ──
+      const lines: any[] = c.linescores || []
+      const rounds: (number | null)[] = [null, null, null, null]
+      lines.forEach((l: any, i: number) => {
+        if (i >= 4) return
+        // Try value first (raw strokes), then displayValue
+        let strokes: number | null = null
+        if (l.value !== undefined && l.value !== null) {
+          const n = Math.round(l.value)
+          if (n >= 55 && n <= 95) strokes = n
+        }
+        if (strokes === null && l.displayValue && l.displayValue !== '--') {
+          const n = parseInt(l.displayValue)
+          if (!isNaN(n) && n >= 55 && n <= 95) strokes = n
+          else if (!isNaN(n) && Math.abs(n) <= 20) strokes = PAR + n
+        }
+        rounds[i] = strokes
+      })
+
+      // ── Detect cut/WD from round count too — if only R1+R2 played, likely cut ──
+      const roundsPlayed = rounds.filter(r => r !== null).length
+      const isCut = isCutRaw || (roundsPlayed === 2 && !isCutRaw && !isWDRaw
+        // Only treat as cut if ESPN score string contains "CUT" or position does
+        && (String(c.score || '').toUpperCase().includes('CUT')
+          || (c.status?.position?.displayName || '').toUpperCase().includes('CUT')))
+      const isWD = isWDRaw
+
+      const status: 'active' | 'cut' | 'wd' = isCut ? 'cut' : isWD ? 'wd' : 'active'
+
+      // ── Position: compute from sort order + tie detection ──
+      let position: string
+      if (isCut) {
+        position = 'CUT'
+      } else if (isWD) {
+        position = 'WD'
+      } else {
+        const myScore = scoreValues[idx]
+        const tiedCount = scoreValues.filter((s, i) => {
+          const st = (raw[i].status?.type?.name || '').toLowerCase()
+          return !st.includes('cut') && !st.includes('wd') && s === myScore
+        }).length
+        const rank = scoreValues.filter((s, i) => {
+          const st = (raw[i].status?.type?.name || '').toLowerCase()
+          return !st.includes('cut') && !st.includes('wd') && s < myScore
+        }).length + 1
+        position = tiedCount > 1 ? `T${rank}` : `${rank}`
+      }
+
+      // ── Total score to par ──
       let score: number | null = null
       if (c.score !== undefined && c.score !== null) {
         const v = parseFloat(c.score)
         if (!isNaN(v)) score = v
       }
 
-      // Round-by-round: l.value = raw strokes as float e.g. 63.0
-      const lines: any[] = c.linescores || []
-      const rounds: (number | null)[] = [null, null, null, null]
-      lines.forEach((l: any, i: number) => {
-        if (i >= 4) return
-        const strokes = l.value
-        if (strokes !== undefined && strokes !== null) {
-          const n = Math.round(strokes)
-          if (n >= 55 && n <= 95) rounds[i] = n
-        }
-      })
-
-      // Thru
+      // ── Thru ──
       const stats: any[] = c.statistics || []
-      const thruStat = stats.find((s: any) => s.name === 'thru' || s.abbreviation === 'THRU')
+      const thruStat = stats.find((s: any) =>
+        s.name === 'thru' || s.abbreviation === 'THRU' || s.abbreviation === 'TOT'
+      )
       const thruVal = thruStat?.displayValue
       const thru: string =
         status === 'cut' ? 'CUT' :
         status === 'wd'  ? 'WD'  :
         thruVal && thruVal !== '--' ? thruVal : '—'
 
-      // Today — derive from last played round
+      // ── Today — last played round minus par ──
       let today: number | null = null
       for (let i = rounds.length - 1; i >= 0; i--) {
         if (rounds[i] !== null) { today = (rounds[i] as number) - PAR; break }
       }
 
-      // Cut/WD: store only R1+R2, scoring.ts mirrors and doubles
+      // ── Cut/WD: keep only real rounds, null out R3+R4 ──
+      // scoring.ts will mirror R3=R1, R4=R2 for display and double the score
       if (status === 'cut' || status === 'wd') {
         rounds[2] = null
         rounds[3] = null
