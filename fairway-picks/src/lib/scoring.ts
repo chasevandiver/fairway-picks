@@ -40,21 +40,15 @@ export function computeStandings(liveData: any[], pickMap: Record<string, string
     let totalScore = 0
 
     const golfers = playerPicks.map((name) => {
-      let g: any = liveData.find(
+      const g: any = liveData.find(
         (d: any) => d.name.toLowerCase() === name.toLowerCase()
       ) ?? { name, score: null, today: null, thru: '—', position: '—', status: 'active', rounds: [null,null,null,null], par: 72 }
 
-      // Detect cut/WD from ANY reliable field — ESPN is inconsistent about which one it sets
-      const pos = String(g.position || '').toUpperCase()
-      const thruStr = String(g.thru || '').toUpperCase()
-      const isCut = g.status === 'cut' || pos === 'CUT' || thruStr === 'CUT'
-      const isWD  = g.status === 'wd'  || pos === 'WD'  || thruStr === 'WD'
+      // espn.ts now reliably sets status and position for cut golfers
+      // but check position as belt-and-suspenders
+      const isCut = g.status === 'cut' || String(g.position).toUpperCase() === 'CUT'
+      const isWD  = g.status === 'wd'  || String(g.position).toUpperCase() === 'WD'
       const isCutOrWD = isCut || isWD
-
-      // Stamp correct status so ScorecardRow can use it
-      if (isCutOrWD) {
-        g = { ...g, status: isWD ? 'wd' : 'cut' }
-      }
 
       const adjScore = isCutOrWD && g.score !== null ? g.score * 2 : (g.score ?? 0)
 
@@ -64,8 +58,11 @@ export function computeStandings(liveData: any[], pickMap: Record<string, string
         displayRounds[3] = displayRounds[1]
       }
 
+      // Stamp status so ScorecardRow always has it
+      const stampedStatus = isWD ? 'wd' : isCut ? 'cut' : g.status
+
       totalScore += adjScore
-      return { ...g, adjScore, displayRounds }
+      return { ...g, status: stampedStatus, adjScore, displayRounds }
     })
 
     const parsePos = (p: string) => parseInt((p || '').replace(/^T/, ''))
