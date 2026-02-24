@@ -339,17 +339,8 @@ function LeaderboardTab({
 const ROUND_LABELS = ['R1', 'R2', 'R3', 'R4']
 
 function ScorecardRow({ g, par }: { g: any; par: number }) {
-  // Detect cut from status OR position/thru — whichever ESPN reliably provides
-  const isCut = g.status === 'cut'
-    || g.status === 'wd'
-    || String(g.position || '').toUpperCase() === 'CUT'
-    || String(g.position || '').toUpperCase() === 'WD'
-    || String(g.thru || '').toUpperCase() === 'CUT'
-    || String(g.thru || '').toUpperCase() === 'WD'
-  const isWD = g.status === 'wd'
-    || String(g.position || '').toUpperCase() === 'WD'
-    || String(g.thru || '').toUpperCase() === 'WD'
-
+  const isCut = g.status === 'cut' || g.status === 'wd'
+  const isWD  = g.status === 'wd'
   const rounds: (number | null)[] = g.displayRounds ?? g.rounds ?? [null, null, null, null]
   const totalStrokes = rounds.reduce((sum: number, r: number | null) => sum + (r ?? 0), 0)
   const played = rounds.filter((r: number | null) => r !== null).length
@@ -436,25 +427,15 @@ function PicksTab({ standings, pickMap, liveData, tournament }: {
         const s = standings.find((x) => x.player === player)
         if (playerPicks.length === 0) return null
 
-        // Build golfer rows with live data merged in
+        // Build golfer rows — scoring.ts already stamps status/displayRounds correctly
         const golferRows = (s?.golfers ?? playerPicks.map((name) => {
           const g = liveData.find((d) => d.name.toLowerCase() === name.toLowerCase())
             ?? { name, score: null, today: null, thru: '—', position: '—', status: 'active' as const, rounds: [null,null,null,null], par }
           const dr = [...(g.rounds ?? [null, null, null, null])]
-          if (g.status === 'cut' || g.status === 'wd') { dr[2] = dr[0]; dr[3] = dr[1] }
-          return { ...g, adjScore: g.score ?? 0, displayRounds: dr }
-        })).map((g: any) => {
-          // Always merge fresh status from liveData so cut badges show correctly
-          const live = liveData.find((d: any) => d.name.toLowerCase() === g.name.toLowerCase())
-          const status = live?.status ?? g.status ?? 'active'
-          // Also detect cut from position/thru as fallback
-          const isCut = status === 'cut' || status === 'wd'
-            || String(live?.position || g.position || '').toUpperCase() === 'CUT'
-            || String(live?.thru || g.thru || '').toUpperCase() === 'CUT'
-          const dr = [...(g.displayRounds ?? g.rounds ?? [null,null,null,null])]
+          const isCut = g.status === 'cut' || g.status === 'wd'
           if (isCut) { dr[2] = dr[0]; dr[3] = dr[1] }
-          return { ...g, status: isCut ? (status === 'wd' ? 'wd' : 'cut') : status, displayRounds: dr }
-        })
+          return { ...g, adjScore: g.score ?? 0, displayRounds: dr }
+        }))
 
         // Per-round totals across all 4 golfers
         const roundTotals: (number | null)[] = [0, 1, 2, 3].map((ri) => {
