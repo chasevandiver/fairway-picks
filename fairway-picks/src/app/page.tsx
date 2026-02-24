@@ -1592,8 +1592,8 @@ function StatsTab({ history }: { history: any[] }) {
           <div className="card-title">All-Time Player Stats</div>
           <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: 'var(--text-dim)' }}>2020 – 2026 · All events</span>
         </div>
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <div className="stats-table-wrap">
+          <table className="stats-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ borderBottom: '2px solid var(--border)' }}>
                 {[
@@ -1606,7 +1606,7 @@ function StatsTab({ history }: { history: any[] }) {
                   { label: '🔝 Top 3', color: 'var(--indigo)' },
                   { label: '✂️ Cuts', color: 'var(--red)' },
                 ].map((h, i) => (
-                  <th key={i} style={{ padding: '10px 20px', textAlign: i === 0 ? 'left' : 'center', fontFamily: 'DM Mono', fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: h.color, fontWeight: 600, whiteSpace: 'nowrap' }}>{h.label}</th>
+                  <th key={i} className={i === 0 ? 'player-cell' : 'num-cell'} style={{ padding: '10px 20px', textAlign: i === 0 ? 'left' : 'center', fontFamily: 'DM Mono', fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: h.color, fontWeight: 600, whiteSpace: 'nowrap' }}>{h.label}</th>
                 ))}
               </tr>
             </thead>
@@ -1675,7 +1675,8 @@ function StatsTab({ history }: { history: any[] }) {
             ))}
           </div>
         </div>
-        <div style={{ padding: '20px 24px', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 0 }}>
+        <div className="majors-grid-wrap">
+          <div className="majors-grid" style={{ padding: '20px 24px', display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 0, overflowX: 'auto' }}>
           {/* Column headers */}
           {(['Masters', 'PGA Championship', 'US Open', 'The Open'] as const).map(majorName => {
             const s = MAJOR_COLORS[majorName]
@@ -1719,6 +1720,7 @@ function StatsTab({ history }: { history: any[] }) {
             })
           ))}
         </div>
+        </div>{/* end majors-grid-wrap */}
 
         {/* Major wins leaderboard */}
         <div style={{ borderTop: '1px solid var(--border)', padding: '16px 24px' }}>
