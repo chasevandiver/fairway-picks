@@ -40,16 +40,26 @@ export function computeStandings(liveData: any[], pickMap: Record<string, string
     let totalScore = 0
 
     const golfers = playerPicks.map((name) => {
-      const g: any = liveData.find(
+      let g: any = liveData.find(
         (d: any) => d.name.toLowerCase() === name.toLowerCase()
       ) ?? { name, score: null, today: null, thru: '—', position: '—', status: 'active', rounds: [null,null,null,null], par: 72 }
 
-      let adjScore = g.score ?? 0
-      if (g.status === 'cut' && g.score !== null) adjScore = g.score * 2
-      if (g.status === 'wd' && g.score !== null) adjScore = g.score * 2
+      // Detect cut/WD from ANY reliable field — ESPN is inconsistent about which one it sets
+      const pos = String(g.position || '').toUpperCase()
+      const thruStr = String(g.thru || '').toUpperCase()
+      const isCut = g.status === 'cut' || pos === 'CUT' || thruStr === 'CUT'
+      const isWD  = g.status === 'wd'  || pos === 'WD'  || thruStr === 'WD'
+      const isCutOrWD = isCut || isWD
+
+      // Stamp correct status so ScorecardRow can use it
+      if (isCutOrWD) {
+        g = { ...g, status: isWD ? 'wd' : 'cut' }
+      }
+
+      const adjScore = isCutOrWD && g.score !== null ? g.score * 2 : (g.score ?? 0)
 
       const displayRounds = [...(g.rounds || [null, null, null, null])]
-      if (g.status === 'cut' || g.status === 'wd') {
+      if (isCutOrWD) {
         displayRounds[2] = displayRounds[0]
         displayRounds[3] = displayRounds[1]
       }
@@ -58,15 +68,11 @@ export function computeStandings(liveData: any[], pickMap: Record<string, string
       return { ...g, adjScore, displayRounds }
     })
 
-    const parsePos = (p: string): number => {
-      if (!p || p === '—' || p === '-' || p.toUpperCase() === 'CUT' || p.toUpperCase() === 'WD') return NaN
-      const n = parseInt(p.replace(/^T/i, ''))
-      return n
-    }
+    const parsePos = (p: string) => parseInt((p || '').replace(/^T/, ''))
     const hasWinner = golfers.some((g: any) => parsePos(g.position) === 1)
     const hasTop3 = golfers.some((g: any) => {
       const pos = parsePos(g.position)
-      return !isNaN(pos) && pos >= 1 && pos <= 3
+      return !isNaN(pos) && pos <= 3
     })
 
     return { player, totalScore, golfers, hasWinner, hasTop3, rank: 0, moneyThisWeek: 0 }
