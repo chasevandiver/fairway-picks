@@ -1,9 +1,8 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@400;500&family=Sora:wght@300;400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@400;500&family=Sora:wght@300;400;500;600&family=Pinyon+Script&display=swap');
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-/* ── Dark Theme (default) ── */
-:root, [data-theme="dark"] {
+:root {
   --bg: #0a0c0f;
   --surface: #111318;
   --surface2: #181c23;
@@ -25,27 +24,6 @@
   --shadow: 0 4px 24px rgba(0,0,0,0.4);
 }
 
-/* ── Light Theme ── */
-[data-theme="light"] {
-  --bg: #f5f6f8;
-  --surface: #ffffff;
-  --surface2: #f0f1f4;
-  --border: rgba(0,0,0,0.08);
-  --border-bright: rgba(0,0,0,0.15);
-  --green: #16a34a;
-  --green-dim: rgba(22,163,74,0.08);
-  --green-glow: rgba(22,163,74,0.20);
-  --gold: #d97706;
-  --gold-dim: rgba(217,119,6,0.08);
-  --red: #dc2626;
-  --indigo: #6366f1;
-  --indigo-dim: rgba(99,102,241,0.08);
-  --text: #1a1d23;
-  --text-dim: #6b7280;
-  --text-mid: #4b5563;
-  --shadow: 0 4px 24px rgba(0,0,0,0.08);
-}
-
 html, body { height: 100%; }
 
 body {
@@ -55,7 +33,6 @@ body {
   font-size: 14px;
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
-  transition: background 0.3s, color 0.3s;
 }
 
 /* ── Layout ── */
@@ -76,7 +53,7 @@ body {
   left: 0;
   bottom: 0;
   z-index: 100;
-  transition: background 0.3s, border-color 0.3s;
+  transition: transform 0.25s ease;
 }
 
 .sidebar-logo {
@@ -175,12 +152,6 @@ body {
   max-width: calc(1280px + 240px);
 }
 
-@media (max-width: 768px) {
-  .sidebar { transform: translateX(-100%); }
-  .sidebar.open { transform: translateX(0); }
-  .main-content { margin-left: 0; padding: 20px; }
-}
-
 /* ── Page Header ── */
 .page-header {
   margin-bottom: 32px;
@@ -210,7 +181,6 @@ body {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   overflow: hidden;
-  transition: background 0.3s, border-color 0.3s;
 }
 .card + .card { margin-top: 20px; }
 .card-header {
@@ -242,7 +212,6 @@ body {
   border-radius: var(--radius);
   padding: 20px;
   text-align: center;
-  transition: background 0.3s, border-color 0.3s;
 }
 .stat-val {
   font-family: 'DM Mono', monospace;
@@ -328,9 +297,8 @@ body {
   white-space: nowrap;
 }
 .btn-green  { background: var(--green); color: #0a0c0f; }
-[data-theme="light"] .btn-green { color: #ffffff; }
-.btn-green:hover  { filter: brightness(1.1); transform: translateY(-1px); box-shadow: 0 4px 20px var(--green-glow); }
-.btn-green:disabled { opacity: 0.35; cursor: not-allowed; transform: none; box-shadow: none; filter: none; }
+.btn-green:hover  { background: #22c55e; transform: translateY(-1px); box-shadow: 0 4px 20px var(--green-glow); }
+.btn-green:disabled { opacity: 0.35; cursor: not-allowed; transform: none; box-shadow: none; }
 .btn-outline { background: transparent; border: 1px solid var(--border-bright); color: var(--text-mid); }
 .btn-outline:hover { border-color: var(--green); color: var(--green); }
 .btn-outline:disabled { opacity: 0.35; cursor: not-allowed; }
@@ -359,12 +327,12 @@ body {
   font-family: 'Sora', sans-serif;
   font-size: 14px;
   outline: none;
-  transition: border-color 0.2s, background 0.3s;
+  transition: border-color 0.2s;
 }
 .form-input:focus, .form-select:focus { border-color: var(--green); }
 .form-input::placeholder { color: var(--text-dim); }
 .form-select { cursor: pointer; }
-.form-select option { background: var(--surface2); color: var(--text); }
+.form-select option { background: var(--surface2); }
 
 /* ── Alerts ── */
 .alert {
@@ -443,19 +411,6 @@ body {
 .golfer-option.taken { opacity: 0.35; pointer-events: none; }
 .golfer-meta { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--text-dim); margin-top: 2px; }
 
-/* ── Odds badge in draft ── */
-.odds-badge {
-  display: inline-block;
-  margin-left: 6px;
-  padding: 1px 6px;
-  border-radius: 4px;
-  background: var(--gold-dim);
-  color: var(--gold);
-  font-size: 10px;
-  font-weight: 600;
-  font-family: 'DM Mono', monospace;
-}
-
 /* ── Player picks card ── */
 .picks-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 16px; }
 .player-card {
@@ -492,7 +447,7 @@ body {
   border-radius: var(--radius);
   padding: 22px 20px;
   text-align: center;
-  transition: border-color 0.2s, background 0.3s;
+  transition: border-color 0.2s;
 }
 .money-card:hover { border-color: var(--border-bright); }
 .money-amount {
@@ -624,36 +579,466 @@ body {
   font-size: 13px;
 }
 
-/* ── Theme Toggle Button ── */
-.theme-toggle {
+/* ── Hamburger button (mobile only) ── */
+/* ── Bottom Tab Bar (mobile only) ── */
+.bottom-tab-bar {
+  display: none;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 150;
+  background: var(--surface);
+  border-top: 1px solid var(--border-bright);
+  padding: 6px 0 max(6px, env(safe-area-inset-bottom));
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.bottom-tab-bar::-webkit-scrollbar { display: none; }
+
+.bottom-tab-btn {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 8px 12px;
-  border-radius: var(--radius-sm);
-  background: var(--surface2);
-  border: 1px solid var(--border);
-  color: var(--text-dim);
-  font-family: 'DM Mono', monospace;
-  font-size: 11px;
+  gap: 3px;
+  padding: 4px 10px;
+  background: none;
+  border: none;
   cursor: pointer;
+  flex-shrink: 0;
+  min-width: 56px;
+  transition: all 0.15s;
+  border-radius: 8px;
+}
+.bottom-tab-icon { font-size: 18px; line-height: 1; }
+.bottom-tab-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+.bottom-tab-btn.active .bottom-tab-label { color: var(--green); }
+.bottom-tab-btn.active .bottom-tab-icon { filter: drop-shadow(0 0 4px rgba(74,222,128,0.5)); }
+
+.hamburger-btn {
+  display: none;
+  position: fixed;
+  top: 14px;
+  left: 14px;
+  z-index: 200;
+  background: var(--surface);
+  border: 1px solid var(--border-bright);
+  border-radius: var(--radius-sm);
+  width: 40px;
+  height: 40px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  cursor: pointer;
+  padding: 0;
+}
+.hamburger-btn span {
+  display: block;
+  width: 18px;
+  height: 2px;
+  background: var(--text);
+  border-radius: 2px;
   transition: all 0.2s;
 }
-.theme-toggle:hover {
-  border-color: var(--green);
-  color: var(--green);
+.hamburger-btn:hover { border-color: var(--green); }
+.hamburger-btn:hover span { background: var(--green); }
+
+/* ── Sidebar close button (mobile only) ── */
+.sidebar-close-btn {
+  display: none;
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 20px;
+  line-height: 1;
+  padding: 4px;
+  z-index: 101;
+}
+.sidebar-close-btn:hover { color: var(--text); }
+
+/* ── Mobile breakpoint ── */
+@media (max-width: 768px) {
+  .sidebar { transform: translateX(-100%); }
+  .sidebar.open { transform: translateX(0); }
+  .sidebar-close-btn { display: block !important; }
+  .sidebar-overlay { display: block !important; }
+  .main-content { margin-left: 0; padding: 12px; padding-top: 16px; padding-bottom: 90px; }
+
+  /* Show bottom tab bar, hide hamburger */
+  .bottom-tab-bar { display: flex; }
+  .hamburger-btn { display: none !important; }
+
+  /* Page headers */
+  .page-header { margin-bottom: 16px; gap: 8px; }
+  .page-title { font-size: 1.4rem; }
+
+  /* Stats row — 2 columns on mobile */
+  .stats-row { grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+  .stat-box { padding: 14px 10px; }
+  .stat-val { font-size: 20px; }
+
+  /* Cards */
+  .card + .card { margin-top: 12px; }
+  .card-header { padding: 12px 14px; gap: 8px; }
+  .card-body { padding: 14px; }
+
+  /* ── Main leaderboard & history tables ── */
+  /* Wrap tables so they scroll horizontally on small screens */
+  .card > .table,
+  .card > div > .table {
+    font-size: 12px;
+  }
+  .table th { padding: 0 10px 10px; font-size: 9px; }
+  .table td { padding: 10px; font-size: 12px; }
+  .score { font-size: 12px; }
+  .badge { font-size: 10px; padding: 2px 7px; }
+
+  /* Hide lower-priority columns on leaderboard */
+  /* Tables scroll horizontally — all columns visible, just swipe */
+
+  /* ── Picks scorecard table ── */
+  /* The scorecard tables are in overflowX:auto wrappers already in JSX,
+     but we make the cells more compact */
+  .golfer-row { padding: 8px 10px; gap: 6px; }
+
+  /* ── Money grid — 2 columns ── */
+  .money-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
+  .money-card { padding: 14px 10px; }
+  .money-amount { font-size: 22px; }
+
+  /* ── Draft ── */
+  .draft-picks-flow { gap: 4px; }
+  .draft-chip { padding: 4px 10px; font-size: 11px; }
+  .golfer-list { max-height: 280px; }
+
+  /* ── Grid helpers ── */
+  .grid-2 { grid-template-columns: 1fr; gap: 12px; }
+  .mb-24 { margin-bottom: 14px; }
+
+  /* ── Stats table — tighten cells, enable horizontal scroll ── */
+  .stats-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .stats-table th { padding: 8px 10px; font-size: 9px; }
+  .stats-table td { padding: 10px 10px; }
+  .stats-table .player-cell { min-width: 80px; }
+  .stats-table .num-cell { min-width: 44px; font-size: 14px; }
+
+  /* ── Majors grid — scroll horizontally on mobile ── */
+  .majors-grid-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .majors-grid { min-width: 420px; }
+
+  /* ── Login card ── */
+  .login-card { padding: 28px 20px; }
+  .login-logo h1 { font-size: 1.8rem; }
 }
 
-/* ── Countdown Ring ── */
-.countdown-ring {
-  display: inline-flex;
+/* ── Extra small (iPhone SE, 375px) ── */
+@media (max-width: 390px) {
+  .main-content { padding: 8px; padding-top: 60px; }
+  .stats-row { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .stat-val { font-size: 18px; }
+  .table th { padding: 0 6px 8px; font-size: 9px; }
+  .table td { padding: 8px 6px; font-size: 11px; }
+  .money-amount { font-size: 19px; }
+  .page-title { font-size: 1.2rem; }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   VISUAL POLISH — Animations, Transitions, Effects
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── Tab fade/slide transition ── */
+@keyframes tabEnter {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.tab-content {
+  animation: tabEnter 0.22s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* ── Skeleton loader ── */
+@keyframes shimmer {
+  0%   { background-position: -600px 0; }
+  100% { background-position: 600px 0; }
+}
+.skeleton {
+  background: linear-gradient(90deg,
+    var(--surface2) 25%,
+    rgba(255,255,255,0.06) 50%,
+    var(--surface2) 75%
+  );
+  background-size: 600px 100%;
+  animation: shimmer 1.4s infinite linear;
+  border-radius: 6px;
+}
+.skeleton-text  { height: 14px; margin-bottom: 8px; }
+.skeleton-title { height: 22px; margin-bottom: 12px; width: 60%; }
+.skeleton-row   { height: 48px; margin-bottom: 4px; border-radius: var(--radius-sm); }
+.skeleton-card  { height: 120px; border-radius: var(--radius); margin-bottom: 16px; }
+.skeleton-stat  { height: 80px; border-radius: var(--radius); }
+
+/* ── Score flash animations ── */
+@keyframes flashGreen {
+  0%   { background: rgba(74,222,128,0.35); color: #fff; }
+  100% { background: transparent; }
+}
+@keyframes flashRed {
+  0%   { background: rgba(248,113,113,0.35); color: #fff; }
+  100% { background: transparent; }
+}
+.score-flash-up   { animation: flashGreen 1.2s ease-out forwards; border-radius: 4px; padding: 0 3px; }
+.score-flash-down { animation: flashRed   1.2s ease-out forwards; border-radius: 4px; padding: 0 3px; }
+
+/* ── Card hover lift ── */
+.card {
+  transition: border-color 0.2s, box-shadow 0.2s, transform 0.2s;
+}
+@media (hover: hover) {
+  .card:hover {
+    border-color: var(--border-bright);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.35), 0 0 0 1px rgba(255,255,255,0.04);
+    transform: translateY(-2px);
+  }
+}
+
+/* ── Tournament progress bar ── */
+.tournament-progress {
+  display: flex;
   align-items: center;
+  gap: 0;
+  margin-bottom: 24px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  height: 44px;
+}
+.progress-step {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   gap: 6px;
   font-family: 'DM Mono', monospace;
-  font-size: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
   color: var(--text-dim);
+  position: relative;
+  height: 100%;
+  transition: all 0.3s;
 }
-.countdown-text {
-  min-width: 36px;
+.progress-step::after {
+  content: '›';
+  position: absolute;
+  right: -1px;
+  font-size: 18px;
+  color: var(--border);
+  z-index: 1;
 }
+.progress-step:last-child::after { display: none; }
+.progress-step.done {
+  background: rgba(74,222,128,0.08);
+  color: var(--green);
+}
+.progress-step.active {
+  background: var(--green-dim);
+  color: var(--green);
+  border-top: 2px solid var(--green);
+}
+.progress-step.active .progress-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 8px var(--green-glow);
+  animation: pulse 2s infinite;
+  flex-shrink: 0;
+}
+
+/* ── Gradient accent cards ── */
+.gradient-card-gold {
+  background: linear-gradient(135deg,
+    rgba(245,158,11,0.12) 0%,
+    rgba(74,222,128,0.06) 50%,
+    rgba(129,140,248,0.08) 100%
+  );
+  border-color: rgba(245,158,11,0.25) !important;
+}
+.gradient-card-green {
+  background: linear-gradient(135deg,
+    rgba(74,222,128,0.10) 0%,
+    rgba(129,140,248,0.06) 100%
+  );
+  border-color: rgba(74,222,128,0.2) !important;
+}
+.gradient-card-indigo {
+  background: linear-gradient(135deg,
+    rgba(129,140,248,0.10) 0%,
+    rgba(74,222,128,0.05) 100%
+  );
+  border-color: rgba(129,140,248,0.2) !important;
+}
+
+/* ── Animated number counter ── */
+@keyframes countUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.count-up {
+  display: inline-block;
+  animation: countUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* ── Glow on season leader card ── */
+.leader-glow {
+  box-shadow: 0 0 40px rgba(245,158,11,0.15), 0 4px 24px rgba(0,0,0,0.4);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   VISUAL POLISH — Animations, Transitions, Effects
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── Tab fade-in transition ── */
+@keyframes tabEnter {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.tab-content {
+  animation: tabEnter 0.2s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* ── Skeleton shimmer ── */
+@keyframes shimmer {
+  0%   { background-position: -600px 0; }
+  100% { background-position:  600px 0; }
+}
+.skeleton {
+  background: linear-gradient(90deg,
+    var(--surface2) 25%,
+    rgba(255,255,255,0.055) 50%,
+    var(--surface2) 75%
+  );
+  background-size: 600px 100%;
+  animation: shimmer 1.4s infinite linear;
+  border-radius: 6px;
+}
+.skeleton-text  { height: 13px; margin-bottom: 8px; }
+.skeleton-title { height: 24px; margin-bottom: 12px; width: 55%; }
+.skeleton-row   { height: 50px; margin-bottom: 4px; border-radius: var(--radius-sm); }
+.skeleton-card  { height: 120px; border-radius: var(--radius); margin-bottom: 16px; }
+.skeleton-stat  { height: 84px; border-radius: var(--radius); }
+
+/* ── Score flash ── */
+@keyframes flashGreen {
+  0%   { background: rgba(74,222,128,0.38); border-radius: 4px; }
+  80%  { background: rgba(74,222,128,0.10); }
+  100% { background: transparent; }
+}
+@keyframes flashRed {
+  0%   { background: rgba(248,113,113,0.38); border-radius: 4px; }
+  80%  { background: rgba(248,113,113,0.10); }
+  100% { background: transparent; }
+}
+.score-flash-up   { animation: flashGreen 1.3s ease-out forwards; padding: 1px 4px; border-radius: 4px; }
+.score-flash-down { animation: flashRed   1.3s ease-out forwards; padding: 1px 4px; border-radius: 4px; }
+
+/* ── Card hover lift ── */
+.card { transition: border-color 0.18s, box-shadow 0.18s, transform 0.18s; }
+@media (hover: hover) {
+  .card:hover {
+    border-color: var(--border-bright);
+    box-shadow: 0 8px 28px rgba(0,0,0,0.32), 0 0 0 1px rgba(255,255,255,0.03);
+    transform: translateY(-2px);
+  }
+}
+
+/* ── Tournament progress bar ── */
+.tournament-progress {
+  display: flex;
+  align-items: stretch;
+  margin-bottom: 24px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  height: 44px;
+}
+.progress-step {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  position: relative;
+  transition: all 0.3s;
+  border-right: 1px solid var(--border);
+}
+.progress-step:last-child { border-right: none; }
+.progress-step.done   { background: rgba(74,222,128,0.07); color: var(--green); }
+.progress-step.active {
+  background: var(--green-dim);
+  color: var(--green);
+  border-top: 2px solid var(--green);
+}
+.progress-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 8px var(--green-glow);
+  animation: pulse 2s infinite;
+  flex-shrink: 0;
+}
+@media (max-width: 480px) {
+  .progress-step { font-size: 9px; gap: 3px; }
+}
+
+/* ── Gradient accent cards ── */
+.gradient-card-gold {
+  background: linear-gradient(135deg,
+    rgba(245,158,11,0.13) 0%,
+    rgba(74,222,128,0.05) 50%,
+    rgba(129,140,248,0.07) 100%) !important;
+  border-color: rgba(245,158,11,0.28) !important;
+}
+.gradient-card-green {
+  background: linear-gradient(135deg,
+    rgba(74,222,128,0.09) 0%,
+    rgba(129,140,248,0.05) 100%) !important;
+  border-color: rgba(74,222,128,0.18) !important;
+}
+.gradient-card-indigo {
+  background: linear-gradient(135deg,
+    rgba(129,140,248,0.09) 0%,
+    rgba(74,222,128,0.04) 100%) !important;
+  border-color: rgba(129,140,248,0.18) !important;
+}
+.leader-glow {
+  box-shadow: 0 0 36px rgba(245,158,11,0.12), 0 4px 24px rgba(0,0,0,0.35) !important;
+}
+
+/* ── Animated number counter ── */
+@keyframes countUp {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.count-up { display: inline-block; animation: countUp 0.45s cubic-bezier(0.16,1,0.3,1) both; }
