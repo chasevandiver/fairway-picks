@@ -10,6 +10,7 @@ import { PLAYERS, PAYOUT_RULES } from '@/lib/types'
 import type { Tournament, Pick, GolferScore, PlayerStanding, SeasonMoney } from '@/lib/types'
 
 const PICKS_PER_PLAYER = 4
+const REFRESH_INTERVAL = 120_000 // 2 minutes
 
 // ─── 2026 PGA Tour Schedule ───────────────────────────────────────────────────
 const PGA_SCHEDULE = [
@@ -53,6 +54,80 @@ const PGA_SCHEDULE = [
   { name: 'TOUR Championship',                  course: 'East Lake Golf Club',                date: '2026-08-27' },
 ]
 
+// ─── Theme Context ────────────────────────────────────────────────────────────
+function useTheme() {
+  const [theme, setTheme] = useState<'dark' | 'light'>('dark')
+
+  useEffect(() => {
+    const saved = localStorage.getItem('fairway_theme') as 'dark' | 'light' | null
+    if (saved) setTheme(saved)
+  }, [])
+
+  const toggle = useCallback(() => {
+    setTheme((t) => {
+      const next = t === 'dark' ? 'light' : 'dark'
+      localStorage.setItem('fairway_theme', next)
+      return next
+    })
+  }, [])
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme)
+  }, [theme])
+
+  return { theme, toggle }
+}
+
+// ─── Auto-Refresh Countdown Hook ─────────────────────────────────────────────
+function useCountdown(lastUpdated: Date | null, intervalMs: number) {
+  const [secondsLeft, setSecondsLeft] = useState(intervalMs / 1000)
+
+  useEffect(() => {
+    if (!lastUpdated) return
+    const tick = () => {
+      const elapsed = Date.now() - lastUpdated.getTime()
+      const remaining = Math.max(0, Math.ceil((intervalMs - elapsed) / 1000))
+      setSecondsLeft(remaining)
+    }
+    tick()
+    const id = setInterval(tick, 1000)
+    return () => clearInterval(id)
+  }, [lastUpdated, intervalMs])
+
+  return secondsLeft
+}
+
+// ─── Odds Hook ────────────────────────────────────────────────────────────────
+interface OddsEntry {
+  name: string
+  odds: string
+  impliedProb: number
+}
+
+function useOdds() {
+  const [oddsMap, setOddsMap] = useState<Record<string, OddsEntry>>({})
+  const [oddsSource, setOddsSource] = useState<string>('none')
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch('/api/odds')
+        const data = await res.json()
+        if (data.entries?.length > 0) {
+          const map: Record<string, OddsEntry> = {}
+          for (const e of data.entries) {
+            map[e.name.toLowerCase()] = e
+          }
+          setOddsMap(map)
+          setOddsSource(data.source)
+        }
+      } catch {}
+    })()
+  }, [])
+
+  return { oddsMap, oddsSource }
+}
+
 // ─── Login Screen ─────────────────────────────────────────────────────────────
 function LoginScreen({ onLogin }: { onLogin: (name: string) => void }) {
   return (
@@ -89,7 +164,7 @@ const NAV_ITEMS = [
 ]
 
 function Sidebar({
-  currentPlayer, tab, setTab, isAdmin, onLogout, tournament
+  currentPlayer, tab, setTab, isAdmin, onLogout, tournament, theme, onToggleTheme
 }: {
   currentPlayer: string
   tab: string
@@ -97,6 +172,8 @@ function Sidebar({
   isAdmin: boolean
   onLogout: () => void
   tournament: Tournament | null
+  theme: 'dark' | 'light'
+  onToggleTheme: () => void
 }) {
   return (
     <div className="sidebar">
@@ -132,7 +209,15 @@ function Sidebar({
       </nav>
 
       <div className="sidebar-footer">
-        <div className="user-chip">
+        <button
+          className="theme-toggle"
+          onClick={onToggleTheme}
+          title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+        >
+          <span style={{ fontSize: 16 }}>{theme === 'dark' ? '☀️' : '🌙'}</span>
+          <span>{theme === 'dark' ? 'Light Mode' : 'Dark Mode'}</span>
+        </button>
+        <div className="user-chip" style={{ marginTop: 10 }}>
           <div className="user-avatar">{currentPlayer[0]}</div>
           <div className="user-info">
             <div className="user-name">{currentPlayer}</div>
@@ -145,6 +230,33 @@ function Sidebar({
           >↩</button>
         </div>
       </div>
+    </div>
+  )
+}
+
+// ─── Countdown Ring ───────────────────────────────────────────────────────────
+function CountdownRing({ secondsLeft, total }: { secondsLeft: number; total: number }) {
+  const pct = secondsLeft / total
+  const r = 10
+  const circ = 2 * Math.PI * r
+  const offset = circ * (1 - pct)
+  const mins = Math.floor(secondsLeft / 60)
+  const secs = secondsLeft % 60
+
+  return (
+    <div className="countdown-ring" title={`Next refresh in ${mins}:${secs.toString().padStart(2, '0')}`}>
+      <svg width="32" height="32" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r={r} fill="none" stroke="var(--border)" strokeWidth="2" />
+        <circle
+          cx="12" cy="12" r={r} fill="none"
+          stroke="var(--green)" strokeWidth="2"
+          strokeLinecap="round"
+          strokeDasharray={circ}
+          strokeDashoffset={offset}
+          style={{ transform: 'rotate(-90deg)', transformOrigin: 'center', transition: 'stroke-dashoffset 1s linear' }}
+        />
+      </svg>
+      <span className="countdown-text">{mins}:{secs.toString().padStart(2, '0')}</span>
     </div>
   )
 }
@@ -162,9 +274,8 @@ function LeaderboardTab({
   onRefresh: () => void
   money: Record<string, number>
 }) {
-  // Safety check for liveData
-  const safeData = Array.isArray(liveData) ? liveData : []
-  
+  const secondsLeft = useCountdown(lastUpdated, REFRESH_INTERVAL)
+
   if (!tournament) return (
     <div className="empty-state card">
       <div className="empty-icon">⛳</div>
@@ -181,9 +292,7 @@ function LeaderboardTab({
         </div>
         <div className="flex gap-12" style={{ alignItems: 'center' }}>
           {lastUpdated && (
-            <span style={{ fontFamily: 'DM Mono', fontSize: 12, color: 'var(--text-dim)' }}>
-              Updated {lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-            </span>
+            <CountdownRing secondsLeft={secondsLeft} total={REFRESH_INTERVAL / 1000} />
           )}
           <button className="refresh-btn" onClick={onRefresh} disabled={loading}>
             <span className={loading ? 'spin' : ''}>↻</span>
@@ -209,7 +318,7 @@ function LeaderboardTab({
         </div>
         <div className="stat-box">
           <div className="stat-val" style={{ color: 'var(--gold)', fontSize: 18 }}>
-            {safeData[0]?.name?.split(' ').pop() || '—'}
+            {liveData[0]?.name?.split(' ').pop() || '—'}
           </div>
           <div className="stat-label">Tour Leader</div>
         </div>
@@ -264,7 +373,7 @@ function LeaderboardTab({
         </div>
       )}
 
-      {safeData.length > 0 && (
+      {liveData.length > 0 && (
         <div className="card">
           <div className="card-header">
             <div className="card-title">Tour Leaderboard</div>
@@ -285,7 +394,7 @@ function LeaderboardTab({
               </tr>
             </thead>
             <tbody>
-              {safeData.slice(0, 30).map((g, i) => {
+              {liveData.slice(0, 30).map((g, i) => {
                 const pickedBy = PLAYERS.find((p) =>
                   (pickMap[p] || []).some((n) => n.toLowerCase() === g.name.toLowerCase())
                 )
@@ -367,15 +476,12 @@ function PicksTab({ standings, pickMap, liveData, tournament }: {
   liveData: GolferScore[]
   tournament: Tournament | null
 }) {
-  // Safety check for liveData
-  const safeData = Array.isArray(liveData) ? liveData : []
-  
   if (!tournament) return <div className="empty-state card"><div className="empty-icon">📋</div><p>No active tournament.</p></div>
   if (Object.keys(pickMap).length === 0) return (
     <div className="empty-state card"><div className="empty-icon">🏌️</div><p>Draft hasn't happened yet.</p></div>
   )
 
-  const par = safeData[0]?.par ?? 72
+  const par = liveData[0]?.par ?? 72
 
   return (
     <div>
@@ -389,15 +495,13 @@ function PicksTab({ standings, pickMap, liveData, tournament }: {
         const s = standings.find((x) => x.player === player)
         if (playerPicks.length === 0) return null
 
-        // Build golfer rows with live data merged in
         const golferRows = (s?.golfers ?? playerPicks.map((name) => {
-          const g = safeData.find((d) => d.name.toLowerCase() === name.toLowerCase())
+          const g = liveData.find((d) => d.name.toLowerCase() === name.toLowerCase())
             ?? { name, score: null, today: null, thru: '—', position: '—', status: 'active' as const, rounds: [null,null,null,null], par }
           const dr = [...(g.rounds ?? [null, null, null, null])]
           if (g.status === 'cut' || g.status === 'wd') { dr[2] = dr[0]; dr[3] = dr[1] }
           return { ...g, adjScore: g.score ?? 0, displayRounds: dr }
         })).map((g: any) => {
-          // Ensure displayRounds always has cut/wd rounds repeated, regardless of source
           if (g.status === 'cut' || g.status === 'wd') {
             const dr = [...(g.displayRounds ?? g.rounds ?? [null,null,null,null])]
             dr[2] = dr[0]; dr[3] = dr[1]
@@ -406,7 +510,6 @@ function PicksTab({ standings, pickMap, liveData, tournament }: {
           return g
         })
 
-        // Per-round totals across all 4 golfers
         const roundTotals: (number | null)[] = [0, 1, 2, 3].map((ri) => {
           const vals: number[] = []
           let allNull = true
@@ -467,7 +570,6 @@ function PicksTab({ standings, pickMap, liveData, tournament }: {
                     <ScorecardRow key={g.name} g={g} par={par} />
                   ))}
 
-                  {/* Team totals row */}
                   <tr style={{ borderTop: '2px solid var(--border-bright)', background: 'var(--surface2)' }}>
                     <td style={{ padding: '12px 18px', fontFamily: 'DM Mono', fontSize: 11, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>
                       Combined
@@ -614,7 +716,7 @@ function MoneyTab({ seasonMoney, weekMoney, tournament, history }: {
 
 // ─── Draft Tab ────────────────────────────────────────────────────────────────
 function DraftTab({
-  tournament, picks, liveData, currentPlayer, isAdmin, onPickMade
+  tournament, picks, liveData, currentPlayer, isAdmin, onPickMade, onUndoPick, oddsMap, oddsSource
 }: {
   tournament: Tournament | null
   picks: Pick[]
@@ -622,13 +724,15 @@ function DraftTab({
   currentPlayer: string
   isAdmin: boolean
   onPickMade: (golferName: string, playerName: string) => Promise<void>
+  onUndoPick: () => Promise<void>
+  oddsMap: Record<string, OddsEntry>
+  oddsSource: string
 }) {
-  // Safety check for liveData
-  const safeData = Array.isArray(liveData) ? liveData : []
-  
   const [search, setSearch] = useState('')
   const [draftOrder, setDraftOrder] = useState<{ player: string; pick: number; round: number }[]>([])
   const [saving, setSaving] = useState(false)
+  const [sortBy, setSortBy] = useState<'odds' | 'position'>('odds')
+  const [undoing, setUndoing] = useState(false)
 
   const takenGolfers = picks.map((p) => p.golfer_name.toLowerCase())
   const pickMap = buildPickMap(picks)
@@ -636,6 +740,7 @@ function DraftTab({
   const pickIndex = picks.length
   const isDraftComplete = picks.length >= totalPicks
   const currentPickPlayer = draftOrder[pickIndex]?.player
+  const lastPick = picks.length > 0 ? picks[picks.length - 1] : null
 
   useEffect(() => {
     if (tournament?.draft_order?.length) {
@@ -645,10 +750,29 @@ function DraftTab({
 
   const isMyTurn = currentPickPlayer === currentPlayer || isAdmin
 
-  const filteredGolfers = safeData.filter(
+  // Sort golfers: by odds (favorites first) or by ESPN position
+  const sortedGolfers = [...liveData].filter(
     (g) => !takenGolfers.includes(g.name.toLowerCase()) &&
       g.name.toLowerCase().includes(search.toLowerCase())
-  )
+  ).sort((a, b) => {
+    if (sortBy === 'odds') {
+      const oddsA = oddsMap[a.name.toLowerCase()]
+      const oddsB = oddsMap[b.name.toLowerCase()]
+      // If both have odds, sort by implied probability (higher = better favorite)
+      if (oddsA && oddsB) return oddsB.impliedProb - oddsA.impliedProb
+      // Golfers with odds come first
+      if (oddsA && !oddsB) return -1
+      if (!oddsA && oddsB) return 1
+      // Fallback: sort by ESPN position
+      const posA = parseInt(a.position.replace(/^T/i, '')) || 999
+      const posB = parseInt(b.position.replace(/^T/i, '')) || 999
+      return posA - posB
+    }
+    // Sort by ESPN position
+    const posA = parseInt(a.position.replace(/^T/i, '')) || 999
+    const posB = parseInt(b.position.replace(/^T/i, '')) || 999
+    return posA - posB
+  })
 
   const handlePick = async (name: string) => {
     if (!currentPickPlayer) return
@@ -656,6 +780,13 @@ function DraftTab({
     await onPickMade(name, currentPickPlayer)
     setSearch('')
     setSaving(false)
+  }
+
+  const handleUndo = async () => {
+    if (!lastPick) return
+    setUndoing(true)
+    await onUndoPick()
+    setUndoing(false)
   }
 
   if (!tournament) return (
@@ -681,9 +812,22 @@ function DraftTab({
                 <div className="card-title">
                   {currentPickPlayer ? `${currentPickPlayer}'s Pick` : 'Draft Order'}
                 </div>
-                <span style={{ fontFamily: 'DM Mono', fontSize: 12, color: 'var(--text-dim)' }}>
-                  Pick {pickIndex + 1} / {totalPicks}
-                </span>
+                <div className="flex gap-8" style={{ alignItems: 'center' }}>
+                  <span style={{ fontFamily: 'DM Mono', fontSize: 12, color: 'var(--text-dim)' }}>
+                    Pick {pickIndex + 1} / {totalPicks}
+                  </span>
+                  {/* Undo button for admins */}
+                  {isAdmin && lastPick && !isDraftComplete && (
+                    <button
+                      className="btn btn-outline btn-sm"
+                      onClick={handleUndo}
+                      disabled={undoing}
+                      title={`Undo: ${lastPick.golfer_name} (${lastPick.player_name})`}
+                    >
+                      {undoing ? '⏳' : '↩'} Undo
+                    </button>
+                  )}
+                </div>
               </div>
               <div className="card-body">
                 <div className="draft-picks-flow mb-24">
@@ -696,6 +840,13 @@ function DraftTab({
                     </div>
                   ))}
                 </div>
+
+                {/* Last pick indicator */}
+                {lastPick && (
+                  <div className="alert alert-green" style={{ marginBottom: 12, fontSize: 12 }}>
+                    ✅ Last pick: <strong>{lastPick.player_name}</strong> → {lastPick.golfer_name}
+                  </div>
+                )}
 
                 {!isMyTurn && (
                   <div className="alert alert-gold" style={{ marginBottom: 16 }}>
@@ -715,33 +866,59 @@ function DraftTab({
                         ⚙️ Admin mode — picking on behalf of <strong>{currentPickPlayer}</strong>
                       </div>
                     )}
-                    <input
-                      className="form-input"
-                      placeholder="Search golfers…"
-                      value={search}
-                      onChange={(e) => setSearch(e.target.value)}
-                      style={{ marginBottom: 12 }}
-                    />
+
+                    {/* Sort toggle + search */}
+                    <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+                      <input
+                        className="form-input"
+                        placeholder="Search golfers…"
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        style={{ flex: 1 }}
+                      />
+                      <button
+                        className={`btn btn-sm ${sortBy === 'odds' ? 'btn-green' : 'btn-outline'}`}
+                        onClick={() => setSortBy(sortBy === 'odds' ? 'position' : 'odds')}
+                        title="Toggle sort"
+                      >
+                        {sortBy === 'odds' ? '📊 Odds' : '🏌️ Position'}
+                      </button>
+                    </div>
+
+                    {Object.keys(oddsMap).length > 0 && (
+                      <div style={{ fontSize: 11, color: 'var(--text-dim)', fontFamily: 'DM Mono', marginBottom: 8 }}>
+                        Sorted by betting odds (favorites first) · Source: {oddsSource === 'odds-api' ? 'Live Odds' : 'Field ranking'}
+                      </div>
+                    )}
+
                     <div className="golfer-list">
-                      {safeData.length === 0 && (
+                      {liveData.length === 0 && (
                         <div style={{ padding: '16px', color: 'var(--text-dim)', fontSize: 13 }}>
                           Loading golfer list…
                         </div>
                       )}
-                      {filteredGolfers.slice(0, 50).map((g) => (
-                        <div
-                          key={g.name}
-                          className="golfer-option"
-                          onClick={() => !saving && handlePick(g.name)}
-                        >
-                          <div>
-                            <div style={{ fontWeight: 500 }}>{g.name}</div>
-                            <div className="golfer-meta">#{g.position} · {toRelScore(g.score)}</div>
+                      {sortedGolfers.slice(0, 50).map((g) => {
+                        const odds = oddsMap[g.name.toLowerCase()]
+                        return (
+                          <div
+                            key={g.name}
+                            className="golfer-option"
+                            onClick={() => !saving && handlePick(g.name)}
+                          >
+                            <div>
+                              <div style={{ fontWeight: 500 }}>{g.name}</div>
+                              <div className="golfer-meta">
+                                #{g.position} · {toRelScore(g.score)}
+                                {odds && (
+                                  <span className="odds-badge">{odds.odds}</span>
+                                )}
+                              </div>
+                            </div>
+                            <span className="badge badge-green">Pick</span>
                           </div>
-                          <span className="badge badge-green">Pick</span>
-                        </div>
-                      ))}
-                      {search && !filteredGolfers.find((g) => g.name.toLowerCase() === search.toLowerCase()) && (
+                        )
+                      })}
+                      {search && !sortedGolfers.find((g) => g.name.toLowerCase() === search.toLowerCase()) && (
                         <div className="golfer-option" onClick={() => !saving && handlePick(search)}>
                           <div>
                             <div style={{ fontWeight: 500 }}>{search}</div>
@@ -775,9 +952,15 @@ function DraftTab({
                     <div style={{ color: 'var(--text-dim)', fontSize: 13 }}>No picks yet</div>
                   ) : (
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                      {playerPicks.map((g) => (
-                        <span key={g} className="badge badge-gray">{g}</span>
-                      ))}
+                      {playerPicks.map((g) => {
+                        const odds = oddsMap[g.toLowerCase()]
+                        return (
+                          <span key={g} className="badge badge-gray">
+                            {g}
+                            {odds && <span style={{ marginLeft: 4, color: 'var(--green)', fontSize: 10 }}>{odds.odds}</span>}
+                          </span>
+                        )
+                      })}
                     </div>
                   )}
                 </div>
@@ -829,7 +1012,6 @@ function AdminTab({
     setTimeout(() => setMsg(''), 4000)
   }
 
-  // Group schedule into upcoming vs past
   const today = new Date().toISOString().slice(0, 10)
   const upcoming = PGA_SCHEDULE.filter((e) => e.date >= today)
   const past = PGA_SCHEDULE.filter((e) => e.date < today)
@@ -1010,6 +1192,9 @@ export default function App() {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   const [bootstrapped, setBootstrapped] = useState(false)
 
+  const { theme, toggle: toggleTheme } = useTheme()
+  const { oddsMap, oddsSource } = useOdds()
+
   const isAdmin = ['Eric', 'Chase'].includes(currentPlayer ?? '')
 
   // ── Load from localStorage on mount ──
@@ -1030,14 +1215,12 @@ export default function App() {
     if (p) setPicks(p)
     if (sm) setSeasonMoney(sm)
 
-    // Load history: join results + tournaments
     const { data: results } = await supabase
       .from('results')
       .select('*, tournaments(name, date)')
       .order('created_at', { ascending: false })
 
     if (results) {
-      // Group by tournament
       const grouped: Record<string, any> = {}
       for (const r of results) {
         const tid = r.tournament_id
@@ -1068,18 +1251,16 @@ export default function App() {
     try {
       const res = await fetch('/api/scores')
       const data: GolferScore[] = await res.json()
-      setLiveData(Array.isArray(data) ? data : [])
+      setLiveData(data)
       setLastUpdated(new Date())
-    } catch {
-      setLiveData([])
-    }
+    } catch {}
     setLoading(false)
   }, [tournament])
 
   useEffect(() => {
     if (tournament) {
       fetchScores()
-      const interval = setInterval(fetchScores, 120_000)
+      const interval = setInterval(fetchScores, REFRESH_INTERVAL)
       return () => clearInterval(interval)
     }
   }, [tournament, fetchScores])
@@ -1113,7 +1294,6 @@ export default function App() {
   }
 
   const handleSetupTournament = async (data: { name: string; course: string; date: string; draft_order: string[] }) => {
-    // Deactivate old tournaments
     await supabase.from('tournaments').update({ status: 'finalized' }).eq('status', 'active')
     const { data: t } = await supabase.from('tournaments').insert({ ...data, status: 'active' }).select().single()
     if (t) setTournament(t)
@@ -1133,11 +1313,18 @@ export default function App() {
     await loadData()
   }
 
+  // ── Undo Last Pick (Admin only) ──
+  const handleUndoPick = async () => {
+    if (!tournament || picks.length === 0) return
+    const lastPick = picks[picks.length - 1]
+    await supabase.from('picks').delete().eq('id', lastPick.id)
+    await loadData()
+  }
+
   const handleFinalize = async () => {
     if (!tournament || !standings.length) return
     const money = weekMoney
 
-    // Insert results
     const resultRows = standings.map((s) => ({
       tournament_id: tournament.id,
       player_name: s.player,
@@ -1149,7 +1336,6 @@ export default function App() {
     }))
     await supabase.from('results').upsert(resultRows, { onConflict: 'tournament_id,player_name' })
 
-    // Update season money
     for (const player of PLAYERS) {
       const delta = money[player] || 0
       const current = seasonMoney.find((sm) => sm.player_name === player)?.total || 0
@@ -1191,12 +1377,14 @@ export default function App() {
         isAdmin={isAdmin}
         onLogout={handleLogout}
         tournament={tournament}
+        theme={theme}
+        onToggleTheme={toggleTheme}
       />
       <main className="main-content">
         {tab === 'live'    && <LeaderboardTab tournament={tournament} standings={standings} liveData={liveData} pickMap={pickMap} loading={loading} lastUpdated={lastUpdated} onRefresh={fetchScores} money={weekMoney} />}
         {tab === 'picks'   && <PicksTab standings={standings} pickMap={pickMap} liveData={liveData} tournament={tournament} />}
         {tab === 'money'   && <MoneyTab seasonMoney={seasonMoney} weekMoney={weekMoney} tournament={tournament} history={history} />}
-        {tab === 'draft'   && <DraftTab tournament={tournament} picks={picks} liveData={liveData} currentPlayer={currentPlayer} isAdmin={isAdmin} onPickMade={handlePickMade} />}
+        {tab === 'draft'   && <DraftTab tournament={tournament} picks={picks} liveData={liveData} currentPlayer={currentPlayer} isAdmin={isAdmin} onPickMade={handlePickMade} onUndoPick={handleUndoPick} oddsMap={oddsMap} oddsSource={oddsSource} />}
         {tab === 'history' && <HistoryTab history={history} />}
         {tab === 'admin'   && isAdmin && <AdminTab tournament={tournament} standings={standings} weekMoney={weekMoney} onSetupTournament={handleSetupTournament} onFinalize={handleFinalize} onClearTournament={handleClearTournament} onClearPicks={handleClearPicks} />}
       </main>
