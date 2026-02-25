@@ -1206,14 +1206,15 @@ export default function App() {
 
   // ── Fetch DB data when logged in ──
   const loadData = useCallback(async () => {
-    const [{ data: t }, { data: p }, { data: sm }] = await Promise.all([
-      supabase.from('tournaments').select('*').eq('status', 'active').single(),
-      supabase.from('picks').select('*').order('pick_order'),
+    const [tournamentRes, { data: p }, { data: sm }] = await Promise.all([
+      supabase.from('tournaments').select('*').eq('status', 'active').limit(1),
+      supabase.from('picks').select('*').order('pick_order').order('created_at'),
       supabase.from('season_money').select('*'),
     ])
-    if (t) setTournament(t)
-    if (p) setPicks(p)
-    if (sm) setSeasonMoney(sm)
+    const t = tournamentRes.data?.[0] ?? null
+    setTournament(t)
+    setPicks(Array.isArray(p) ? p : [])
+    setSeasonMoney(Array.isArray(sm) ? sm : [])
 
     const { data: results } = await supabase
       .from('results')
