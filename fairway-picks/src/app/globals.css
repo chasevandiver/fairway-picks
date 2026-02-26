@@ -737,3 +737,19 @@ gap: 12px;
 font-family: ‘DM Mono’, monospace;
 font-size: 13px;
 }
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.expandable-player-btn:hover {
+  border-color: var(--border-bright);
+  background: var(--surface);
+}
