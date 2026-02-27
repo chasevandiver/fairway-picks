@@ -1,8 +1,6 @@
 import type { Pick } from './types'
 import { PLAYERS, PAYOUT_RULES } from './types'
 
-const PAR = 72
-
 export function toRelScore(s: number | null | undefined): string {
   if (s === null || s === undefined || isNaN(s)) return '—'
   if (s === 0) return 'E'
@@ -46,43 +44,67 @@ export function computeStandings(liveData: any[], pickMap: Record<string, string
         (d: any) => d.name.toLowerCase() === name.toLowerCase()
       ) ?? { name, score: null, today: null, thru: '—', position: '—', status: 'active', rounds: [null,null,null,null], par: 72 }
 
-      // espn.ts now reliably sets status and position for cut golfers
-      // but check position as belt-and-suspenders
-      const isCut = g.status === 'cut' || String(g.position).toUpperCase() === 'CUT'
-      const isWD  = g.status === 'wd'  || String(g.position).toUpperCase() === 'WD'
-      const isCutOrWD = isCut || isWD
+      const par = g.par ?? 72
+      let adjScore = g.score ?? 0
 
-      const r1 = g.rounds?.[0] ?? null
-      const r2 = g.rounds?.[1] ?? null
-      let adjScore: number
-      if (isCutOrWD && r1 !== null && r2 !== null) {
-        const avg = Math.ceil((r1 + r2) / 2)
-        adjScore = (r1 + r2 + avg + avg) - PAR * 4
-      } else {
-        adjScore = g.score ?? 0
+      // For cut/wd: double the 2-round score (rounds 3&4 repeat rounds 1&2)
+      if ((g.status === 'cut' || g.status === 'wd') && g.score !== null) {
+        adjScore = g.score * 2
       }
 
-      const displayRounds = [...(g.rounds || [null, null, null, null])]
-      if (isCutOrWD) {
-        const r1 = displayRounds[0] ?? 0
-        const r2 = displayRounds[1] ?? 0
-        const avg = Math.ceil((r1 + r2) / 2)
-        displayRounds[2] = avg
-        displayRounds[3] = avg
+      // displayRounds: what to show in the scorecard columns
+      // For completed rounds: raw strokes from g.rounds[]
+      // For the current in-progress round: derive strokes from today to-par + par
+      //   so the cell shows a live updating number
+      // For rounds not yet started: null (shows —)
+      const baseRounds: (number | null)[] = g.rounds ?? [null, null, null, null]
+      const displayRounds: (number | null)[] = [null, null, null, null]
+
+      // Find which round is currently in progress
+      // A round is in-progress if: thru is not F/—/CUT/WD and today is not null
+      const inProgress = g.thru !== 'F' && g.thru !== '—' && g.thru !== 'CUT' && g.thru !== 'WD' && g.today !== null
+
+      // Figure out which round index is active
+      // Count completed rounds (non-null in baseRounds)
+      let completedRoundCount = 0
+      for (const r of baseRounds) {
+        if (r !== null) completedRoundCount++
+      }
+      const activeRoundIdx = inProgress ? completedRoundCount : -1
+
+      for (let i = 0; i < 4; i++) {
+        if (i < completedRoundCount) {
+          // Completed round — use raw strokes
+          displayRounds[i] = baseRounds[i]
+        } else if (i === activeRoundIdx) {
+          // In-progress round — derive strokes from today to-par + par
+          // This gives a live updating stroke count in the cell
+          if (g.today !== null) {
+            displayRounds[i] = par + g.today
+          }
+        }
+        // else: future round, stays null
       }
 
-      // Stamp status so ScorecardRow always has it
-      const stampedStatus = isWD ? 'wd' : isCut ? 'cut' : g.status
+      // For cut/wd: repeat R1/R2 into R3/R4 slots
+      if (g.status === 'cut' || g.status === 'wd') {
+        displayRounds[2] = displayRounds[0]
+        displayRounds[3] = displayRounds[1]
+      }
 
       totalScore += adjScore
-      return { ...g, status: stampedStatus, adjScore, displayRounds }
+      return { ...g, adjScore, displayRounds }
     })
 
-    const parsePos = (p: string) => parseInt((p || '').replace(/^T/, ''))
+    const parsePos = (p: string): number => {
+      if (!p || p === '—' || p === '-' || p.toUpperCase() === 'CUT' || p.toUpperCase() === 'WD') return NaN
+      const n = parseInt(p.replace(/^T/i, ''))
+      return n
+    }
     const hasWinner = golfers.some((g: any) => parsePos(g.position) === 1)
     const hasTop3 = golfers.some((g: any) => {
       const pos = parsePos(g.position)
-      return !isNaN(pos) && pos <= 3
+      return !isNaN(pos) && pos >= 1 && pos <= 3
     })
 
     return { player, totalScore, golfers, hasWinner, hasTop3, rank: 0, moneyThisWeek: 0 }
