@@ -116,7 +116,7 @@ export async function fetchLiveScores(): Promise<GolferScore[]> {
       }
 
       // ── Thru ──
-      let thru: string
+      let thru: string = '—'
       if (status === 'cut') {
         thru = 'CUT'
       } else if (status === 'wd') {
@@ -125,16 +125,13 @@ export async function fetchLiveScores(): Promise<GolferScore[]> {
         thru = 'F'
       } else {
         // Find the current active round (last one with holes data)
-        let thruSet = false
         for (let i = lines.length - 1; i >= 0; i--) {
           const currentRoundHoles: any[] = lines[i]?.linescores || []
           if (currentRoundHoles.length > 0) {
             thru = currentRoundHoles.length >= 18 ? 'F' : String(currentRoundHoles.length)
-            thruSet = true
             break
           }
         }
-        if (!thruSet) thru = '—'
       }
 
       // ── Cut/WD score: sum to-par across played rounds ──
