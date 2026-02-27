@@ -84,25 +84,17 @@ export async function fetchLiveScores(): Promise<GolferScore[]> {
 
       const lines: any[] = c.linescores || []
 
-      // rounds[]: raw strokes per round
-      // - Completed round (18 holes): use l.value directly (actual round strokes e.g. 69)
-      // - In-progress round (>0 holes): derive from to-par + coursePar (e.g. -3 + 71 = 68)
-      // - Not started (0 holes): null
+
+      // Only store strokes for fully completed rounds (18 holes)
+      // In-progress rounds stay null — live score shown via today + thru fields
       const rounds: (number | null)[] = [null, null, null, null]
       lines.forEach((l: any, i: number) => {
         if (i >= 4) return
         const holeCount = l.linescores?.length ?? 0
         if (holeCount >= 18) {
-          // Completed round — l.value is reliable raw strokes
           const n = Math.round(l.value || 0)
           if (n >= 55 && n <= 95) rounds[i] = n
-        } else if (holeCount > 0) {
-          // In-progress — l.value is running hole total, NOT full round strokes
-          // Derive projected strokes from current to-par + coursePar
-          const toPar = parseToPar(l.displayValue)
-          if (toPar !== null) rounds[i] = toPar + coursePar
         }
-        // holeCount === 0: not started, stays null
       })
 
       // Find last round actually played (has nested hole linescores)
