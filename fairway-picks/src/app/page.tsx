@@ -325,21 +325,33 @@ function ExpandablePlayerCard({
                       </td>
                       {rounds.map((r: number | null, i: number) => {
                         const toPar = r !== null ? r - par : null
+                        const thruNum = parseInt(g.thru)
+                        const priorComplete = rounds.slice(0, i).every((x: number | null) => x !== null)
+                        const laterEmpty = rounds.slice(i + 1).every((x: number | null) => x === null)
+                        const isInProgress = r === null && priorComplete && laterEmpty &&
+                          !isNaN(thruNum) && thruNum > 0 && g.status === 'active'
                         return (
                           <td key={i} style={{ padding: '10px 8px', textAlign: 'center' }}>
                             <div style={{ fontFamily: 'DM Mono', fontSize: 14, fontWeight: 500 }}>
-                              {r ?? '—'}
+                              {r !== null ? r : (isInProgress ? '*' : '—')}
                             </div>
-                            <div className={`score ${scoreClass(toPar)}`} style={{ fontSize: 9, marginTop: 1 }}>
-                              {toPar !== null ? toRelScore(toPar) : ''}
+                            <div className={`score ${isInProgress ? scoreClass(g.today) : scoreClass(toPar)}`} style={{ fontSize: 9, marginTop: 1 }}>
+                              {isInProgress && g.today !== null
+                                ? `${toRelScore(g.today)} thru ${g.thru}`
+                                : (toPar !== null ? toRelScore(toPar) : '')}
                             </div>
                           </td>
                         )
                       })}
                       <td style={{ padding: '10px 12px', textAlign: 'center' }}>
-                        <div className={`score ${scoreClass(g.score)}`} style={{ fontSize: 16, fontFamily: 'DM Mono', fontWeight: 700 }}>
-                          {toRelScore(g.score)}
+                        <div className={`score ${scoreClass(g.adjScore ?? g.score)}`} style={{ fontSize: 16, fontFamily: 'DM Mono', fontWeight: 700 }}>
+                          {toRelScore(g.adjScore ?? g.score)}
                         </div>
+                        {g.thru && g.thru !== '—' && g.thru !== 'F' && g.thru !== 'CUT' && g.thru !== 'WD' && (
+                          <div style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'DM Mono', marginTop: 1 }}>
+                            thru {g.thru}
+                          </div>
+                        )}
                       </td>
                     </tr>
                   )
