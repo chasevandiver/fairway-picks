@@ -38,8 +38,10 @@ export async function fetchLiveScores(): Promise<GolferScore[]> {
     const raw = competitions[0]?.competitors || []
     if (raw.length < 5) return MOCK_DATA
 
-    // Temporarily add this right after `const raw = competitions[0]?.competitors || []`
-console.log('FIRST GOLFER RAW:', JSON.stringify(raw[0], null, 2))
+// Log first 10 to find someone mid-R2
+for (const c of raw.slice(0, 10)) {
+  console.log(`${c.athlete?.displayName}: score=${c.score} | linescores=${JSON.stringify(c.linescores?.map((l:any) => ({v: l.value, dv: l.displayValue, holes: l.linescores?.length})))}`)
+}
 
     // ── Derive course par from first golfer's first completed round ──
     // par = raw strokes - to-par displayValue  (e.g. 63 - (-7) = 70)
