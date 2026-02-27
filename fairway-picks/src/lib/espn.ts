@@ -38,14 +38,6 @@ export async function fetchLiveScores(): Promise<GolferScore[]> {
     const raw = competitions[0]?.competitors || []
     if (raw.length < 5) return MOCK_DATA
 
-    // Log all golfers compactly so we can see finished R2 structure
-    for (const c of raw.slice(0, 30)) {
-      const lines = c.linescores || []
-      console.log(`${c.athlete?.displayName}: score=${c.score} | ` +
-        lines.map((l: any, i: number) => `R${i+1}(v=${l.value} dv=${l.displayValue} holes=${l.linescores?.length ?? 0})`).join(' | ')
-      )
-    }
-
     // Derive course par from first golfer's first completed round
     let coursePar = DEFAULT_PAR
     for (const c of raw) {
@@ -104,7 +96,7 @@ export async function fetchLiveScores(): Promise<GolferScore[]> {
         }
       })
 
-      // Find last round actually played (has nested hole linescores)
+      // Find last round actually played (has nested hole linescores with length > 0)
       let activeRoundIdx = -1
       for (let i = lines.length - 1; i >= 0; i--) {
         if ((lines[i].linescores?.length ?? 0) > 0) {
@@ -113,13 +105,16 @@ export async function fetchLiveScores(): Promise<GolferScore[]> {
         }
       }
 
-      // Between rounds: active round finished AND next round placeholder exists but not started
+      // "Between rounds" = finished active round AND next slot is a real placeholder
+      // A real placeholder has dv="-" (ESPN tee time slot), NOT undefined/missing
+      // Mark Hubbard has R3(v=undefined dv=undefined) which is NOT a real placeholder
       const activeRoundFinished = activeRoundIdx >= 0 &&
         (lines[activeRoundIdx].linescores?.length ?? 0) >= 18
-      const nextRoundNotStarted = activeRoundIdx >= 0 &&
-        activeRoundIdx < lines.length - 1 &&
-        (lines[activeRoundIdx + 1]?.linescores?.length ?? 0) === 0
-      const betweenRounds = activeRoundFinished && nextRoundNotStarted
+      const nextSlot = lines[activeRoundIdx + 1]
+      const nextIsRealPlaceholder = nextSlot !== undefined &&
+        nextSlot.displayValue === '-' &&
+        (nextSlot.linescores?.length ?? 0) === 0
+      const betweenRounds = activeRoundFinished && nextIsRealPlaceholder
 
       // Today: null if between rounds, otherwise active round to-par
       let today: number | null = null
