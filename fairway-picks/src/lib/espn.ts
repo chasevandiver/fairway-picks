@@ -112,13 +112,28 @@ export async function fetchLiveScores(): Promise<GolferScore[]> {
   }
 })
 
-      // ── Today (current/last round to-par) ──
-      // Use lines[last].displayValue directly — ESPN computes this hole-by-hole
-      // and it's always correct regardless of course par.
-      let today: number | null = null
-      if (lines.length > 0) {
-        today = parseToPar(lines[lines.length - 1]?.displayValue)
-      }
+     // ── Today (current/last round to-par) ──
+// lines[last].displayValue = cumulative to-par through last round (NOT just today)
+// So derive today = current total - sum of previous completed rounds
+let today: number | null = null
+if (lines.length > 0) {
+  if (lines.length === 1) {
+    // Only R1 data — today IS the round score
+    today = parseToPar(lines[0]?.displayValue)
+  } else {
+    // R2+: today = total (c.score) minus sum of all completed prior rounds' to-par
+    const totalToPar = parseToPar(c.score)  // overall to-par e.g. -9
+    let priorRoundsToPar = 0
+    // Sum all rounds except the last (which is today)
+    for (let i = 0; i < lines.length - 1; i++) {
+      const rtp = parseToPar(lines[i]?.displayValue)
+      if (rtp !== null) priorRoundsToPar += rtp
+    }
+    if (totalToPar !== null) {
+      today = totalToPar - priorRoundsToPar
+    }
+  }
+}
 
       // ── Thru ──
       // c.statistics[] is always empty. ESPN's THRU during R1 shows tee times
