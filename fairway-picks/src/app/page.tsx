@@ -468,56 +468,6 @@ function LeaderboardTab({
         </div>
       </div>
 
-      {/* ── Projected Final Standings ── */}
-      {standings.length > 0 && (() => {
-        // Only show projection if tournament is in progress (some golfers have played but not finished)
-        const inProgress = liveData.some(g => g.thru !== 'F' && g.thru !== '—' && g.thru !== 'CUT' && g.score !== null)
-        if (!inProgress) return null
-
-        // Project each golfer's final score based on current pace
-        const projectScore = (g: any): number => {
-          if (g.score === null) return 0
-          if (g.thru === 'F') return g.score
-          if (g.status === 'cut' || g.status === 'wd') return g.adjScore ?? g.score * 2
-          const thruHoles = parseInt(g.thru) || 18
-          if (thruHoles === 0) return g.score
-          const pace = (g.score ?? 0) / thruHoles
-          const remaining = (72 - thruHoles) / 18  // rounds remaining approx
-          return Math.round(g.score + pace * remaining * 18)
-        }
-
-        const projectedStandings = standings.map(s => {
-          const projTotal = s.golfers.reduce((sum: number, g: any) => sum + projectScore(g), 0)
-          return { player: s.player, projTotal }
-        }).sort((a, b) => a.projTotal - b.projTotal)
-
-        return (
-          <div className="card mb-24">
-            <div className="card-header">
-              <div className="card-title">Projected Final Standings</div>
-              <span className="badge badge-indigo">📊 Pace-based estimate</span>
-            </div>
-            <table className="table">
-              <thead><tr><th>Proj. Rank</th><th>Player</th><th>Proj. Score</th><th>vs Current</th></tr></thead>
-              <tbody>
-                {projectedStandings.map((p, i) => {
-                  const current = standings.find(s => s.player === p.player)
-                  const diff = p.projTotal - (current?.totalScore ?? 0)
-                  return (
-                    <tr key={p.player} className="row">
-                      <td><span className={`rank rank-${i + 1}`}>{i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`}</span></td>
-                      <td><strong>{p.player}</strong></td>
-                      <td><span className={`score ${scoreClass(p.projTotal)}`}>{toRelScore(p.projTotal)}</span></td>
-                      <td><span style={{ fontFamily: 'DM Mono', fontSize: 12, color: diff > 0 ? 'var(--red)' : diff < 0 ? 'var(--green)' : 'var(--text-dim)' }}>{diff > 0 ? `+${diff}` : diff < 0 ? `${diff}` : '—'}</span></td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-        )
-      })()}
-
       {/* ── Expandable Player Standings ── */}
       {standings.length === 0 ? (
         <div className="alert alert-gold mb-24">
