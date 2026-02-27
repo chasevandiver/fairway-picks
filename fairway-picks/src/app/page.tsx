@@ -455,49 +455,6 @@ function LeaderboardTab({
         </div>
       </div>
 
-      {/* ── Live Alerts ── */}
-      {standings.length > 0 && (() => {
-        const alerts: { type: 'lead' | 'top3' | 'cut'; msg: string }[] = []
-
-        // Check each player's golfers for notable positions
-        for (const s of standings) {
-          for (const g of s.golfers) {
-            const pos = parseInt((g.position || '').replace(/^T/, ''))
-            if (pos === 1) alerts.push({ type: 'lead', msg: `🏆 ${g.name} (${s.player}'s pick) is leading the tournament!` })
-            else if (!isNaN(pos) && pos <= 3) alerts.push({ type: 'top3', msg: `🔝 ${g.name} (${s.player}'s pick) is T${pos} — top 3!` })
-          }
-        }
-
-        // Cut line: golfers within 1 shot of the cut
-        const activeLiveGolfers = liveData.filter(g => g.status === 'active' && g.score !== null)
-        if (activeLiveGolfers.length > 20) {
-          const sorted = [...activeLiveGolfers].sort((a, b) => (a.score ?? 0) - (b.score ?? 0))
-          const cutIdx = Math.floor(sorted.length * 0.65)
-          const cutScore = sorted[cutIdx]?.score ?? 0
-          for (const s of standings) {
-            for (const g of s.golfers) {
-              if (g.status === 'active' && g.score !== null && g.thru !== 'F') {
-                const diff = (g.score ?? 0) - cutScore
-                if (diff >= 0 && diff <= 2) {
-                  alerts.push({ type: 'cut', msg: `✂️ ${g.name} (${s.player}'s pick) is on the cut line (${toRelScore(g.score)})` })
-                }
-              }
-            }
-          }
-        }
-
-        if (alerts.length === 0) return null
-        return (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 24 }}>
-            {alerts.map((a, i) => (
-              <div key={i} className={`alert ${a.type === 'lead' ? 'alert-gold' : a.type === 'top3' ? 'alert-green' : 'alert-red'}`}>
-                {a.msg}
-              </div>
-            ))}
-          </div>
-        )
-      })()}
-
       {/* ── Projected Final Standings ── */}
       {standings.length > 0 && (() => {
         // Only show projection if tournament is in progress (some golfers have played but not finished)
@@ -717,6 +674,14 @@ function PicksTab({ standings, pickMap, liveData, tournament }: {
 
   const par = liveData[0]?.par ?? 72
 
+  // ── Compute cut line score for alerts ──
+  const activeLiveGolfers = liveData.filter(g => g.status === 'active' && g.score !== null)
+  let cutScore: number | null = null
+  if (activeLiveGolfers.length > 20) {
+    const sorted = [...activeLiveGolfers].sort((a, b) => (a.score ?? 0) - (b.score ?? 0))
+    cutScore = sorted[Math.floor(sorted.length * 0.65)]?.score ?? null
+  }
+
   return (
     <div>
       <div className="page-header">
@@ -830,6 +795,32 @@ function PicksTab({ standings, pickMap, liveData, tournament }: {
                 </tbody>
               </table>
             </div>
+
+            {/* ── Per-golfer alerts ── */}
+            {(() => {
+              const playerAlerts: { type: 'lead' | 'top3' | 'cut'; msg: string }[] = []
+              for (const g of golferRows as any[]) {
+                const pos = parseInt((g.position || '').replace(/^T/i, ''))
+                if (pos === 1) playerAlerts.push({ type: 'lead', msg: `🏆 ${g.name} is leading the tournament!` })
+                else if (!isNaN(pos) && pos <= 3) playerAlerts.push({ type: 'top3', msg: `🔝 ${g.name} is T${pos} — top 3!` })
+                if (cutScore !== null && g.status === 'active' && g.score !== null && g.thru !== 'F') {
+                  const diff = (g.score ?? 0) - cutScore
+                  if (diff >= 0 && diff <= 2) {
+                    playerAlerts.push({ type: 'cut', msg: `✂️ ${g.name} is on the cut line (${toRelScore(g.score)})` })
+                  }
+                }
+              }
+              if (playerAlerts.length === 0) return null
+              return (
+                <div style={{ padding: '10px 14px', borderTop: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {playerAlerts.map((a, i) => (
+                    <div key={i} className={`alert ${a.type === 'lead' ? 'alert-gold' : a.type === 'top3' ? 'alert-green' : 'alert-red'}`} style={{ margin: 0, fontSize: 12 }}>
+                      {a.msg}
+                    </div>
+                  ))}
+                </div>
+              )
+            })()}
 
             {s && (s.hasWinner || s.hasTop3) && (
               <div style={{ padding: '10px 18px', borderTop: '1px solid var(--border)', display: 'flex', gap: 6, background: 'var(--surface2)' }}>
