@@ -626,25 +626,24 @@ function ScorecardRow({ g, par }: { g: any; par: number }) {
         )}
       </td>
       {rounds.map((r: number | null, i: number) => {
-        const isMirrored = isCut && (i === 2 || i === 3)
         const roundPar = r !== null ? r - par : null
-        // Check if this is the in-progress round: no completed strokes,
-        // but golfer is actively playing (thru is a hole number)
+        // Detect in-progress round: this slot is null, all prior slots are filled,
+        // and golfer has a live hole count (thru is a number, not F/—/CUT/WD)
         const thruNum = parseInt(g.thru)
-        const isActiveRound = r === null && !isNaN(thruNum) && thruNum > 0 &&
-          rounds.slice(0, i).every((prev: number | null) => prev !== null) &&
-          rounds.slice(i + 1).every((next: number | null) => next === null)
+        const priorComplete = rounds.slice(0, i).every((x: number | null) => x !== null)
+        const laterEmpty = rounds.slice(i + 1).every((x: number | null) => x === null)
+        const isInProgress = r === null && priorComplete && laterEmpty &&
+          !isNaN(thruNum) && thruNum > 0 &&
+          g.status === 'active'
         return (
           <td key={i} style={{ padding: '11px 10px', textAlign: 'center', borderLeft: '1px solid var(--border)' }}>
-            <div style={{
-              fontFamily: 'DM Mono', fontSize: 15, fontWeight: 500,
-              color: isMirrored ? 'var(--text-dim)' : 'var(--text)',
-              fontStyle: isMirrored ? 'italic' : 'normal',
-            }}>
-              {r ?? (isActiveRound ? '*' : '—')}
+            <div style={{ fontFamily: 'DM Mono', fontSize: 15, fontWeight: 500 }}>
+              {r !== null ? r : (isInProgress ? '*' : '—')}
             </div>
-            <div className={`score ${isActiveRound ? scoreClass(g.today) : scoreClass(roundPar)}`} style={{ fontSize: 10, marginTop: 1, opacity: isMirrored ? 0.6 : 1 }}>
-              {isActiveRound && g.today !== null ? toRelScore(g.today) : (roundPar !== null ? toRelScore(roundPar) : '')}
+            <div className={`score ${isInProgress ? scoreClass(g.today) : scoreClass(roundPar)}`} style={{ fontSize: 10, marginTop: 1 }}>
+              {isInProgress && g.today !== null
+                ? `${toRelScore(g.today)} thru ${g.thru}`
+                : (roundPar !== null ? toRelScore(roundPar) : '')}
             </div>
           </td>
         )
