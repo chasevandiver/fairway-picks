@@ -52,18 +52,19 @@ export async function fetchLiveScores(): Promise<GolferScore[]> {
     }
 
     // First pass: compute positions accounting for ties
-    const scoreValues: number[] = raw.map((c: any) => {
-      const s = parseFloat(c.score ?? '999')
-      return isNaN(s) ? 999 : s
-    })
-
     const getPosition = (idx: number, statusStr: string): string => {
       if (statusStr.includes('cut')) return 'CUT'
       if (statusStr.includes('wd')) return 'WD'
       const myScore = scoreValues[idx]
-      const tiedCount = scoreValues.filter((s, i) => {
+      if (myScore === 999) return '—'
+      const activeScores = scoreValues.filter((_, i) => {
         const st = (raw[i].status?.type?.name || '').toLowerCase()
-        return !st.includes('cut') && !st.includes('wd') && s === myScore
+        return !st.includes('cut') && !st.includes('wd') && scoreValues[i] !== 999
+      })
+      const tiedCount = activeScores.filter(s => s === myScore).length
+      const rank = activeScores.filter(s => s < myScore).length + 1
+      return tiedCount > 1 ? `T${rank}` : `${rank}`
+    }
       }).length
       const rank = scoreValues.filter((s, i) => {
         const st = (raw[i].status?.type?.name || '').toLowerCase()
