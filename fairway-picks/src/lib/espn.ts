@@ -84,16 +84,25 @@ export async function fetchLiveScores(): Promise<GolferScore[]> {
 
       const lines: any[] = c.linescores || []
 
-      // rounds[]: only store raw strokes for COMPLETED rounds (18 holes)
-      // Mid-round partial stroke totals (e.g. 58 thru 15 holes) are NOT stored
-      // so the scorecard shows — for in-progress rounds, not a misleading partial number
+      // rounds[]: raw strokes per round
+      // - Completed round (18 holes): use l.value directly (actual round strokes e.g. 69)
+      // - In-progress round (>0 holes): derive from to-par + coursePar (e.g. -3 + 71 = 68)
+      // - Not started (0 holes): null
       const rounds: (number | null)[] = [null, null, null, null]
       lines.forEach((l: any, i: number) => {
         if (i >= 4) return
         const holeCount = l.linescores?.length ?? 0
-        const n = Math.round(l.value || 0)
-        // Only store if round is complete (18 holes) and strokes are in valid range
-        if (holeCount >= 18 && n >= 55 && n <= 95) rounds[i] = n
+        if (holeCount >= 18) {
+          // Completed round — l.value is reliable raw strokes
+          const n = Math.round(l.value || 0)
+          if (n >= 55 && n <= 95) rounds[i] = n
+        } else if (holeCount > 0) {
+          // In-progress — l.value is running hole total, NOT full round strokes
+          // Derive projected strokes from current to-par + coursePar
+          const toPar = parseToPar(l.displayValue)
+          if (toPar !== null) rounds[i] = toPar + coursePar
+        }
+        // holeCount === 0: not started, stays null
       })
 
       // Find last round actually played (has nested hole linescores)
@@ -105,7 +114,7 @@ export async function fetchLiveScores(): Promise<GolferScore[]> {
         }
       }
 
-      // Between rounds: active round finished AND next round slot exists but not started
+      // Between rounds: active round finished AND next round placeholder exists but not started
       const activeRoundFinished = activeRoundIdx >= 0 &&
         (lines[activeRoundIdx].linescores?.length ?? 0) >= 18
       const nextRoundNotStarted = activeRoundIdx >= 0 &&
