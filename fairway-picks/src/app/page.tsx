@@ -511,7 +511,7 @@ function LeaderboardTab({
               </tr>
             </thead>
             <tbody>
-              {liveData.slice(0, 30).map((g, i) => {
+              {liveData.map((g, i) => {
                 const pickedBy = PLAYERS.find((p) =>
                   (pickMap[p] || []).some((n) => n.toLowerCase() === g.name.toLowerCase())
                 )
