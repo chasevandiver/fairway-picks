@@ -259,42 +259,39 @@ function ExpandablePlayerCard({
         }}
         className="expandable-player-btn"
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div className="user-avatar" style={{ width: 32, height: 32, fontSize: 13 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0 }}>
+          <div className="user-avatar" style={{ width: 32, height: 32, fontSize: 13, flexShrink: 0 }}>
             {standing.player[0]}
           </div>
-          <div style={{ textAlign: 'left' }}>
+          <div style={{ textAlign: 'left', minWidth: 0 }}>
             <div style={{ fontWeight: 600, fontSize: 14 }}>{standing.player}</div>
-            <div style={{ fontSize: 11, color: 'var(--text-dim)', fontFamily: 'DM Mono' }}>
-              {golfers.length} golfers
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4, flexWrap: 'wrap' }}>
+              <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.06em', flexShrink: 0 }}>Pos:</span>
+              {golfers.map((g: any) => {
+                const pos = g?.position ?? '—'
+                const isCut = g?.status === 'cut'
+                const isWD = g?.status === 'wd'
+                const posNum = parseInt(pos.replace(/^T/, ''))
+                const isFirst = posNum === 1
+                const isTop3 = !isNaN(posNum) && posNum >= 1 && posNum <= 3
+                const label = isCut ? 'CUT' : isWD ? 'WD' : pos
+                const color = isCut || isWD ? 'var(--red)' : isFirst ? 'var(--gold)' : isTop3 ? 'var(--green)' : 'var(--text)'
+                const bg = isCut || isWD ? 'rgba(248,113,113,0.1)' : isFirst ? 'rgba(245,158,11,0.12)' : isTop3 ? 'rgba(74,222,128,0.10)' : 'var(--surface)'
+                const borderColor = isCut || isWD ? 'rgba(248,113,113,0.25)' : isFirst ? 'rgba(245,158,11,0.3)' : isTop3 ? 'rgba(74,222,128,0.25)' : 'var(--border)'
+                return (
+                  <div key={g?.name} style={{
+                    fontFamily: 'DM Mono', fontSize: 11, fontWeight: 600, color,
+                    background: bg, border: `1px solid ${borderColor}`,
+                    borderRadius: 6, padding: '2px 6px', minWidth: 28, textAlign: 'center', lineHeight: 1.4,
+                  }}>
+                    {label}
+                  </div>
+                )
+              })}
             </div>
           </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-            <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.06em', marginRight: 2 }}>Pos:</span>
-            {golfers.map((g: any) => {
-              const pos = g?.position ?? '—'
-              const isCut = g?.status === 'cut'
-              const isWD = g?.status === 'wd'
-              const posNum = parseInt(pos.replace(/^T/, ''))
-              const isFirst = posNum === 1
-              const isTop3 = !isNaN(posNum) && posNum >= 1 && posNum <= 3
-              const label = isCut ? 'CUT' : isWD ? 'WD' : pos
-              const color = isCut || isWD ? 'var(--red)' : isFirst ? 'var(--gold)' : isTop3 ? 'var(--green)' : 'var(--text)'
-              const bg = isCut || isWD ? 'rgba(248,113,113,0.1)' : isFirst ? 'rgba(245,158,11,0.12)' : isTop3 ? 'rgba(74,222,128,0.10)' : 'var(--surface)'
-              const borderColor = isCut || isWD ? 'rgba(248,113,113,0.25)' : isFirst ? 'rgba(245,158,11,0.3)' : isTop3 ? 'rgba(74,222,128,0.25)' : 'var(--border)'
-              return (
-                <div key={g?.name} style={{
-                  fontFamily: 'DM Mono', fontSize: 11, fontWeight: 600, color,
-                  background: bg, border: `1px solid ${borderColor}`,
-                  borderRadius: 6, padding: '2px 6px', minWidth: 32, textAlign: 'center', lineHeight: 1.4,
-                }}>
-                  {label}
-                </div>
-              )
-            })}
-          </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
           <div className={`score ${scoreClass(standing.totalScore)}`} style={{ fontSize: 18, fontFamily: 'DM Mono', fontWeight: 700 }}>
             {toRelScore(standing.totalScore)}
           </div>
