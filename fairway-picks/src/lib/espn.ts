@@ -38,6 +38,14 @@ export async function fetchLiveScores(): Promise<GolferScore[]> {
     const raw = competitions[0]?.competitors || []
     if (raw.length < 5) return MOCK_DATA
 
+    // Log all golfers compactly so we can see finished R2 structure
+    for (const c of raw.slice(0, 30)) {
+      const lines = c.linescores || []
+      console.log(`${c.athlete?.displayName}: score=${c.score} | ` +
+        lines.map((l: any, i: number) => `R${i+1}(v=${l.value} dv=${l.displayValue} holes=${l.linescores?.length ?? 0})`).join(' | ')
+      )
+    }
+
     // Derive course par from first golfer's first completed round
     let coursePar = DEFAULT_PAR
     for (const c of raw) {
@@ -83,7 +91,6 @@ export async function fetchLiveScores(): Promise<GolferScore[]> {
       let score: number | null = parseToPar(c.score)
 
       const lines: any[] = c.linescores || []
-
 
       // Only store strokes for fully completed rounds (18 holes)
       // In-progress rounds stay null — live score shown via today + thru fields
