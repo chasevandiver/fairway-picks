@@ -44,49 +44,11 @@ export function computeStandings(liveData: any[], pickMap: Record<string, string
         (d: any) => d.name.toLowerCase() === name.toLowerCase()
       ) ?? { name, score: null, today: null, thru: '—', position: '—', status: 'active', rounds: [null,null,null,null], par: 72 }
 
-      const par = g.par ?? 72
       let adjScore = g.score ?? 0
+      if (g.status === 'cut' && g.score !== null) adjScore = g.score * 2
+      if (g.status === 'wd' && g.score !== null) adjScore = g.score * 2
 
-      // For cut/wd: double the 2-round score (rounds 3&4 repeat rounds 1&2)
-      if ((g.status === 'cut' || g.status === 'wd') && g.score !== null) {
-        adjScore = g.score * 2
-      }
-
-      // displayRounds: what to show in the scorecard columns
-      // For completed rounds: raw strokes from g.rounds[]
-      // For the current in-progress round: derive strokes from today to-par + par
-      //   so the cell shows a live updating number
-      // For rounds not yet started: null (shows —)
-      const baseRounds: (number | null)[] = g.rounds ?? [null, null, null, null]
-      const displayRounds: (number | null)[] = [null, null, null, null]
-
-      // Find which round is currently in progress
-      // A round is in-progress if: thru is not F/—/CUT/WD and today is not null
-      const inProgress = g.thru !== 'F' && g.thru !== '—' && g.thru !== 'CUT' && g.thru !== 'WD' && g.today !== null
-
-      // Figure out which round index is active
-      // Count completed rounds (non-null in baseRounds)
-      let completedRoundCount = 0
-      for (const r of baseRounds) {
-        if (r !== null) completedRoundCount++
-      }
-      const activeRoundIdx = inProgress ? completedRoundCount : -1
-
-      for (let i = 0; i < 4; i++) {
-        if (i < completedRoundCount) {
-          // Completed round — use raw strokes
-          displayRounds[i] = baseRounds[i]
-        } else if (i === activeRoundIdx) {
-          // In-progress round — derive strokes from today to-par + par
-          // This gives a live updating stroke count in the cell
-          if (g.today !== null) {
-            displayRounds[i] = par + g.today
-          }
-        }
-        // else: future round, stays null
-      }
-
-      // For cut/wd: repeat R1/R2 into R3/R4 slots
+      const displayRounds = [...(g.rounds || [null, null, null, null])]
       if (g.status === 'cut' || g.status === 'wd') {
         displayRounds[2] = displayRounds[0]
         displayRounds[3] = displayRounds[1]
