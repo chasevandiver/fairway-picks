@@ -125,9 +125,17 @@ for (const c of raw.slice(0, 15)) {
      // ── Today (current/last round to-par) ──
 // lines[last].displayValue = cumulative to-par through last round (NOT just today)
 // So derive today = current total - sum of previous completed rounds
+// ── Today ──
 let today: number | null = null
-if (lines.length > 0) {
-  if (lines.length === 1) {
+for (let i = lines.length - 1; i >= 0; i--) {
+  const l = lines[i]
+  const hasHoles = (l.linescores?.length ?? 0) > 0
+  const toPar = parseToPar(l?.displayValue)
+  if (hasHoles && toPar !== null) {
+    today = toPar
+    break
+  }
+}
     // Only R1 data — today IS the round score
     today = parseToPar(lines[0]?.displayValue)
   } else {
