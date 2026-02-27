@@ -324,6 +324,7 @@ function ExpandablePlayerCard({
                         </div>
                       </td>
                       {rounds.map((r: number | null, i: number) => {
+                        if (i === 1) console.log(g.name, JSON.stringify({thru: g.thru, today: g.today, r}))
                         const toPar = r !== null ? r - par : null
                         const thruNum = parseInt(g.thru)
                         const priorComplete = rounds.slice(0, i).every((x: number | null) => x !== null)
