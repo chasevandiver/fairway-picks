@@ -82,13 +82,18 @@ export async function fetchLiveScores(): Promise<GolferScore[]> {
 
       let score: number | null = parseToPar(c.score)
 
-      // Round-by-round raw strokes: l.value = raw strokes, valid 55-95
       const lines: any[] = c.linescores || []
+
+      // rounds[]: only store raw strokes for COMPLETED rounds (18 holes)
+      // Mid-round partial stroke totals (e.g. 58 thru 15 holes) are NOT stored
+      // so the scorecard shows — for in-progress rounds, not a misleading partial number
       const rounds: (number | null)[] = [null, null, null, null]
       lines.forEach((l: any, i: number) => {
         if (i >= 4) return
+        const holeCount = l.linescores?.length ?? 0
         const n = Math.round(l.value || 0)
-        if (n >= 55 && n <= 95) rounds[i] = n
+        // Only store if round is complete (18 holes) and strokes are in valid range
+        if (holeCount >= 18 && n >= 55 && n <= 95) rounds[i] = n
       })
 
       // Find last round actually played (has nested hole linescores)
@@ -100,8 +105,7 @@ export async function fetchLiveScores(): Promise<GolferScore[]> {
         }
       }
 
-      // Between rounds: active round finished (18 holes) AND next round slot
-      // exists but hasn't started yet (holes=0, dv="-")
+      // Between rounds: active round finished AND next round slot exists but not started
       const activeRoundFinished = activeRoundIdx >= 0 &&
         (lines[activeRoundIdx].linescores?.length ?? 0) >= 18
       const nextRoundNotStarted = activeRoundIdx >= 0 &&
