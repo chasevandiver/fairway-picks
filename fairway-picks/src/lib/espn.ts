@@ -14,6 +14,14 @@ const MOCK_DATA: GolferScore[] = [
   { name: 'Tony Finau',          position: 'CUT', score: 8,   today: 4,  thru: 'CUT', status: 'cut',    rounds: [76, 76, null, null], par: DEFAULT_PAR },
 ]
 
+// Parse ESPN to-par display strings: "-7" → -7, "E" → 0, "+2" → 2, null/"--" → null
+function parseToPar(dv: string | undefined | null): number | null {
+  if (!dv || dv === '--' || dv === '') return null
+  if (dv === 'E') return 0
+  const n = parseInt(dv)
+  return isNaN(n) ? null : n
+}
+
 export async function fetchLiveScores(): Promise<GolferScore[]> {
   try {
     const res = await fetch(
@@ -30,30 +38,23 @@ export async function fetchLiveScores(): Promise<GolferScore[]> {
     const raw = competitions[0]?.competitors || []
     if (raw.length < 5) return MOCK_DATA
 
-    // ── Get actual course par ──
-    // Derive par from the first golfer's first completed round:
-    // par = raw strokes - to-par display value
+    // ── Derive course par from first golfer's first completed round ──
+    // par = raw strokes - to-par displayValue  (e.g. 63 - (-7) = 70)
+    // The competition details[] array is unreliable/empty; this always works.
     let coursePar = DEFAULT_PAR
     for (const c of raw) {
-      const lines0: any[] = c.linescores || []
-      if (lines0.length > 0) {
-        const strokes = Math.round(lines0[0].value || 0)
-        const dv = lines0[0].displayValue || ''
-        let toPar: number | null = null
-        if (dv === 'E') toPar = 0
-        else { const p = parseInt(dv); if (!isNaN(p)) toPar = p }
-        if (toPar !== null && strokes > 60 && strokes < 80) {
-          const derived = strokes - toPar
-          if (derived >= 68 && derived <= 73) {
-            coursePar = derived
-            break
-          }
-        }
+      const l0 = (c.linescores || [])[0]
+      if (!l0) continue
+      const strokes = Math.round(l0.value || 0)
+      const toPar = parseToPar(l0.displayValue)
+      if (toPar !== null && strokes >= 60 && strokes <= 80) {
+        const derived = strokes - toPar
+        if (derived >= 68 && derived <= 74) { coursePar = derived; break }
       }
     }
     console.log(`🏌️ Course Par: ${coursePar}`)
 
-    // First pass: figure out positions accounting for ties
+    // ── First pass: compute positions accounting for ties ──
     const scoreValues: number[] = raw.map((c: any) => {
       const s = parseFloat(c.score ?? '999')
       return isNaN(s) ? 999 : s
@@ -84,89 +85,66 @@ export async function fetchLiveScores(): Promise<GolferScore[]> {
       // ── Position ──
       const position = getPosition(idx, statusRaw)
 
-      // ── Total score to par ── ESPN returns this as a string in c.score e.g. "-16"
-      let score: number | null = null
-      if (c.score !== undefined && c.score !== null) {
-        const v = parseFloat(c.score)
-        if (!isNaN(v)) score = v
-      }
+      // ── Total score to par ──
+      // c.score is a string like "-9", "E", "+2"
+      let score: number | null = parseToPar(c.score)
 
       // ── Round-by-round linescores ──
+      // lines[i].value = raw strokes (float), lines[i].displayValue = to-par string
       const lines: any[] = c.linescores || []
       const rounds: (number | null)[] = [null, null, null, null]
-
       lines.forEach((l: any, i: number) => {
         if (i >= 4) return
-        const strokes = l.value  // raw strokes as a float e.g. 63.0
-        if (strokes !== undefined && strokes !== null) {
-          const n = Math.round(strokes)
-          if (n >= 55 && n <= 95) {
-            rounds[i] = n
-          }
-        }
+        const n = Math.round(l.value || 0)
+        if (n >= 55 && n <= 95) rounds[i] = n
       })
 
-      // ── Today (current round to par) ──
-      // linescores[i].displayValue is already the correct to-par string for that round
-      // e.g. "-7", "-1", "E", "+2" — use the last completed round's displayValue directly.
-      // This avoids any par assumption issues since ESPN calculates it hole-by-hole.
+      // ── Today (current/last round to-par) ──
+      // Use lines[last].displayValue directly — ESPN computes this hole-by-hole
+      // and it's always correct regardless of course par.
       let today: number | null = null
       if (lines.length > 0) {
-        const lastLine = lines[lines.length - 1]
-        const dv = lastLine?.displayValue
-        if (dv && dv !== '--') {
-          if (dv === 'E') {
-            today = 0
-          } else {
-            const t = parseInt(dv)
-            if (!isNaN(t)) today = t
-          }
-        }
+        today = parseToPar(lines[lines.length - 1]?.displayValue)
       }
 
       // ── Thru ──
-      // c.statistics is always [] at top-level. Instead derive thru from:
-      // - status type description for finished/cut/wd
-      // - number of holes completed in the current (last) linescore's nested linescores
+      // c.statistics[] is always empty. ESPN's THRU during R1 shows tee times
+      // like "10:35 AM*" not a hole number, so we derive thru ourselves:
+      //
+      //  - cut / wd          → "CUT" / "WD"
+      //  - 4 linescores      → tournament complete → "F"
+      //  - current round nested linescores present:
+      //      18 holes         → round finished → "F"
+      //      < 18 holes       → in progress → hole count as string
+      //  - 1 linescore, no nested holes (R1 just finished but no hole detail) → "F"
+      //  - no linescores yet → haven't teed off → "—"
       let thru: string
       if (status === 'cut') {
         thru = 'CUT'
       } else if (status === 'wd') {
         thru = 'WD'
-      } else {
-        const statusDesc = (c.status?.type?.description || '').toLowerCase()
-        const statusName = (c.status?.type?.name || '').toLowerCase()
-        if (statusDesc.includes('final') || statusName.includes('final') || 
-            statusDesc.includes('complete') || lines.length === 4) {
-          // All 4 rounds completed = finished
+      } else if (lines.length === 4) {
+        thru = 'F'
+      } else if (lines.length > 0) {
+        const currentRoundHoles: any[] = lines[lines.length - 1]?.linescores || []
+        if (currentRoundHoles.length === 0) {
+          // No nested hole data — round is complete (ESPN drops hole detail after finishing)
           thru = 'F'
-        } else if (lines.length > 0) {
-          // Count holes played in the current round via nested linescores
-          const currentRoundLinescores = lines[lines.length - 1]?.linescores || []
-          const holesPlayed = currentRoundLinescores.length
-          if (holesPlayed === 18) {
-            thru = 'F'
-          } else if (holesPlayed > 0) {
-            thru = String(holesPlayed)
-          } else {
-            thru = '—'
-          }
+        } else if (currentRoundHoles.length >= 18) {
+          thru = 'F'
         } else {
-          thru = '—'
+          thru = String(currentRoundHoles.length)
         }
+      } else {
+        thru = '—'
       }
 
-      // For cut/wd golfers: derive score from sum of round displayValues (to-par per round)
-      // This is more reliable than strokes - par since ESPN already calculated it correctly
+      // ── Cut/WD score: sum to-par displayValues across played rounds ──
       if (status === 'cut' || status === 'wd') {
-        let toParSum = 0
-        let validRounds = 0
+        let toParSum = 0; let validRounds = 0
         for (const l of lines) {
-          const dv = l?.displayValue
-          if (dv && dv !== '--') {
-            const v = dv === 'E' ? 0 : parseInt(dv)
-            if (!isNaN(v)) { toParSum += v; validRounds++ }
-          }
+          const v = parseToPar(l?.displayValue)
+          if (v !== null) { toParSum += v; validRounds++ }
         }
         if (validRounds > 0) score = toParSum
       }
@@ -179,7 +157,7 @@ export async function fetchLiveScores(): Promise<GolferScore[]> {
         thru,
         status,
         rounds,
-        par: coursePar,  // Use actual course par
+        par: coursePar,
       } as GolferScore
     })
 
