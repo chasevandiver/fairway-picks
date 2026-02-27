@@ -52,9 +52,10 @@ export async function fetchLiveScores(): Promise<GolferScore[]> {
     }
 
     // First pass: compute score values for position calculation
+    // ESPN returns "E" for even par, so use parseToPar instead of parseFloat
     const scoreValues: number[] = raw.map((c: any) => {
-      const s = parseFloat(c.score ?? '999')
-      return isNaN(s) ? 999 : s
+      const v = parseToPar(c.score)
+      return v !== null ? v : 999
     })
 
     const getPosition = (idx: number, statusStr: string): string => {
