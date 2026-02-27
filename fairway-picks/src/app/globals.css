@@ -1042,7 +1042,6 @@ body {
   to   { opacity: 1; transform: translateY(0); }
 }
 .count-up { display: inline-block; animation: countUp 0.45s cubic-bezier(0.16,1,0.3,1) both; }
-}
 
 /* Add this CSS animation to the bottom of your globals.css file */
 
