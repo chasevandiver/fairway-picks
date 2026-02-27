@@ -16,7 +16,7 @@ const MOCK_DATA: GolferScore[] = [
 
 // Parse ESPN to-par display strings: "-7" -> -7, "E" -> 0, "+2" -> 2, null/"--"/"-" -> null
 function parseToPar(dv: string | undefined | null): number | null {
-  if (!dv || dv === '--' || dv === '' || dv === '-') return null
+  if (dv === null || dv === undefined || dv === '--' || dv === '' || dv === '-') return null
   if (dv === 'E') return 0
   const n = parseInt(dv)
   return isNaN(n) ? null : n
@@ -52,7 +52,7 @@ export async function fetchLiveScores(): Promise<GolferScore[]> {
     }
 
     // First pass: compute score values for position calculation
-    // ESPN returns "E" for even par, so use parseToPar instead of parseFloat
+    // Use parseToPar so "E" (even par) is handled correctly
     const scoreValues: number[] = raw.map((c: any) => {
       const v = parseToPar(c.score)
       return v !== null ? v : 999
@@ -80,11 +80,9 @@ export async function fetchLiveScores(): Promise<GolferScore[]> {
 
       const position = getPosition(idx, statusRaw)
 
-      let score: number | null = parseToPar(c.score)
-
       const lines: any[] = c.linescores || []
 
-      // Only store strokes for fully completed rounds (18 holes)
+      // Parse completed rounds (18 holes played)
       const rounds: (number | null)[] = [null, null, null, null]
       lines.forEach((l: any, i: number) => {
         if (i >= 4) return
@@ -113,12 +111,6 @@ export async function fetchLiveScores(): Promise<GolferScore[]> {
         (nextSlot.linescores?.length ?? 0) === 0
       const betweenRounds = activeRoundFinished && nextIsRealPlaceholder
 
-      // Today: null if between rounds, otherwise active round to-par
-      let today: number | null = null
-      if (!betweenRounds && activeRoundIdx >= 0) {
-        today = parseToPar(lines[activeRoundIdx]?.displayValue)
-      }
-
       // Thru
       let thru: string = '—'
       if (status === 'cut') {
@@ -132,15 +124,32 @@ export async function fetchLiveScores(): Promise<GolferScore[]> {
         thru = activeHoles.length >= 18 ? 'F' : String(activeHoles.length)
       }
 
-      // Cut/WD score: sum to-par across all played rounds
+      // Today: null for cut/wd/between rounds
+      let today: number | null = null
+      if (status !== 'cut' && status !== 'wd' && !betweenRounds && activeRoundIdx >= 0) {
+        today = parseToPar(lines[activeRoundIdx]?.displayValue)
+      }
+
+      // Score calculation
+      let score: number | null = null
       if (status === 'cut' || status === 'wd') {
-        let toParSum = 0
-        let validRounds = 0
-        for (const l of lines) {
-          const v = parseToPar(l?.displayValue)
-          if (v !== null) { toParSum += v; validRounds++ }
+        // Use completed round strokes for accuracy (handles non-par-72 courses)
+        const playedRounds = rounds.filter(r => r !== null) as number[]
+        if (playedRounds.length > 0) {
+          const totalStrokes = playedRounds.reduce((a, b) => a + b, 0)
+          score = totalStrokes - (coursePar * playedRounds.length)
+        } else {
+          // Fallback: sum linescore displayValues
+          let toParSum = 0
+          let validRounds = 0
+          for (const l of lines) {
+            const v = parseToPar(l?.displayValue)
+            if (v !== null) { toParSum += v; validRounds++ }
+          }
+          if (validRounds > 0) score = toParSum
         }
-        if (validRounds > 0) score = toParSum
+      } else {
+        score = parseToPar(c.score)
       }
 
       return {
