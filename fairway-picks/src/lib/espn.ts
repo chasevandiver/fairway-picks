@@ -107,27 +107,16 @@ export async function fetchLiveScores(): Promise<GolferScore[]> {
         thruVal && thruVal !== '--' ? thruVal : '—'
 
       // ── Today (current round to par) ──
-      // Use ESPN's score directly if it exists, otherwise derive from last played round
+      // Always derive from the last played round's raw strokes minus actual coursePar.
+      // We intentionally skip ESPN's pre-calculated "today" stat because it is baked
+      // against a hardcoded par (usually 72) and will be wrong on par-71/70 courses.
       let today: number | null = null
-      
-      // First, try to get it from ESPN's data
-      const todayStat = stats.find((s: any) => s.name === 'today' || s.abbreviation === 'TODAY')
-      if (todayStat?.displayValue && todayStat.displayValue !== '--') {
-        const t = parseInt(todayStat.displayValue)
-        if (!isNaN(t)) {
-          today = t
-        }
+      let lastRoundIdx = -1
+      for (let i = rounds.length - 1; i >= 0; i--) {
+        if (rounds[i] !== null) { lastRoundIdx = i; break }
       }
-      
-      // Fallback: derive from the last played round
-      if (today === null) {
-        let lastRoundIdx = -1
-        for (let i = rounds.length - 1; i >= 0; i--) {
-          if (rounds[i] !== null) { lastRoundIdx = i; break }
-        }
-        if (lastRoundIdx >= 0) {
-          today = (rounds[lastRoundIdx] as number) - coursePar
-        }
+      if (lastRoundIdx >= 0) {
+        today = (rounds[lastRoundIdx] as number) - coursePar
       }
 
       // For cut/wd golfers: score = actual 2-round to-par total
