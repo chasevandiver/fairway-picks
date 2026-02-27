@@ -51,7 +51,12 @@ export async function fetchLiveScores(): Promise<GolferScore[]> {
       }
     }
 
-    // First pass: compute positions accounting for ties
+    // First pass: compute score values for position calculation
+    const scoreValues: number[] = raw.map((c: any) => {
+      const s = parseFloat(c.score ?? '999')
+      return isNaN(s) ? 999 : s
+    })
+
     const getPosition = (idx: number, statusStr: string): string => {
       if (statusStr.includes('cut')) return 'CUT'
       if (statusStr.includes('wd')) return 'WD'
@@ -63,13 +68,6 @@ export async function fetchLiveScores(): Promise<GolferScore[]> {
       })
       const tiedCount = activeScores.filter(s => s === myScore).length
       const rank = activeScores.filter(s => s < myScore).length + 1
-      return tiedCount > 1 ? `T${rank}` : `${rank}`
-    }
-      }).length
-      const rank = scoreValues.filter((s, i) => {
-        const st = (raw[i].status?.type?.name || '').toLowerCase()
-        return !st.includes('cut') && !st.includes('wd') && s < myScore
-      }).length + 1
       return tiedCount > 1 ? `T${rank}` : `${rank}`
     }
 
@@ -86,7 +84,6 @@ export async function fetchLiveScores(): Promise<GolferScore[]> {
       const lines: any[] = c.linescores || []
 
       // Only store strokes for fully completed rounds (18 holes)
-      // In-progress rounds stay null — live score shown via today + thru fields
       const rounds: (number | null)[] = [null, null, null, null]
       lines.forEach((l: any, i: number) => {
         if (i >= 4) return
@@ -106,9 +103,7 @@ export async function fetchLiveScores(): Promise<GolferScore[]> {
         }
       }
 
-      // "Between rounds" = finished active round AND next slot is a real placeholder
-      // A real placeholder has dv="-" (ESPN tee time slot), NOT undefined/missing
-      // Mark Hubbard has R3(v=undefined dv=undefined) which is NOT a real placeholder
+      // "Between rounds" detection
       const activeRoundFinished = activeRoundIdx >= 0 &&
         (lines[activeRoundIdx].linescores?.length ?? 0) >= 18
       const nextSlot = lines[activeRoundIdx + 1]
