@@ -4,7 +4,8 @@ import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { createClient } from '@/lib/supabase'
 import {
   toRelScore, scoreClass, formatMoney, moneyClass,
-  buildPickMap, computeStandings, computeMoney, snakeDraftOrder
+  buildPickMap, computeStandings, computeMoney, snakeDraftOrder,
+  getCurrentRound, buildCutDisplayRounds
 } from '@/lib/scoring'
 import { PLAYERS, PAYOUT_RULES } from '@/lib/types'
 import type { Tournament, Pick, GolferScore, PlayerStanding, SeasonMoney } from '@/lib/types'
@@ -683,15 +684,23 @@ function PicksTab({ standings, pickMap, liveData, tournament }: {
         const s = standings.find((x) => x.player === player)
         if (playerPicks.length === 0) return null
 
-        // Build golfer rows — scoring.ts already stamps status/displayRounds correctly
+        // Build golfer rows — round-aware cut display logic
+        const currentRound = getCurrentRound(liveData)
         const golferRows = (s?.golfers ?? playerPicks.map((name) => {
           const g = liveData.find((d) => d.name.toLowerCase() === name.toLowerCase())
             ?? { name, score: null, today: null, thru: '—', position: '—', status: 'active' as const, rounds: [null,null,null,null], par }
-          const dr = [...(g.rounds ?? [null, null, null, null])]
           const isCut = g.status === 'cut' || g.status === 'wd'
-          if (isCut) { dr[2] = dr[0]; dr[3] = dr[1] }
-          return { ...g, adjScore: g.score ?? 0, displayRounds: dr }
-        }))
+          const displayRounds = isCut
+            ? buildCutDisplayRounds(g.rounds ?? [null, null, null, null], currentRound)
+            : [...(g.rounds ?? [null, null, null, null])]
+          return { ...g, adjScore: g.score ?? 0, displayRounds }
+        })).map((g: any) => {
+          // Re-apply round-aware cut logic for golfers sourced from standings
+          if (g.status === 'cut' || g.status === 'wd') {
+            return { ...g, displayRounds: buildCutDisplayRounds(g.rounds ?? [null, null, null, null], currentRound) }
+          }
+          return g
+        })
 
         // Per-round totals across all 4 golfers
         const roundTotals: (number | null)[] = [0, 1, 2, 3].map((ri) => {
