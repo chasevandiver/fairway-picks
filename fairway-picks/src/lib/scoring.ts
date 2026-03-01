@@ -93,12 +93,23 @@ export function computeStandings(liveData: any[], pickMap: Record<string, string
       let displayRounds: (number | null)[]
 
       if (g.status === 'cut' || g.status === 'wd') {
-        // Only double the score once the weekend has started
-        if (currentRound >= 2 && g.score !== null) {
-          adjScore = g.score * 2
+        // Incrementally add cut penalty rounds as the weekend progresses:
+        // R1/R2 only: use actual 2-round score (no penalty yet)
+        // R3 started: add R3 penalty (= R1 repeated), so score * 1.5 effectively
+        //   but cleaner: score + R1_to_par
+        // R4 started: full double, score * 2
+        const r = g.rounds || [null, null, null, null]
+        const twoRoundScore = g.score ?? 0  // actual to-par after 2 rounds
+        const r1Par = r[0] !== null ? r[0] - (g.par ?? 72) : 0
+        if (currentRound >= 3) {
+          // R4 started: full doubled score
+          adjScore = twoRoundScore * 2
+        } else if (currentRound >= 2) {
+          // R3 started: 2-round score + R1 repeated as R3
+          adjScore = twoRoundScore + r1Par
         } else {
-          // Before weekend, use their actual 2-round score (not doubled)
-          adjScore = g.score ?? 0
+          // R1/R2: just their real score
+          adjScore = twoRoundScore
         }
         displayRounds = buildCutDisplayRounds(g.rounds || [null, null, null, null], currentRound)
       } else {
