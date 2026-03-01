@@ -128,7 +128,7 @@ export function computeStandings(liveData: any[], pickMap: Record<string, string
     const hasWinner = golfers.some((g: any) => parsePos(g.position) === 1)
     const hasTop3 = golfers.some((g: any) => {
       const pos = parsePos(g.position)
-      return !isNaN(pos) && pos >= 1 && pos <= 3
+      return !isNaN(pos) && pos >= 2 && pos <= 3  // position 1 is winner, not top3
     })
 
     return { player, totalScore, golfers, hasWinner, hasTop3, rank: 0, moneyThisWeek: 0 }
