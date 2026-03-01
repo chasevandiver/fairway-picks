@@ -64,7 +64,7 @@ export async function fetchLiveScores(): Promise<GolferScore[]> {
     let PAR = DEFAULT_PAR
     for (const c of raw) {
       const rounds = parsedRoundsOnly[raw.indexOf(c)]
-      const completedCount = rounds.filter((r) => r !== null).length
+      const completedCount = rounds.filter((r: number | null) => r !== null).length
       if (completedCount === 4) {
         const totalStrokes = (rounds as number[]).reduce((a, b) => a + b, 0)
         const totalScore = parseFloat(c.score ?? 'x')
