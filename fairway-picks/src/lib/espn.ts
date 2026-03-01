@@ -30,29 +30,83 @@ export async function fetchLiveScores(): Promise<GolferScore[]> {
     const raw = competitions[0]?.competitors || []
     if (raw.length < 5) return MOCK_DATA
 
-    // ── First pass: parse round strokes from linescores ──
-    const parsedRounds: (number | null)[][] = raw.map((c: any) => {
+    // ── ESPN API structure (confirmed from live data) ──
+    // c.linescores = array of rounds, one entry per round played
+    //   linescore.period     = round number (1, 2, 3, 4)
+    //   linescore.value      = raw strokes for COMPLETED rounds (55-95)
+    //                          OR partial strokes for in-progress (e.g. 18 for 5 holes)
+    //   linescore.displayValue = to-par for that round (e.g. "-4", "E", "+1")
+    //   linescore.linescores = array of hole-by-hole scores
+    //                          length = number of holes completed in that round
+    //
+    // c.statistics = [] (always empty at top level — ignore it)
+    //
+    // So: thru = linescore.linescores.length for the current round
+    //     today = linescore.displayValue for the current round
+    //     completed round = linescore.value >= 55 && <= 95
+
+    const parsedData = raw.map((c: any) => {
       const lines: any[] = c.linescores || []
       const rounds: (number | null)[] = [null, null, null, null]
-      lines.forEach((l: any, i: number) => {
-        if (i >= 4) return
+      let today: number | null = null
+      let thru: string = '—'
+      let activeRoundIdx = -1
+
+      lines.forEach((l: any) => {
+        // period is the round number (1-indexed), convert to 0-indexed
+        const roundIdx = (l.period ?? 0) - 1
+        if (roundIdx < 0 || roundIdx > 3) return
+
         const strokes = l.value
-        if (strokes !== undefined && strokes !== null) {
-          const n = Math.round(strokes)
-          if (n >= 55 && n <= 95) {
-            rounds[i] = n
+        const n = strokes !== undefined && strokes !== null ? Math.round(strokes) : 0
+        const isCompletedRound = n >= 55 && n <= 95
+
+        if (isCompletedRound) {
+          rounds[roundIdx] = n
+        } else {
+          // In-progress round
+          activeRoundIdx = roundIdx
+
+          // Today's score = displayValue of this round entry (e.g. "-2", "E", "+1")
+          const displayVal = (l.displayValue || '').trim()
+          if (displayVal === 'E') today = 0
+          else {
+            const parsed = parseInt(displayVal)
+            if (!isNaN(parsed)) today = parsed
+          }
+
+          // Thru = number of holes in the nested linescores array
+          const holeLinescores: any[] = l.linescores || []
+          const holesPlayed = holeLinescores.length
+          if (holesPlayed > 0) {
+            thru = holesPlayed === 18 ? 'F' : String(holesPlayed)
           }
         }
       })
-      return rounds
+
+      // If no in-progress round found, golfer has finished their round for the day
+      if (activeRoundIdx === -1) {
+        // Find the last completed round
+        let lastDone = -1
+        for (let i = 3; i >= 0; i--) {
+          if (rounds[i] !== null) { lastDone = i; break }
+        }
+        if (lastDone >= 0) {
+          thru = 'F'
+          today = (rounds[lastDone] as number) - PAR
+        }
+      }
+
+      return { rounds, today, thru, activeRoundIdx }
     })
 
     // ── Determine current tournament round ──
-    // Use majority-based detection: highest round where >10 golfers have data.
-    // This prevents a few early R4 finishers from pushing currentRound to 3
-    // while most of the field is still playing R3.
+    // Majority-based: highest round where >10 golfers have data
+    // Prevents a few early finishers from pushing currentRound ahead of the field
     const roundCounts = [0, 1, 2, 3].map((ri) =>
-      parsedRounds.filter((r) => r[ri] !== null).length
+      parsedData.filter((d: any) =>
+        d.rounds[ri] !== null || d.activeRoundIdx === ri
+      ).length
     )
     let currentRound = 0
     for (let ri = 3; ri >= 0; ri--) {
@@ -92,15 +146,15 @@ export async function fetchLiveScores(): Promise<GolferScore[]> {
     }
 
     const competitors: GolferScore[] = raw.map((c: any, idx: number) => {
-      const rounds = parsedRounds[idx]
+      const { rounds, today, thru: thruHole, activeRoundIdx } = parsedData[idx]
 
       // ── Status detection ──
       let status = getStatusFromESPN(c)
 
       // Secondary: weekend + only 2 rounds of data = cut
       if (status === 'active' && isWeekend) {
-        const hasR3 = rounds[2] !== null
-        const hasR4 = rounds[3] !== null
+        const hasR3 = rounds[2] !== null || activeRoundIdx === 2
+        const hasR4 = rounds[3] !== null || activeRoundIdx === 3
         if (!hasR3 && !hasR4) {
           status = 'cut'
         }
@@ -116,26 +170,13 @@ export async function fetchLiveScores(): Promise<GolferScore[]> {
         if (!isNaN(v)) score = v
       }
 
-      // ── Thru — original working logic ──
-      const stats: any[] = c.statistics || []
-      const thruStat = stats.find((s: any) => s.name === 'thru' || s.abbreviation === 'THRU')
-      const thruVal = thruStat?.displayValue
+      // ── Thru ──
       const thru: string =
         status === 'cut' ? 'CUT' :
         status === 'wd'  ? 'WD'  :
-        thruVal && thruVal !== '--' ? thruVal : '—'
+        thruHole
 
-      // ── Today — original working logic ──
-      let today: number | null = null
-      let lastRoundIdx = -1
-      for (let i = rounds.length - 1; i >= 0; i--) {
-        if (rounds[i] !== null) { lastRoundIdx = i; break }
-      }
-      if (lastRoundIdx >= 0) {
-        today = (rounds[lastRoundIdx] as number) - PAR
-      }
-
-      // For cut/wd golfers: score = actual 2-round to-par total
+      // For cut/wd: recalculate score from raw rounds
       if ((status === 'cut' || status === 'wd') && rounds[0] !== null && rounds[1] !== null) {
         score = rounds[0] + rounds[1] - PAR * 2
       }
