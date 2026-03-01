@@ -34,7 +34,52 @@ export function buildPickMap(picks: Pick[]): Record<string, string[]> {
   return map
 }
 
+/**
+ * Determine which rounds have actually started based on the live data.
+ * A round has started if ANY active (non-cut) golfer has data for it.
+ * Returns the highest round index (0-based) that has started, or -1 if none.
+ */
+export function getCurrentRound(liveData: any[]): number {
+  let maxRound = -1
+  for (const g of liveData) {
+    const rounds: (number | null)[] = g.rounds || []
+    for (let i = rounds.length - 1; i >= 0; i--) {
+      if (rounds[i] !== null && i > maxRound) {
+        maxRound = i
+        break
+      }
+    }
+  }
+  return maxRound
+}
+
+/**
+ * Build the display rounds for a cut/wd golfer based on which rounds have started.
+ * - currentRound 0 or 1: only R1/R2 real data, R3/R4 stay null (cut hasn't happened yet display-wise)
+ * - currentRound 2 (R3 started): show R3 = R1, R4 stays null
+ * - currentRound 3 (R4 started): show R3 = R1, R4 = R2
+ */
+export function buildCutDisplayRounds(
+  rounds: (number | null)[],
+  currentRound: number
+): (number | null)[] {
+  const dr = [...rounds]
+  if (currentRound >= 2) {
+    dr[2] = dr[0] // R3 = repeat of R1
+  } else {
+    dr[2] = null
+  }
+  if (currentRound >= 3) {
+    dr[3] = dr[1] // R4 = repeat of R2
+  } else {
+    dr[3] = null
+  }
+  return dr
+}
+
 export function computeStandings(liveData: any[], pickMap: Record<string, string[]>): any[] {
+  const currentRound = getCurrentRound(liveData)
+
   const standings = PLAYERS.map((player) => {
     const playerPicks = pickMap[player] || []
     let totalScore = 0
@@ -45,13 +90,19 @@ export function computeStandings(liveData: any[], pickMap: Record<string, string
       ) ?? { name, score: null, today: null, thru: '—', position: '—', status: 'active', rounds: [null,null,null,null], par: 72 }
 
       let adjScore = g.score ?? 0
-      if (g.status === 'cut' && g.score !== null) adjScore = g.score * 2
-      if (g.status === 'wd' && g.score !== null) adjScore = g.score * 2
+      let displayRounds: (number | null)[]
 
-      const displayRounds = [...(g.rounds || [null, null, null, null])]
       if (g.status === 'cut' || g.status === 'wd') {
-        displayRounds[2] = displayRounds[0]
-        displayRounds[3] = displayRounds[1]
+        // Only double the score once the weekend has started
+        if (currentRound >= 2 && g.score !== null) {
+          adjScore = g.score * 2
+        } else {
+          // Before weekend, use their actual 2-round score (not doubled)
+          adjScore = g.score ?? 0
+        }
+        displayRounds = buildCutDisplayRounds(g.rounds || [null, null, null, null], currentRound)
+      } else {
+        displayRounds = [...(g.rounds || [null, null, null, null])]
       }
 
       totalScore += adjScore
