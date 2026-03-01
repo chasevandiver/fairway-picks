@@ -4,6 +4,9 @@ import './globals.css'
 export const metadata: Metadata = {
   title: 'Fairway Picks · PGA Tour Pick\'em',
   description: 'Golf pick\'em league tracker with live scores',
+  icons: {
+    apple: '/apple-touch-icon.png',
+  },
 }
 
 export const viewport: Viewport = {
