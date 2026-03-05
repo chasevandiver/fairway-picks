@@ -2627,9 +2627,10 @@ export default function App() {
   }, [currentPlayer])
 
   // ── Computed ──
+  const participants = tournament?.draft_order ?? []
   const pickMap = buildPickMap(picks)
-  const standings = computeStandings(liveData, pickMap)
-  const weekMoney = computeMoney(standings)
+  const standings = computeStandings(liveData, pickMap, participants.length > 0 ? participants : undefined)
+  const weekMoney = computeMoney(standings, participants.length > 0 ? participants : undefined)
 
   // ── Handlers ──
   const handleLogin = (name: string) => {

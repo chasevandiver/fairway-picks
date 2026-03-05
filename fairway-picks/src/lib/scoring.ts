@@ -77,10 +77,10 @@ export function buildCutDisplayRounds(
   return dr
 }
 
-export function computeStandings(liveData: any[], pickMap: Record<string, string[]>): any[] {
+export function computeStandings(liveData: any[], pickMap: Record<string, string[]>, players: string[] = PLAYERS): any[] {
   const currentRound = getCurrentRound(liveData)
 
-  const standings = PLAYERS.map((player) => {
+  const standings = players.map((player) => {
     const playerPicks = pickMap[player] || []
     let totalScore = 0
 
@@ -138,19 +138,19 @@ export function computeStandings(liveData: any[], pickMap: Record<string, string
   return standings.map((s, i) => ({ ...s, rank: i + 1 }))
 }
 
-export function computeMoney(standings: any[]): Record<string, number> {
+export function computeMoney(standings: any[], players: string[] = PLAYERS): Record<string, number> {
   const money: Record<string, number> = {}
-  PLAYERS.forEach((p) => (money[p] = 0))
+  players.forEach((p) => (money[p] = 0))
   if (!standings.length) return money
 
   const winner = standings[0]
-  const others = PLAYERS.filter((p) => p !== winner.player)
+  const others = players.filter((p) => p !== winner.player)
   money[winner.player] += PAYOUT_RULES.lowestStrokes * others.length
   others.forEach((p) => (money[p] -= PAYOUT_RULES.lowestStrokes))
 
   standings.forEach((s) => {
     if (s.hasWinner) {
-      const oth = PLAYERS.filter((p) => p !== s.player)
+      const oth = players.filter((p) => p !== s.player)
       money[s.player] += PAYOUT_RULES.outrightWinner * oth.length
       oth.forEach((p) => (money[p] -= PAYOUT_RULES.outrightWinner))
     }
@@ -158,7 +158,7 @@ export function computeMoney(standings: any[]): Record<string, number> {
 
   standings.forEach((s) => {
     if (s.hasTop3) {
-      const oth = PLAYERS.filter((p) => p !== s.player)
+      const oth = players.filter((p) => p !== s.player)
       money[s.player] += PAYOUT_RULES.top3 * oth.length
       oth.forEach((p) => (money[p] -= PAYOUT_RULES.top3))
     }
