@@ -240,6 +240,9 @@ function ExpandablePlayerCard({
     return liveG || g || { name, score: null, today: null, thru: '—', position: '—', status: 'active' as const, rounds: [null,null,null,null], par }
   })
 
+  const todayScores = golfers.map((g: any) => g?.today).filter((t: any) => t != null)
+  const todayTotal = todayScores.length > 0 ? todayScores.reduce((sum: number, t: number) => sum + t, 0) : null
+
   return (
     <div style={{ marginBottom: 8 }}>
       <button
@@ -293,8 +296,19 @@ function ExpandablePlayerCard({
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
-          <div className={`score ${scoreClass(standing.totalScore)}`} style={{ fontSize: 18, fontFamily: 'DM Mono', fontWeight: 700 }}>
-            {toRelScore(standing.totalScore)}
+          {todayTotal !== null && (
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontFamily: 'DM Mono', fontSize: 9, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>Today</div>
+              <div className={`score ${scoreClass(todayTotal)}`} style={{ fontSize: 14, fontFamily: 'DM Mono', fontWeight: 600 }}>
+                {toRelScore(todayTotal)}
+              </div>
+            </div>
+          )}
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontFamily: 'DM Mono', fontSize: 9, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>Total</div>
+            <div className={`score ${scoreClass(standing.totalScore)}`} style={{ fontSize: 18, fontFamily: 'DM Mono', fontWeight: 700 }}>
+              {toRelScore(standing.totalScore)}
+            </div>
           </div>
           <span style={{ fontSize: 16, color: 'var(--text-dim)', transition: 'transform 0.2s', transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)' }}>
             ▼
