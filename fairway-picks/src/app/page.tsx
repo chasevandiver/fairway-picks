@@ -1123,15 +1123,18 @@ function DraftTab({
 
 // ─── Admin Tab ────────────────────────────────────────────────────────────────
 function AdminTab({
-  tournament, standings, weekMoney, onSetupTournament, onFinalize, onClearTournament, onClearPicks
+  tournament, standings, weekMoney, picks, liveData, onSetupTournament, onFinalize, onClearTournament, onClearPicks, onSwapGolfer
 }: {
   tournament: Tournament | null
   standings: PlayerStanding[]
   weekMoney: Record<string, number>
+  picks: Pick[]
+  liveData: GolferScore[]
   onSetupTournament: (data: { name: string; course: string; date: string; draft_order: string[]; is_major: boolean }) => Promise<void>
   onFinalize: () => Promise<void>
   onClearTournament: () => Promise<void>
   onClearPicks: () => Promise<void>
+  onSwapGolfer: (pickId: string, newGolferName: string) => Promise<void>
 }) {
   const [selectedEvent, setSelectedEvent] = useState('')
   const [participants, setParticipants] = useState<string[]>(PLAYERS)
@@ -1139,6 +1142,13 @@ function AdminTab({
   const [saving, setSaving] = useState(false)
   const [finalizing, setFinalizing] = useState(false)
   const [msg, setMsg] = useState('')
+
+  // Golfer swap state
+  const [swapPlayer, setSwapPlayer] = useState<string>('')
+  const [swapPickId, setSwapPickId] = useState<string | null>(null)
+  const [swapPickGolfer, setSwapPickGolfer] = useState<string>('')
+  const [swapSearch, setSwapSearch] = useState('')
+  const [swapping, setSwapping] = useState(false)
 
   const selectedTournament = PGA_SCHEDULE.find((e) => e.name === selectedEvent)
 
@@ -1315,6 +1325,137 @@ function AdminTab({
               </div>
             </div>
           )}
+
+          {tournament && picks.length > 0 && (() => {
+            const playerPicks = picks.filter((p) => p.player_name === swapPlayer)
+            const takenGolfers = picks.map((p) => p.golfer_name.toLowerCase())
+            const swapFiltered = liveData.filter(
+              (g) => !takenGolfers.includes(g.name.toLowerCase()) &&
+                g.name.toLowerCase().includes(swapSearch.toLowerCase())
+            )
+            const handleSwap = async (newGolfer: string) => {
+              if (!swapPickId) return
+              setSwapping(true)
+              await onSwapGolfer(swapPickId, newGolfer)
+              setSwapPickId(null)
+              setSwapPickGolfer('')
+              setSwapSearch('')
+              setMsg(`✅ Swapped ${swapPickGolfer} → ${newGolfer} for ${swapPlayer}`)
+              setSwapping(false)
+              setTimeout(() => setMsg(''), 4000)
+            }
+            return (
+              <div className="card mb-24">
+                <div className="card-header">
+                  <div className="card-title">Emergency Golfer Swap</div>
+                  <span className="badge badge-gold">WD / Withdrawal</span>
+                </div>
+                <div className="card-body">
+                  <div style={{ fontSize: 12, color: 'var(--text-dim)', marginBottom: 16 }}>
+                    Replace a picked golfer who withdrew before the tournament. Select a player, click their golfer to replace, then choose a substitute.
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">Select Player</label>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                      {PLAYERS.filter(p => picks.some(pk => pk.player_name === p)).map((p) => (
+                        <button
+                          key={p}
+                          onClick={() => { setSwapPlayer(p); setSwapPickId(null); setSwapPickGolfer(''); setSwapSearch('') }}
+                          style={{
+                            padding: '6px 14px', borderRadius: 8, border: '1px solid', cursor: 'pointer',
+                            fontFamily: 'Sora', fontSize: 13, fontWeight: 600,
+                            background: swapPlayer === p ? 'var(--green-dim)' : 'var(--surface2)',
+                            borderColor: swapPlayer === p ? 'rgba(74,222,128,0.3)' : 'var(--border)',
+                            color: swapPlayer === p ? 'var(--green)' : 'var(--text-dim)',
+                          }}
+                        >
+                          {p}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {swapPlayer && (
+                    <div className="form-group">
+                      <label className="form-label">
+                        {swapPickId ? `Replacing: ${swapPickGolfer}` : `${swapPlayer}'s Picks — click to replace`}
+                      </label>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+                        {playerPicks.map((pk) => (
+                          <div
+                            key={pk.id}
+                            onClick={() => { setSwapPickId(pk.id); setSwapPickGolfer(pk.golfer_name); setSwapSearch('') }}
+                            style={{
+                              padding: '8px 14px', borderRadius: 8, border: '1px solid', cursor: 'pointer',
+                              background: swapPickId === pk.id ? 'rgba(234,179,8,0.15)' : 'var(--surface2)',
+                              borderColor: swapPickId === pk.id ? 'rgba(234,179,8,0.5)' : 'var(--border)',
+                              color: swapPickId === pk.id ? '#eab308' : 'var(--text)',
+                              fontWeight: swapPickId === pk.id ? 600 : 400,
+                              fontSize: 13,
+                              transition: 'all 0.15s',
+                            }}
+                          >
+                            {pk.golfer_name}
+                            {swapPickId === pk.id && <span style={{ marginLeft: 6, fontSize: 11 }}>✕ swap</span>}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {swapPickId && (
+                    <div className="form-group">
+                      <label className="form-label">Choose Replacement Golfer</label>
+                      <input
+                        className="form-input"
+                        placeholder="Search available golfers…"
+                        value={swapSearch}
+                        onChange={(e) => setSwapSearch(e.target.value)}
+                        style={{ marginBottom: 8 }}
+                      />
+                      <div className="golfer-list">
+                        {liveData.length === 0 && (
+                          <div style={{ padding: '12px', color: 'var(--text-dim)', fontSize: 13 }}>
+                            No live golfer data available. Type a name below to add manually.
+                          </div>
+                        )}
+                        {swapFiltered.slice(0, 30).map((g) => (
+                          <div
+                            key={g.name}
+                            className="golfer-option"
+                            onClick={() => !swapping && handleSwap(g.name)}
+                          >
+                            <div>
+                              <div style={{ fontWeight: 500 }}>{g.name}</div>
+                              <div className="golfer-meta">#{g.position} · {g.score !== null ? (g.score > 0 ? `+${g.score}` : g.score === 0 ? 'E' : g.score) : '—'}</div>
+                            </div>
+                            <span className="badge badge-green">Swap In</span>
+                          </div>
+                        ))}
+                        {swapSearch && !swapFiltered.find((g) => g.name.toLowerCase() === swapSearch.toLowerCase()) && (
+                          <div className="golfer-option" onClick={() => !swapping && handleSwap(swapSearch)}>
+                            <div>
+                              <div style={{ fontWeight: 500 }}>{swapSearch}</div>
+                              <div className="golfer-meta">Custom entry</div>
+                            </div>
+                            <span className="badge badge-gold">+ Add</span>
+                          </div>
+                        )}
+                      </div>
+                      <button
+                        className="btn btn-outline"
+                        style={{ marginTop: 10, fontSize: 12 }}
+                        onClick={() => { setSwapPickId(null); setSwapPickGolfer(''); setSwapSearch('') }}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )
+          })()}
 
           <div className="card">
             <div className="card-header"><div className="card-title">Payout Rules</div></div>
@@ -2735,6 +2876,11 @@ export default function App() {
     setPicks([])
   }
 
+  const handleSwapGolfer = async (pickId: string, newGolferName: string) => {
+    await supabase.from('picks').update({ golfer_name: newGolferName }).eq('id', pickId)
+    await loadData()
+  }
+
   const handleDeleteTournament = async (tournamentId: string, moneyByPlayer: Record<string, number>) => {
     // Reverse season money for this tournament
     for (const player of PLAYERS) {
@@ -2837,7 +2983,7 @@ export default function App() {
             {tab === 'history' && <HistoryTab history={history} golferHistory={golferHistory} isAdmin={isAdmin} onDeleteTournament={handleDeleteTournament} onEditResult={handleEditResult} onDeleteResult={handleDeleteResult} />}
             {tab === 'stats'   && <StatsTab history={history} />}
             {tab === 'recap'   && <SeasonRecapTab history={history} golferHistory={golferHistory} seasonMoney={seasonMoney} />}
-            {tab === 'admin'   && isAdmin && <AdminTab tournament={tournament} standings={standings} weekMoney={weekMoney} onSetupTournament={handleSetupTournament} onFinalize={handleFinalize} onClearTournament={handleClearTournament} onClearPicks={handleClearPicks} />}
+            {tab === 'admin'   && isAdmin && <AdminTab tournament={tournament} standings={standings} weekMoney={weekMoney} picks={picks} liveData={liveData} onSetupTournament={handleSetupTournament} onFinalize={handleFinalize} onClearTournament={handleClearTournament} onClearPicks={handleClearPicks} onSwapGolfer={handleSwapGolfer} />}
           </div>
         )}
       </main>
