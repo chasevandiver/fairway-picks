@@ -141,6 +141,23 @@ export async function fetchLiveScores(): Promise<GolferScore[]> {
     }
     const isWeekend = currentRound >= 2
 
+    // ── Step 4.5: Fix today for golfers who haven't started the current round ──
+    // If a golfer's last completed round is before the current tournament round,
+    // they haven't played today yet — their "today" should be null, not their
+    // previous round's score.
+    parsedData.forEach((d: any) => {
+      if (d.activeRoundIdx === -1) {
+        let lastDone = -1
+        for (let i = 3; i >= 0; i--) {
+          if (d.rounds[i] !== null) { lastDone = i; break }
+        }
+        if (lastDone >= 0 && lastDone < currentRound) {
+          d.today = null
+          d.thru = '—'
+        }
+      }
+    })
+
     // ── Score values for position calculation ──
     const scoreValues: number[] = raw.map((c: any) => {
       const s = parseFloat(c.score ?? '999')
