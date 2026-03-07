@@ -171,8 +171,8 @@ export async function fetchLiveScores(): Promise<GolferScore[]> {
     // If ESPN says "CUT" in any of its position/status fields, the golfer is cut.
     // If ESPN gives them a real position (number, T5, etc.) they are NOT cut.
     // No secondary round-data inference — that kept over-marking everyone as cut.
-    const getStatusFromESPN = (c: any): 'active' | 'cut' | 'wd' => {
-      // Check if score field is literally "CUT" or "WD" (ESPN uses this in the SCORE column)
+    const getStatusFromESPN = (c: any, idx: number): 'active' | 'cut' | 'wd' => {
+      // Check if score field is literally "CUT" or "WD"
       const scoreStr = (c.score ?? '').toString().trim().toUpperCase()
       if (scoreStr === 'CUT') return 'cut'
       if (scoreStr === 'WD' || scoreStr === 'WITHDRAWN') return 'wd'
@@ -182,17 +182,17 @@ export async function fetchLiveScores(): Promise<GolferScore[]> {
       if (typeName.includes('cut')) return 'cut'
       if (typeName.includes('wd') || typeName.includes('withdraw')) return 'wd'
 
-      // Check shortDetail / detail / description (e.g. "CUT", "WD", "Active")
+      // Check shortDetail / detail / description
       const shortDetail = (c.status?.type?.shortDetail || c.status?.type?.detail || c.status?.type?.description || '').toUpperCase()
       if (shortDetail === 'CUT') return 'cut'
       if (shortDetail === 'WD' || shortDetail === 'WITHDRAWN') return 'wd'
 
-      // Check displayValue (e.g. "CUT", "WD", "Active")
+      // Check status displayValue
       const displayValue = (c.status?.displayValue || '').toUpperCase()
       if (displayValue === 'CUT') return 'cut'
       if (displayValue === 'WD' || displayValue === 'WITHDRAWN') return 'wd'
 
-      // Check linescores displayValue — ESPN shows "CUT" in the THRU column via linescores
+      // Check linescores displayValue
       const lines: any[] = c.linescores || []
       for (const l of lines) {
         const lDisplay = (l.displayValue || '').trim().toUpperCase()
@@ -200,11 +200,22 @@ export async function fetchLiveScores(): Promise<GolferScore[]> {
         if (lDisplay === 'WD' || lDisplay === 'WITHDRAWN') return 'wd'
       }
 
+      // Key ESPN API signal: cut players have NO period 3/4 linescore entries at all.
+      // Active players who haven't teed off in R3 still have a placeholder {period:3,...}
+      // entry with a tee time. Cut players simply stop at period 2.
+      // So: once R3 has started, a player who completed R1+R2 but has no period 3 entry is cut.
+      if (currentRound >= 2) {
+        const rounds = parsedRoundsOnly[idx]
+        const completedR1R2 = rounds[0] !== null && rounds[1] !== null
+        const hasR3Entry = lines.some((l: any) => l.period >= 3)
+        if (completedR1R2 && !hasR3Entry) return 'cut'
+      }
+
       return 'active'
     }
 
     // Pre-compute all statuses so getPosition uses the correct values
-    const statuses: ('active' | 'cut' | 'wd')[] = raw.map((c: any) => getStatusFromESPN(c))
+    const statuses: ('active' | 'cut' | 'wd')[] = raw.map((c: any, idx: number) => getStatusFromESPN(c, idx))
 
     const getPosition = (idx: number, status: 'active' | 'cut' | 'wd'): string => {
       if (status === 'cut') return 'CUT'
