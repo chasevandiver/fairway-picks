@@ -134,7 +134,7 @@ export async function fetchLiveScores(): Promise<GolferScore[]> {
     )
     let currentRound = 0
     for (let ri = 3; ri >= 0; ri--) {
-      if (roundCounts[ri] > 10) {
+      if (roundCounts[ri] > 0) {
         currentRound = ri
         break
       }
