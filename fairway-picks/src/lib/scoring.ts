@@ -36,17 +36,33 @@ export function buildPickMap(picks: Pick[]): Record<string, string[]> {
 
 /**
  * Determine which rounds have actually started based on the live data.
- * A round has started if ANY active (non-cut) golfer has data for it.
+ * A round has started if ANY active (non-cut) golfer has data for it OR is
+ * currently mid-round (thru is a hole number, meaning they've teed off).
  * Returns the highest round index (0-based) that has started, or -1 if none.
  */
 export function getCurrentRound(liveData: any[]): number {
   let maxRound = -1
   for (const g of liveData) {
     const rounds: (number | null)[] = g.rounds || []
+    // Check completed rounds
     for (let i = rounds.length - 1; i >= 0; i--) {
       if (rounds[i] !== null && i > maxRound) {
         maxRound = i
         break
+      }
+    }
+    // Also detect mid-round: active golfer with a numeric thru means they've
+    // teed off in the next round after their last completed one.
+    // This catches the start of R3/R4 before anyone has finished the round.
+    if (g.status === 'active') {
+      const thruNum = parseInt(g.thru ?? '')
+      if (!isNaN(thruNum) && thruNum > 0) {
+        let lastCompleted = -1
+        for (let i = rounds.length - 1; i >= 0; i--) {
+          if (rounds[i] !== null) { lastCompleted = i; break }
+        }
+        const inProgressRound = lastCompleted + 1
+        if (inProgressRound > maxRound) maxRound = inProgressRound
       }
     }
   }
