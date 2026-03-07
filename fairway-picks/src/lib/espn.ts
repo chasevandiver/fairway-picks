@@ -171,13 +171,14 @@ export async function fetchLiveScores(): Promise<GolferScore[]> {
       return 'active'
     }
 
-    // Secondary cut check: only apply when a majority (>50%) of competitors have
-    // started or completed R3. This prevents marking golfers as cut at the very
-    // start of R3 when they simply haven't teed off yet.
+    // Secondary cut check: only apply once R3 is well underway (30+ golfers have
+    // started/completed R3). A typical cut field is ~65-70 golfers (~42-45% of
+    // 156), so a 50%-of-field threshold can never be met. Instead, 30 starters
+    // means ~half the cut field is out — anyone still without R3 data is truly cut.
     const r3StartedCount = parsedData.filter((d: any) =>
       d.rounds[2] !== null || d.activeRoundIdx === 2
     ).length
-    const r3WellUnderway = r3StartedCount > raw.length * 0.5
+    const r3WellUnderway = isWeekend && r3StartedCount > 30
 
     // Pre-compute all statuses so getPosition uses the correct derived statuses
     const statuses: ('active' | 'cut' | 'wd')[] = raw.map((c: any, idx: number) => {
