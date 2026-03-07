@@ -167,35 +167,31 @@ export async function fetchLiveScores(): Promise<GolferScore[]> {
       return isNaN(s) ? 999 : s
     })
 
+    // Determine cut/wd status purely from ESPN's own fields.
+    // If ESPN says "CUT" in any of its position/status fields, the golfer is cut.
+    // If ESPN gives them a real position (number, T5, etc.) they are NOT cut.
+    // No secondary round-data inference — that kept over-marking everyone as cut.
     const getStatusFromESPN = (c: any): 'active' | 'cut' | 'wd' => {
-      const statusRaw = (c.status?.type?.name || '').toLowerCase()
-      if (statusRaw.includes('cut')) return 'cut'
-      if (statusRaw.includes('wd')) return 'wd'
+      // Check status type name (e.g. "STATUS_CUT", "STATUS_WD", "STATUS_ACTIVE")
+      const typeName = (c.status?.type?.name || '').toLowerCase()
+      if (typeName.includes('cut')) return 'cut'
+      if (typeName.includes('wd') || typeName.includes('withdraw')) return 'wd'
+
+      // Check shortDetail / detail (e.g. "CUT", "WD", "Active")
+      const shortDetail = (c.status?.type?.shortDetail || c.status?.type?.detail || '').toUpperCase()
+      if (shortDetail === 'CUT') return 'cut'
+      if (shortDetail === 'WD' || shortDetail === 'WITHDRAWN') return 'wd'
+
+      // Check displayValue (e.g. "CUT", "WD", "Active")
+      const displayValue = (c.status?.displayValue || '').toUpperCase()
+      if (displayValue === 'CUT') return 'cut'
+      if (displayValue === 'WD' || displayValue === 'WITHDRAWN') return 'wd'
+
       return 'active'
     }
 
-    // Secondary cut check: only apply once R3 is well underway (30+ golfers have
-    // started/completed R3). A typical cut field is ~65-70 golfers (~42-45% of
-    // 156), so a 50%-of-field threshold can never be met. Instead, 30 starters
-    // means ~half the cut field is out — anyone still without R3 data is truly cut.
-    const r3StartedCount = parsedData.filter((d: any) =>
-      d.rounds[2] !== null || d.activeRoundIdx === 2
-    ).length
-    const r3WellUnderway = isWeekend && r3StartedCount > 3
-
-    // Pre-compute all statuses so getPosition uses the correct derived statuses
-    const statuses: ('active' | 'cut' | 'wd')[] = raw.map((c: any, idx: number) => {
-      let status = getStatusFromESPN(c)
-      if (status === 'active' && isWeekend && r3WellUnderway) {
-        const { rounds, activeRoundIdx } = parsedData[idx]
-        const hasR3 = rounds[2] !== null || activeRoundIdx === 2
-        const hasR4 = rounds[3] !== null || activeRoundIdx === 3
-        if (!hasR3 && !hasR4) {
-          status = 'cut'
-        }
-      }
-      return status
-    })
+    // Pre-compute all statuses so getPosition uses the correct values
+    const statuses: ('active' | 'cut' | 'wd')[] = raw.map((c: any) => getStatusFromESPN(c))
 
     const getPosition = (idx: number, status: 'active' | 'cut' | 'wd'): string => {
       if (status === 'cut') return 'CUT'
