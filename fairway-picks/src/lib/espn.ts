@@ -171,35 +171,42 @@ export async function fetchLiveScores(): Promise<GolferScore[]> {
       return 'active'
     }
 
-    const getPosition = (idx: number, status: 'active' | 'cut' | 'wd'): string => {
-      if (status === 'cut') return 'CUT'
-      if (status === 'wd') return 'WD'
-      const myScore = scoreValues[idx]
-      const tiedCount = scoreValues.filter((s, i) => {
-        const st = getStatusFromESPN(raw[i])
-        return st === 'active' && s === myScore
-      }).length
-      const rank = scoreValues.filter((s, i) => {
-        const st = getStatusFromESPN(raw[i])
-        return st === 'active' && s < myScore
-      }).length + 1
-      return tiedCount > 1 ? `T${rank}` : `${rank}`
-    }
+    // Secondary cut check: only apply when a majority (>50%) of competitors have
+    // started or completed R3. This prevents marking golfers as cut at the very
+    // start of R3 when they simply haven't teed off yet.
+    const r3StartedCount = parsedData.filter((d: any) =>
+      d.rounds[2] !== null || d.activeRoundIdx === 2
+    ).length
+    const r3WellUnderway = r3StartedCount > raw.length * 0.5
 
-    const competitors: GolferScore[] = raw.map((c: any, idx: number) => {
-      const { rounds, today, thru: thruHole, activeRoundIdx } = parsedData[idx]
-
-      // ── Status detection ──
+    // Pre-compute all statuses so getPosition uses the correct derived statuses
+    const statuses: ('active' | 'cut' | 'wd')[] = raw.map((c: any, idx: number) => {
       let status = getStatusFromESPN(c)
-
-      // Secondary: weekend + only 2 rounds of data = cut
-      if (status === 'active' && isWeekend) {
+      if (status === 'active' && isWeekend && r3WellUnderway) {
+        const { rounds, activeRoundIdx } = parsedData[idx]
         const hasR3 = rounds[2] !== null || activeRoundIdx === 2
         const hasR4 = rounds[3] !== null || activeRoundIdx === 3
         if (!hasR3 && !hasR4) {
           status = 'cut'
         }
       }
+      return status
+    })
+
+    const getPosition = (idx: number, status: 'active' | 'cut' | 'wd'): string => {
+      if (status === 'cut') return 'CUT'
+      if (status === 'wd') return 'WD'
+      const myScore = scoreValues[idx]
+      const tiedCount = scoreValues.filter((s, i) => statuses[i] === 'active' && s === myScore).length
+      const rank = scoreValues.filter((s, i) => statuses[i] === 'active' && s < myScore).length + 1
+      return tiedCount > 1 ? `T${rank}` : `${rank}`
+    }
+
+    const competitors: GolferScore[] = raw.map((c: any, idx: number) => {
+      const { rounds, today, thru: thruHole } = parsedData[idx]
+
+      // ── Status detection (use pre-computed value) ──
+      const status = statuses[idx]
 
       // ── Position ──
       const position = getPosition(idx, status)
