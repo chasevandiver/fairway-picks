@@ -159,8 +159,11 @@ export async function fetchLiveScores(): Promise<GolferScore[]> {
     })
 
     // ── Score values for position calculation ──
+    // ESPN returns "E" for even-par; parseFloat("E") === NaN so handle it explicitly.
     const scoreValues: number[] = raw.map((c: any) => {
-      const s = parseFloat(c.score ?? '999')
+      const raw = (c.score ?? '').toString().trim()
+      if (raw === 'E') return 0
+      const s = parseFloat(raw)
       return isNaN(s) ? 999 : s
     })
 
@@ -178,7 +181,7 @@ export async function fetchLiveScores(): Promise<GolferScore[]> {
     const r3StartedCount = parsedData.filter((d: any) =>
       d.rounds[2] !== null || d.activeRoundIdx === 2
     ).length
-    const r3WellUnderway = isWeekend && r3StartedCount > 30
+    const r3WellUnderway = isWeekend && r3StartedCount > 3
 
     // Pre-compute all statuses so getPosition uses the correct derived statuses
     const statuses: ('active' | 'cut' | 'wd')[] = raw.map((c: any, idx: number) => {
