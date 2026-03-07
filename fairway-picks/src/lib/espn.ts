@@ -248,9 +248,18 @@ export async function fetchLiveScores(): Promise<GolferScore[]> {
         status === 'wd'  ? 'WD'  :
         thruHole
 
-      // For cut/wd: recalculate score from raw rounds using actual PAR
-      if ((status === 'cut' || status === 'wd') && rounds[0] !== null && rounds[1] !== null) {
+      // For cut: recalculate score from R1+R2 using actual PAR
+      if (status === 'cut' && rounds[0] !== null && rounds[1] !== null) {
         score = rounds[0] + rounds[1] - PAR * 2
+      }
+
+      // For WD: ESPN already has the correct score baked in from rounds played.
+      // Only fall back to computing from rounds if ESPN didn't provide a numeric score.
+      if (status === 'wd' && score === null) {
+        const completedRounds = rounds.filter((r): r is number => r !== null)
+        if (completedRounds.length > 0) {
+          score = completedRounds.reduce((a, b) => a + b, 0) - PAR * completedRounds.length
+        }
       }
 
       return {
