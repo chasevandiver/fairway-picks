@@ -108,7 +108,7 @@ export function computeStandings(liveData: any[], pickMap: Record<string, string
       let adjScore = g.score ?? 0
       let displayRounds: (number | null)[]
 
-      if (g.status === 'cut' || g.status === 'wd') {
+      if (g.status === 'cut') {
         // Incrementally add cut penalty rounds as the weekend progresses:
         // R1/R2 only: use actual 2-round score (no penalty yet)
         // R3 started: add R3 penalty (= R1 repeated), so score * 1.5 effectively
@@ -128,6 +128,10 @@ export function computeStandings(liveData: any[], pickMap: Record<string, string
           adjScore = twoRoundScore
         }
         displayRounds = buildCutDisplayRounds(g.rounds || [null, null, null, null], currentRound)
+      } else if (g.status === 'wd') {
+        // WD golfers: ESPN already has the correct score from rounds played, no penalty.
+        adjScore = g.score ?? 0
+        displayRounds = [...(g.rounds || [null, null, null, null])]
       } else {
         displayRounds = [...(g.rounds || [null, null, null, null])]
       }
