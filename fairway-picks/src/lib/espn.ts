@@ -172,13 +172,18 @@ export async function fetchLiveScores(): Promise<GolferScore[]> {
     // If ESPN gives them a real position (number, T5, etc.) they are NOT cut.
     // No secondary round-data inference — that kept over-marking everyone as cut.
     const getStatusFromESPN = (c: any): 'active' | 'cut' | 'wd' => {
+      // Check if score field is literally "CUT" or "WD" (ESPN uses this in the SCORE column)
+      const scoreStr = (c.score ?? '').toString().trim().toUpperCase()
+      if (scoreStr === 'CUT') return 'cut'
+      if (scoreStr === 'WD' || scoreStr === 'WITHDRAWN') return 'wd'
+
       // Check status type name (e.g. "STATUS_CUT", "STATUS_WD", "STATUS_ACTIVE")
       const typeName = (c.status?.type?.name || '').toLowerCase()
       if (typeName.includes('cut')) return 'cut'
       if (typeName.includes('wd') || typeName.includes('withdraw')) return 'wd'
 
-      // Check shortDetail / detail (e.g. "CUT", "WD", "Active")
-      const shortDetail = (c.status?.type?.shortDetail || c.status?.type?.detail || '').toUpperCase()
+      // Check shortDetail / detail / description (e.g. "CUT", "WD", "Active")
+      const shortDetail = (c.status?.type?.shortDetail || c.status?.type?.detail || c.status?.type?.description || '').toUpperCase()
       if (shortDetail === 'CUT') return 'cut'
       if (shortDetail === 'WD' || shortDetail === 'WITHDRAWN') return 'wd'
 
@@ -186,6 +191,14 @@ export async function fetchLiveScores(): Promise<GolferScore[]> {
       const displayValue = (c.status?.displayValue || '').toUpperCase()
       if (displayValue === 'CUT') return 'cut'
       if (displayValue === 'WD' || displayValue === 'WITHDRAWN') return 'wd'
+
+      // Check linescores displayValue — ESPN shows "CUT" in the THRU column via linescores
+      const lines: any[] = c.linescores || []
+      for (const l of lines) {
+        const lDisplay = (l.displayValue || '').trim().toUpperCase()
+        if (lDisplay === 'CUT') return 'cut'
+        if (lDisplay === 'WD' || lDisplay === 'WITHDRAWN') return 'wd'
+      }
 
       return 'active'
     }
