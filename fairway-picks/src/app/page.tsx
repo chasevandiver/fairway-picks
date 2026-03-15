@@ -1866,8 +1866,6 @@ function HistoryTab({ history, golferHistory, isAdmin, onDeleteTournament, onEdi
             const standings = h.standings || []
             const strokeWinner = [...standings].sort((a: any, b: any) => a.score - b.score)[0]
             const tourWinners = standings.filter((s: any) => s.has_winner)
-            const top3Players = standings.filter((s: any) => s.has_top3)
-
             if (strokeWinner) {
               participants.filter(p => p !== strokeWinner.player).forEach(p => {
                 net[p][strokeWinner.player] += PAYOUT_RULES.lowestStrokes
@@ -1878,10 +1876,13 @@ function HistoryTab({ history, golferHistory, isAdmin, onDeleteTournament, onEdi
                 net[p][w.player] += PAYOUT_RULES.outrightWinner
               })
             })
-            top3Players.forEach((w: any) => {
-              participants.filter(p => p !== w.player).forEach(p => {
-                net[p][w.player] += PAYOUT_RULES.top3
-              })
+            standings.forEach((w: any) => {
+              const count = w.top3Count || 0
+              if (count > 0) {
+                participants.filter(p => p !== w.player).forEach(p => {
+                  net[p][w.player] += PAYOUT_RULES.top3 * count
+                })
+              }
             })
 
             // Collapse to net: for each pair only keep the net direction
@@ -2787,6 +2788,7 @@ export default function App() {
           rank: r.rank,
           has_winner: r.has_winner,
           has_top3: r.has_top3,
+          top3Count: 0, // will be filled in from golfer_results below
           golfers_cut: r.golfers_cut || 0,
         })
         if (r.has_winner) grouped[tid].winner_player = r.player_name
@@ -2795,12 +2797,16 @@ export default function App() {
       // Recompute money from golfer_results positions so top3Count is always accurate
       for (const tid of Object.keys(grouped)) {
         const h = grouped[tid]
+        // Populate top3Count on each standing from golfer_results
+        h.standings.forEach((s: any) => {
+          s.top3Count = top3CountMap[tid]?.[s.player] || 0
+        })
         const sortedStandings = [...h.standings].sort((a: any, b: any) => a.score - b.score)
         const participants = sortedStandings.map((s: any) => s.player)
         const standingsForMoney = sortedStandings.map((s: any) => ({
           player: s.player,
           hasWinner: s.has_winner,
-          top3Count: top3CountMap[tid]?.[s.player] || 0,
+          top3Count: s.top3Count,
         }))
         h.money = computeMoney(standingsForMoney, participants)
       }
