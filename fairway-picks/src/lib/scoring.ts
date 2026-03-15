@@ -147,10 +147,10 @@ export function computeStandings(liveData: any[], pickMap: Record<string, string
     })
 
     const hasWinner = golfers.some((g: any) => parsePos(g.position) === 1)
-    const hasTop3 = golfers.some((g: any) => {
+    const top3Count = golfers.filter((g: any) => {
       const pos = parsePos(g.position)
       return !isNaN(pos) && pos >= 2 && pos <= 3  // position 1 is winner, not top3
-    })
+    }).length
 
     // Best (lowest numeric) finishing position among this player's golfers — used as tiebreaker
     const bestPosition = golfers.reduce((best: number, g: any) => {
@@ -158,7 +158,7 @@ export function computeStandings(liveData: any[], pickMap: Record<string, string
       return !isNaN(pos) && pos < best ? pos : best
     }, Infinity)
 
-    return { player, totalScore, golfers, hasWinner, hasTop3, bestPosition, rank: 0, moneyThisWeek: 0 }
+    return { player, totalScore, golfers, hasWinner, top3Count, bestPosition, rank: 0, moneyThisWeek: 0 }
   })
 
   // Primary sort: lowest totalScore wins. Tiebreaker: best (lowest) finishing position among picks.
@@ -195,10 +195,10 @@ export function computeMoney(standings: any[], players: string[] = PLAYERS): Rec
   })
 
   standings.forEach((s) => {
-    if (s.hasTop3) {
+    if (s.top3Count > 0) {
       const oth = players.filter((p) => p !== s.player)
-      money[s.player] += PAYOUT_RULES.top3 * oth.length
-      oth.forEach((p) => (money[p] -= PAYOUT_RULES.top3))
+      money[s.player] += PAYOUT_RULES.top3 * oth.length * s.top3Count
+      oth.forEach((p) => (money[p] -= PAYOUT_RULES.top3 * s.top3Count))
     }
   })
 
