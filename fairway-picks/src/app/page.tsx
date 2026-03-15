@@ -2747,11 +2747,23 @@ export default function App() {
       setPicks([])
     }
 
-    // Load history: join results + tournaments
-    const { data: results } = await supabase
-      .from('results')
-      .select('*, tournaments(name, date, is_major)')
-      .order('created_at', { ascending: false })
+    // Load history: join results + tournaments, and golfer_results in parallel
+    const [{ data: results }, { data: gr }] = await Promise.all([
+      supabase.from('results').select('*, tournaments(name, date, is_major)').order('created_at', { ascending: false }),
+      supabase.from('golfer_results').select('*, tournaments(name, date, is_major)').order('created_at', { ascending: false }),
+    ])
+
+    // Build top3Count map from golfer_results: tid -> player -> count of positions 2 or 3
+    const top3CountMap: Record<string, Record<string, number>> = {}
+    if (gr) {
+      for (const g of gr) {
+        const pos = parseInt((g.position || '').replace(/^T/i, ''))
+        if (!isNaN(pos) && pos >= 2 && pos <= 3) {
+          if (!top3CountMap[g.tournament_id]) top3CountMap[g.tournament_id] = {}
+          top3CountMap[g.tournament_id][g.player_name] = (top3CountMap[g.tournament_id][g.player_name] || 0) + 1
+        }
+      }
+    }
 
     if (results) {
       // Group by tournament
@@ -2777,17 +2789,25 @@ export default function App() {
           has_top3: r.has_top3,
           golfers_cut: r.golfers_cut || 0,
         })
-        grouped[tid].money[r.player_name] = r.money_won
         if (r.has_winner) grouped[tid].winner_player = r.player_name
       }
+
+      // Recompute money from golfer_results positions so top3Count is always accurate
+      for (const tid of Object.keys(grouped)) {
+        const h = grouped[tid]
+        const sortedStandings = [...h.standings].sort((a: any, b: any) => a.score - b.score)
+        const participants = sortedStandings.map((s: any) => s.player)
+        const standingsForMoney = sortedStandings.map((s: any) => ({
+          player: s.player,
+          hasWinner: s.has_winner,
+          top3Count: top3CountMap[tid]?.[s.player] || 0,
+        }))
+        h.money = computeMoney(standingsForMoney, participants)
+      }
+
       setHistory(Object.values(grouped))
     }
 
-    // Load golfer-level history
-    const { data: gr } = await supabase
-      .from('golfer_results')
-      .select('*, tournaments(name, date, is_major)')
-      .order('created_at', { ascending: false })
     if (gr) setGolferHistory(gr)
     setDataLoaded(true)
   }, [])
