@@ -834,10 +834,10 @@ function PicksTab({ standings, pickMap, liveData, tournament }: {
               )
             })()}
 
-            {s && (s.hasWinner || s.hasTop3) && (
+            {s && (s.hasWinner || s.top3Count > 0) && (
               <div style={{ padding: '10px 18px', borderTop: '1px solid var(--border)', display: 'flex', gap: 6, background: 'var(--surface2)' }}>
-                {s.hasWinner && <span className="badge badge-gold">🏆 Has Tournament Winner</span>}
-                {s.hasTop3   && <span className="badge badge-green">🔝 Has Top 3 Golfer</span>}
+                {s.hasWinner     && <span className="badge badge-gold">🏆 Has Tournament Winner</span>}
+                {s.top3Count > 0 && <span className="badge badge-green">🔝 Has Top 3 Golfer</span>}
               </div>
             )}
           </div>
@@ -2897,7 +2897,7 @@ export default function App() {
       total_score: s.totalScore,
       rank: s.rank,
       has_winner: s.hasWinner,
-      has_top3: s.hasTop3,
+      has_top3: s.top3Count > 0,
       money_won: money[s.player] || 0,
       golfers_cut: s.golfers.filter((g: any) => g.status === 'cut' || g.status === 'wd').length,
     }))

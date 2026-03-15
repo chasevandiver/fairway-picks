@@ -41,7 +41,7 @@ export interface PlayerStanding {
   totalScore: number
   golfers: (GolferScore & { adjScore: number; displayRounds: (number | null)[] })[]
   hasWinner: boolean
-  hasTop3: boolean
+  top3Count: number
   bestPosition: number  // lowest numeric finishing position among picks (Infinity if none); used as tiebreaker
   rank: number
   moneyThisWeek: number
