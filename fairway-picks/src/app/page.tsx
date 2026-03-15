@@ -1494,6 +1494,17 @@ function HistoryTab({ history, golferHistory, isAdmin, onDeleteTournament, onEdi
   const [deleting, setDeleting] = useState<string | null>(null)
   const [subtab, setSubtab] = useState<'tournaments' | 'golfers'>('tournaments')
   const [selectedPlayer, setSelectedPlayer] = useState<string>(PLAYERS[0])
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
+
+  const toggleRow = (tid: string, player: string) => {
+    const key = `${tid}:${player}`
+    setExpandedRows(prev => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }
 
   if (!history.length) return (
     <div className="empty-state card">
@@ -1700,6 +1711,7 @@ function HistoryTab({ history, golferHistory, isAdmin, onDeleteTournament, onEdi
           <table className="table">
             <thead>
               <tr>
+                <th style={{ width: 28 }}></th>
                 <th>Rank</th>
                 <th>Player</th>
                 <th>Score</th>
@@ -1712,67 +1724,127 @@ function HistoryTab({ history, golferHistory, isAdmin, onDeleteTournament, onEdi
                 const moneyVal = h.money?.[s.player] || 0
                 const isEditingScore = isAdmin && editing?.tid === h.tournament_id && editing?.player === s.player && editing?.field === 'total_score'
                 const isEditingMoney = isAdmin && editing?.tid === h.tournament_id && editing?.player === s.player && editing?.field === 'money_won'
+                const rowKey = `${h.tournament_id}:${s.player}`
+                const isExpanded = expandedRows.has(rowKey)
+                const playerGolfers = golferHistory.filter(
+                  (g: any) => g.tournament_id === h.tournament_id && g.player_name === s.player
+                )
+                const colSpan = isAdmin ? 6 : 5
                 return (
-                  <tr key={s.player} className="row">
-                    <td><span className={`rank rank-${s.rank}`}>#{s.rank}</span></td>
-                    <td><strong>{s.player}</strong></td>
-                    <td>
-                      {isEditingScore ? (
-                        <input
-                          autoFocus
-                          type="number"
-                          value={editVal}
-                          onChange={e => setEditVal(e.target.value)}
-                          onBlur={commitEdit}
-                          onKeyDown={e => { if (e.key === 'Enter') commitEdit(); if (e.key === 'Escape') setEditing(null) }}
-                          style={{ width: 70, background: 'var(--surface2)', border: '1px solid var(--green)', borderRadius: 4, color: 'var(--text)', padding: '2px 6px', fontFamily: 'DM Mono', fontSize: 13, textAlign: 'center' }}
-                        />
-                      ) : (
-                        <span
-                          className={`score ${scoreClass(s.score)}`}
-                          onClick={() => isAdmin && startEdit(h.tournament_id, s.player, 'total_score', s.score)}
-                          style={isAdmin ? { cursor: 'pointer', borderBottom: '1px dashed var(--text-dim)' } : {}}
-                          title={isAdmin ? 'Click to edit score' : ''}
-                        >
-                          {toRelScore(s.score)}
-                        </span>
-                      )}
-                    </td>
-                    <td>
-                      {isEditingMoney ? (
-                        <input
-                          autoFocus
-                          type="number"
-                          value={editVal}
-                          onChange={e => setEditVal(e.target.value)}
-                          onBlur={commitEdit}
-                          onKeyDown={e => { if (e.key === 'Enter') commitEdit(); if (e.key === 'Escape') setEditing(null) }}
-                          style={{ width: 80, background: 'var(--surface2)', border: '1px solid var(--green)', borderRadius: 4, color: 'var(--text)', padding: '2px 6px', fontFamily: 'DM Mono', fontSize: 13, textAlign: 'center' }}
-                        />
-                      ) : (
-                        <span
-                          className={`score ${moneyVal > 0 ? 'under' : moneyVal < 0 ? 'over' : 'even'}`}
-                          onClick={() => isAdmin && startEdit(h.tournament_id, s.player, 'money_won', moneyVal)}
-                          style={isAdmin ? { cursor: 'pointer', borderBottom: '1px dashed var(--text-dim)' } : {}}
-                          title={isAdmin ? 'Click to edit winnings' : ''}
-                        >
-                          {formatMoney(moneyVal)}
-                        </span>
-                      )}
-                    </td>
-                    {isAdmin && (
-                      <td>
-                        <button
-                          className="btn btn-danger btn-sm"
-                          onClick={() => {
-                            if (confirm(`Remove ${s.player} from this tournament? Their money will be reversed.`))
-                              onDeleteResult(h.tournament_id, s.player, moneyVal)
-                          }}
-                          title="Remove this player's result"
-                        >✕</button>
+                  <>
+                    <tr key={s.player} className="row" style={{ cursor: 'pointer' }} onClick={() => toggleRow(h.tournament_id, s.player)}>
+                      <td style={{ textAlign: 'center', color: 'var(--text-dim)', fontSize: 11, transition: 'transform 0.2s', transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)', userSelect: 'none' }}>▼</td>
+                      <td><span className={`rank rank-${s.rank}`}>#{s.rank}</span></td>
+                      <td><strong>{s.player}</strong></td>
+                      <td onClick={e => e.stopPropagation()}>
+                        {isEditingScore ? (
+                          <input
+                            autoFocus
+                            type="number"
+                            value={editVal}
+                            onChange={e => setEditVal(e.target.value)}
+                            onBlur={commitEdit}
+                            onKeyDown={e => { if (e.key === 'Enter') commitEdit(); if (e.key === 'Escape') setEditing(null) }}
+                            style={{ width: 70, background: 'var(--surface2)', border: '1px solid var(--green)', borderRadius: 4, color: 'var(--text)', padding: '2px 6px', fontFamily: 'DM Mono', fontSize: 13, textAlign: 'center' }}
+                          />
+                        ) : (
+                          <span
+                            className={`score ${scoreClass(s.score)}`}
+                            onClick={() => isAdmin && startEdit(h.tournament_id, s.player, 'total_score', s.score)}
+                            style={isAdmin ? { cursor: 'pointer', borderBottom: '1px dashed var(--text-dim)' } : {}}
+                            title={isAdmin ? 'Click to edit score' : ''}
+                          >
+                            {toRelScore(s.score)}
+                          </span>
+                        )}
                       </td>
+                      <td onClick={e => e.stopPropagation()}>
+                        {isEditingMoney ? (
+                          <input
+                            autoFocus
+                            type="number"
+                            value={editVal}
+                            onChange={e => setEditVal(e.target.value)}
+                            onBlur={commitEdit}
+                            onKeyDown={e => { if (e.key === 'Enter') commitEdit(); if (e.key === 'Escape') setEditing(null) }}
+                            style={{ width: 80, background: 'var(--surface2)', border: '1px solid var(--green)', borderRadius: 4, color: 'var(--text)', padding: '2px 6px', fontFamily: 'DM Mono', fontSize: 13, textAlign: 'center' }}
+                          />
+                        ) : (
+                          <span
+                            className={`score ${moneyVal > 0 ? 'under' : moneyVal < 0 ? 'over' : 'even'}`}
+                            onClick={() => isAdmin && startEdit(h.tournament_id, s.player, 'money_won', moneyVal)}
+                            style={isAdmin ? { cursor: 'pointer', borderBottom: '1px dashed var(--text-dim)' } : {}}
+                            title={isAdmin ? 'Click to edit winnings' : ''}
+                          >
+                            {formatMoney(moneyVal)}
+                          </span>
+                        )}
+                      </td>
+                      {isAdmin && (
+                        <td onClick={e => e.stopPropagation()}>
+                          <button
+                            className="btn btn-danger btn-sm"
+                            onClick={() => {
+                              if (confirm(`Remove ${s.player} from this tournament? Their money will be reversed.`))
+                                onDeleteResult(h.tournament_id, s.player, moneyVal)
+                            }}
+                            title="Remove this player's result"
+                          >✕</button>
+                        </td>
+                      )}
+                    </tr>
+                    {isExpanded && (
+                      <tr key={`${s.player}-expanded`}>
+                        <td colSpan={colSpan} style={{ padding: 0, background: 'rgba(0,0,0,0.2)' }}>
+                          {playerGolfers.length === 0 ? (
+                            <div style={{ padding: '10px 24px', color: 'var(--text-dim)', fontFamily: 'DM Mono', fontSize: 12 }}>No golfer data saved for this tournament.</div>
+                          ) : (
+                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                              <thead>
+                                <tr style={{ background: 'rgba(0,0,0,0.3)' }}>
+                                  <th style={{ padding: '6px 12px 6px 32px', textAlign: 'left', fontFamily: 'DM Mono', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-dim)', fontWeight: 600 }}>Golfer</th>
+                                  <th style={{ padding: '6px 12px', textAlign: 'center', fontFamily: 'DM Mono', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-dim)', fontWeight: 600 }}>Finish</th>
+                                  <th style={{ padding: '6px 12px', textAlign: 'center', fontFamily: 'DM Mono', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-dim)', fontWeight: 600 }}>Score</th>
+                                  <th style={{ padding: '6px 12px', textAlign: 'center', fontFamily: 'DM Mono', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-dim)', fontWeight: 600 }}>R1</th>
+                                  <th style={{ padding: '6px 12px', textAlign: 'center', fontFamily: 'DM Mono', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-dim)', fontWeight: 600 }}>R2</th>
+                                  <th style={{ padding: '6px 12px', textAlign: 'center', fontFamily: 'DM Mono', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-dim)', fontWeight: 600 }}>R3</th>
+                                  <th style={{ padding: '6px 12px', textAlign: 'center', fontFamily: 'DM Mono', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-dim)', fontWeight: 600 }}>R4</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {playerGolfers.map((g: any, gi: number) => {
+                                  const pos = g.position || '—'
+                                  const posNum = parseInt(pos.replace(/^T/, ''))
+                                  const isCut = g.status === 'cut' || g.status === 'wd'
+                                  const rounds: (number | null)[] = g.rounds || [null, null, null, null]
+                                  return (
+                                    <tr key={gi} style={{ borderTop: '1px solid rgba(255,255,255,0.05)', background: isCut ? 'rgba(239,68,68,0.04)' : 'transparent' }}>
+                                      <td style={{ padding: '7px 12px 7px 32px', fontWeight: 600 }}>{g.golfer_name}</td>
+                                      <td style={{ padding: '7px 12px', textAlign: 'center' }}>
+                                        {isCut ? (
+                                          <span className="badge badge-red" style={{ fontSize: 10 }}>✂ CUT</span>
+                                        ) : (
+                                          <span className={`rank ${posNum === 1 ? 'rank-1' : posNum === 2 ? 'rank-2' : posNum === 3 ? 'rank-3' : ''}`} style={{ fontSize: 12 }}>{pos}</span>
+                                        )}
+                                      </td>
+                                      <td style={{ padding: '7px 12px', textAlign: 'center' }}>
+                                        <span className={`score ${scoreClass(g.adj_score)}`} style={{ fontSize: 12 }}>{toRelScore(g.adj_score)}</span>
+                                      </td>
+                                      {rounds.map((r: number | null, ri: number) => (
+                                        <td key={ri} style={{ padding: '7px 12px', textAlign: 'center', fontFamily: 'DM Mono', fontSize: 12, color: isCut && ri >= 2 ? 'var(--text-dim)' : 'var(--text)', fontStyle: isCut && ri >= 2 ? 'italic' : 'normal' }}>
+                                          {r ?? '—'}
+                                        </td>
+                                      ))}
+                                    </tr>
+                                  )
+                                })}
+                              </tbody>
+                            </table>
+                          )}
+                        </td>
+                      </tr>
                     )}
-                  </tr>
+                  </>
                 )
               })}
             </tbody>
@@ -1783,10 +1855,13 @@ function HistoryTab({ history, golferHistory, isAdmin, onDeleteTournament, onEdi
           {(() => {
             const money = h.money || {}
 
+            // Only include players who actually participated in this tournament
+            const participants: string[] = (h.standings || []).map((s: any) => s.player)
+
             // Build gross debts between every pair: who owes who what gross amount
             // net[A][B] = net amount A owes B (can go negative meaning B owes A)
             const net: Record<string, Record<string, number>> = {}
-            PLAYERS.forEach(a => { net[a] = {}; PLAYERS.forEach(b => { net[a][b] = 0 }) })
+            participants.forEach(a => { net[a] = {}; participants.forEach(b => { net[a][b] = 0 }) })
 
             const standings = h.standings || []
             const strokeWinner = [...standings].sort((a: any, b: any) => a.score - b.score)[0]
@@ -1794,17 +1869,17 @@ function HistoryTab({ history, golferHistory, isAdmin, onDeleteTournament, onEdi
             const top3Players = standings.filter((s: any) => s.has_top3)
 
             if (strokeWinner) {
-              PLAYERS.filter(p => p !== strokeWinner.player).forEach(p => {
+              participants.filter(p => p !== strokeWinner.player).forEach(p => {
                 net[p][strokeWinner.player] += PAYOUT_RULES.lowestStrokes
               })
             }
             tourWinners.forEach((w: any) => {
-              PLAYERS.filter(p => p !== w.player).forEach(p => {
+              participants.filter(p => p !== w.player).forEach(p => {
                 net[p][w.player] += PAYOUT_RULES.outrightWinner
               })
             })
             top3Players.forEach((w: any) => {
-              PLAYERS.filter(p => p !== w.player).forEach(p => {
+              participants.filter(p => p !== w.player).forEach(p => {
                 net[p][w.player] += PAYOUT_RULES.top3
               })
             })
@@ -1812,8 +1887,8 @@ function HistoryTab({ history, golferHistory, isAdmin, onDeleteTournament, onEdi
             // Collapse to net: for each pair only keep the net direction
             const netPayments: { from: string; to: string; amount: number }[] = []
             const seen = new Set<string>()
-            PLAYERS.forEach(a => {
-              PLAYERS.forEach(b => {
+            participants.forEach(a => {
+              participants.forEach(b => {
                 if (a === b) return
                 const key = [a, b].sort().join('|')
                 if (seen.has(key)) return
