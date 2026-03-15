@@ -1,0 +1,14 @@
+# TypeScript build cache
+*.tsbuildinfo
+
+# Next.js
+.next/
+out/
+
+# Node
+node_modules/
+
+# Env files
+.env
+.env.local
+.env*.local
