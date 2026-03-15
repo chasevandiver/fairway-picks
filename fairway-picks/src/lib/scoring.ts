@@ -93,6 +93,12 @@ export function buildCutDisplayRounds(
   return dr
 }
 
+function parsePos(p: string): number {
+  if (!p || p === '—' || p === '-' || p.toUpperCase() === 'CUT' || p.toUpperCase() === 'WD') return NaN
+  const n = parseInt(p.replace(/^T/i, ''))
+  return n
+}
+
 export function computeStandings(liveData: any[], pickMap: Record<string, string[]>, players: string[] = PLAYERS): any[] {
   const currentRound = getCurrentRound(liveData)
 
@@ -140,22 +146,34 @@ export function computeStandings(liveData: any[], pickMap: Record<string, string
       return { ...g, adjScore, displayRounds }
     })
 
-    const parsePos = (p: string): number => {
-      if (!p || p === '—' || p === '-' || p.toUpperCase() === 'CUT' || p.toUpperCase() === 'WD') return NaN
-      const n = parseInt(p.replace(/^T/i, ''))
-      return n
-    }
     const hasWinner = golfers.some((g: any) => parsePos(g.position) === 1)
     const hasTop3 = golfers.some((g: any) => {
       const pos = parsePos(g.position)
       return !isNaN(pos) && pos >= 2 && pos <= 3  // position 1 is winner, not top3
     })
 
-    return { player, totalScore, golfers, hasWinner, hasTop3, rank: 0, moneyThisWeek: 0 }
+    // Best (lowest numeric) finishing position among this player's golfers — used as tiebreaker
+    const bestPosition = golfers.reduce((best: number, g: any) => {
+      const pos = parsePos(g.position)
+      return !isNaN(pos) && pos < best ? pos : best
+    }, Infinity)
+
+    return { player, totalScore, golfers, hasWinner, hasTop3, bestPosition, rank: 0, moneyThisWeek: 0 }
   })
 
-  standings.sort((a, b) => a.totalScore - b.totalScore)
-  return standings.map((s, i) => ({ ...s, rank: i + 1 }))
+  // Primary sort: lowest totalScore wins. Tiebreaker: best (lowest) finishing position among picks.
+  standings.sort((a, b) => {
+    if (a.totalScore !== b.totalScore) return a.totalScore - b.totalScore
+    return a.bestPosition - b.bestPosition
+  })
+
+  // Assign ranks: players tied on both totalScore and bestPosition share the same rank
+  return standings.map((s, i, arr) => {
+    if (i === 0) return { ...s, rank: 1 }
+    const prev = arr[i - 1]
+    const sameRank = s.totalScore === prev.totalScore && s.bestPosition === prev.bestPosition
+    return { ...s, rank: sameRank ? prev.rank : i + 1 }
+  })
 }
 
 export function computeMoney(standings: any[], players: string[] = PLAYERS): Record<string, number> {
