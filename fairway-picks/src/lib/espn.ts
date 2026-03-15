@@ -256,7 +256,7 @@ export async function fetchLiveScores(): Promise<GolferScore[]> {
       // For WD: ESPN already has the correct score baked in from rounds played.
       // Only fall back to computing from rounds if ESPN didn't provide a numeric score.
       if (status === 'wd' && score === null) {
-        const completedRounds = rounds.filter((r): r is number => r !== null)
+        const completedRounds = (rounds as (number | null)[]).filter((r): r is number => r !== null)
         if (completedRounds.length > 0) {
           score = completedRounds.reduce((a, b) => a + b, 0) - PAR * completedRounds.length
         }
