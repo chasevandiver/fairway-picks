@@ -1061,3 +1061,230 @@ body {
   border-color: var(--border-bright);
   background: var(--surface);
 }
+
+/* ══════════════════════════════════════════════════════════════════
+   ── Masters Tournament Theme ──────────────────────────────────────
+   Activates via data-theme="masters" on <body> when Masters is live.
+   ══════════════════════════════════════════════════════════════════ */
+
+[data-theme="masters"] {
+  --bg: #f5f0e8;
+  --surface: #ffffff;
+  --surface2: #f0ebe0;
+  --border: rgba(0, 103, 71, 0.12);
+  --border-bright: rgba(0, 103, 71, 0.28);
+  --green: #006747;
+  --green-dim: rgba(0, 103, 71, 0.08);
+  --green-glow: rgba(0, 103, 71, 0.3);
+  --gold: #c8960c;
+  --gold-dim: rgba(200, 150, 12, 0.12);
+  --red: #c0392b;
+  --indigo: #4a5568;
+  --text: #1a2e1a;
+  --text-dim: #5a7060;
+  --text-mid: #3d5040;
+  --shadow: 0 4px 24px rgba(0, 103, 71, 0.10);
+}
+
+[data-theme="masters"] body {
+  background: var(--bg);
+}
+
+/* ── Sidebar ── */
+[data-theme="masters"] .sidebar {
+  background: #006747;
+  border-right: 1px solid rgba(0, 0, 0, 0.12);
+}
+[data-theme="masters"] .sidebar-logo {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+}
+[data-theme="masters"] .sidebar-logo h1 { color: white; }
+[data-theme="masters"] .sidebar-logo h1 span { color: #FFCB05; }
+[data-theme="masters"] .sidebar-logo p { color: rgba(255, 255, 255, 0.55); }
+[data-theme="masters"] .nav-label { color: rgba(255, 255, 255, 0.45); }
+[data-theme="masters"] .nav-item { color: rgba(255, 255, 255, 0.78); }
+[data-theme="masters"] .nav-item:hover { background: rgba(255, 255, 255, 0.1); color: white; }
+[data-theme="masters"] .nav-item.active {
+  background: #FFCB05;
+  color: #003d2a;
+  border-color: transparent;
+}
+[data-theme="masters"] .sidebar-footer { border-top: 1px solid rgba(255, 255, 255, 0.15); }
+[data-theme="masters"] .user-chip {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.18);
+}
+[data-theme="masters"] .user-name { color: white; }
+[data-theme="masters"] .user-role { color: rgba(255, 255, 255, 0.5); }
+[data-theme="masters"] .user-avatar {
+  background: rgba(255, 203, 5, 0.2);
+  border-color: rgba(255, 203, 5, 0.45);
+  color: #FFCB05;
+}
+[data-theme="masters"] .tournament-pill {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.28);
+  color: rgba(255, 255, 255, 0.9);
+}
+[data-theme="masters"] .live-dot {
+  background: #FFCB05;
+  box-shadow: 0 0 8px rgba(255, 203, 5, 0.6);
+}
+
+/* ── Bottom tab bar (mobile) ── */
+[data-theme="masters"] .bottom-tab-bar {
+  background: #006747;
+  border-top: 1px solid rgba(0, 0, 0, 0.12);
+}
+[data-theme="masters"] .bottom-tab-label { color: rgba(255, 255, 255, 0.6); }
+[data-theme="masters"] .bottom-tab-btn.active .bottom-tab-label { color: #FFCB05; }
+[data-theme="masters"] .bottom-tab-btn.active .bottom-tab-icon {
+  filter: drop-shadow(0 0 4px rgba(255, 203, 5, 0.7));
+}
+
+/* ── Hamburger (mobile) ── */
+[data-theme="masters"] .hamburger-btn {
+  background: white;
+  border-color: rgba(0, 103, 71, 0.25);
+}
+[data-theme="masters"] .hamburger-btn span { background: #006747; }
+[data-theme="masters"] .hamburger-btn:hover { border-color: #006747; }
+
+/* ── Cards & surfaces ── */
+[data-theme="masters"] .card {
+  background: #ffffff;
+  border-color: rgba(0, 103, 71, 0.12);
+  box-shadow: 0 2px 12px rgba(0, 103, 71, 0.07);
+}
+[data-theme="masters"] .card-header {
+  background: #f5f0e8;
+  border-bottom-color: rgba(0, 103, 71, 0.10);
+}
+[data-theme="masters"] .stat-box {
+  background: #ffffff;
+  border-color: rgba(0, 103, 71, 0.12);
+}
+[data-theme="masters"] .stat-val { color: #006747; }
+[data-theme="masters"] .player-card {
+  background: #ffffff;
+  border-color: rgba(0, 103, 71, 0.12);
+}
+[data-theme="masters"] .player-card-header {
+  background: #f5f0e8;
+  border-bottom-color: rgba(0, 103, 71, 0.10);
+}
+[data-theme="masters"] .money-card {
+  background: #ffffff;
+  border-color: rgba(0, 103, 71, 0.12);
+}
+
+/* ── Tables ── */
+[data-theme="masters"] .table tr.row { border-top-color: rgba(0, 103, 71, 0.08); }
+[data-theme="masters"] .table tr.row:hover { background: #f5f0e8; }
+[data-theme="masters"] .divider { background: rgba(0, 103, 71, 0.10); }
+
+/* ── Tournament progress bar ── */
+[data-theme="masters"] .tournament-progress {
+  background: #ffffff;
+  border-color: rgba(0, 103, 71, 0.15);
+}
+[data-theme="masters"] .progress-step { border-right-color: rgba(0, 103, 71, 0.1); color: #5a7060; }
+[data-theme="masters"] .progress-step.done { background: rgba(0, 103, 71, 0.06); color: #006747; }
+[data-theme="masters"] .progress-step.active {
+  background: rgba(0, 103, 71, 0.1);
+  color: #006747;
+  border-top-color: #006747;
+}
+
+/* ── Buttons ── */
+[data-theme="masters"] .btn-green { background: #006747; color: white; }
+[data-theme="masters"] .btn-green:hover { background: #005538; box-shadow: 0 4px 20px rgba(0, 103, 71, 0.35); }
+[data-theme="masters"] .btn-green:disabled { opacity: 0.35; }
+[data-theme="masters"] .btn-outline { border-color: rgba(0, 103, 71, 0.3); color: #006747; }
+[data-theme="masters"] .btn-outline:hover { border-color: #006747; color: #006747; }
+
+/* ── Badges ── */
+[data-theme="masters"] .badge-green {
+  background: rgba(0, 103, 71, 0.1);
+  color: #006747;
+  border-color: rgba(0, 103, 71, 0.25);
+}
+[data-theme="masters"] .badge-gold {
+  background: rgba(200, 150, 12, 0.12);
+  color: #8a6500;
+  border-color: rgba(200, 150, 12, 0.25);
+}
+
+/* ── Forms ── */
+[data-theme="masters"] .form-input,
+[data-theme="masters"] .form-select {
+  background: white;
+  border-color: rgba(0, 103, 71, 0.2);
+  color: var(--text);
+}
+[data-theme="masters"] .form-input::placeholder { color: #8aab8a; }
+[data-theme="masters"] .form-input:focus,
+[data-theme="masters"] .form-select:focus { border-color: #006747; }
+[data-theme="masters"] .form-select option { background: white; color: #1a2e1a; }
+
+/* ── Alerts ── */
+[data-theme="masters"] .alert-green {
+  background: rgba(0, 103, 71, 0.08);
+  border-color: rgba(0, 103, 71, 0.2);
+  color: #006747;
+}
+[data-theme="masters"] .alert-gold {
+  background: rgba(200, 150, 12, 0.1);
+  border-color: rgba(200, 150, 12, 0.22);
+  color: #8a6500;
+}
+
+/* ── Misc ── */
+[data-theme="masters"] .refresh-btn { border-color: rgba(0, 103, 71, 0.2); color: #5a7060; }
+[data-theme="masters"] .refresh-btn:hover { border-color: #006747; color: #006747; }
+[data-theme="masters"] ::-webkit-scrollbar-thumb { background: rgba(0, 103, 71, 0.25); }
+[data-theme="masters"] .gradient-card-gold {
+  background: linear-gradient(135deg, rgba(200,150,12,0.10) 0%, rgba(0,103,71,0.04) 100%) !important;
+  border-color: rgba(200,150,12,0.25) !important;
+}
+[data-theme="masters"] .gradient-card-green {
+  background: linear-gradient(135deg, rgba(0,103,71,0.08) 0%, rgba(0,103,71,0.03) 100%) !important;
+  border-color: rgba(0,103,71,0.15) !important;
+}
+[data-theme="masters"] .leader-glow {
+  box-shadow: 0 0 36px rgba(200,150,12,0.15), 0 4px 24px rgba(0,103,71,0.08) !important;
+}
+
+/* ── Draft ── */
+[data-theme="masters"] .draft-chip { background: #f5f0e8; border-color: rgba(0,103,71,0.15); color: #5a7060; }
+[data-theme="masters"] .draft-chip.active {
+  background: rgba(0,103,71,0.1);
+  border-color: rgba(0,103,71,0.3);
+  color: #006747;
+}
+[data-theme="masters"] .golfer-option:hover { background: #f5f0e8; border-color: rgba(0,103,71,0.15); }
+
+/* ── Login screen ── */
+[data-theme="masters"] .login-screen {
+  background: #f5f0e8;
+  background-image:
+    radial-gradient(ellipse at 30% 20%, rgba(0,103,71,0.08) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 80%, rgba(255,203,5,0.06) 0%, transparent 50%);
+}
+[data-theme="masters"] .login-card {
+  background: white;
+  border-color: rgba(0,103,71,0.15);
+}
+[data-theme="masters"] .login-logo h1 { color: #1a2e1a; }
+[data-theme="masters"] .login-logo h1 span { color: #006747; }
+[data-theme="masters"] .login-logo p { color: #5a7060; }
+[data-theme="masters"] .player-btn {
+  background: #f5f0e8;
+  border-color: rgba(0,103,71,0.12);
+  color: #1a2e1a;
+}
+[data-theme="masters"] .player-btn:hover {
+  border-color: #006747;
+  background: rgba(0,103,71,0.08);
+  color: #006747;
+}

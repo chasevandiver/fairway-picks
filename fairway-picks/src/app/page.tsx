@@ -145,7 +145,7 @@ const NAV_ITEMS = [
 ]
 
 function Sidebar({
-  currentPlayer, tab, setTab, isAdmin, onLogout, tournament, isOpen, onClose
+  currentPlayer, tab, setTab, isAdmin, onLogout, tournament, isOpen, onClose, isMasters
 }: {
   currentPlayer: string
   tab: string
@@ -155,6 +155,7 @@ function Sidebar({
   tournament: Tournament | null
   isOpen: boolean
   onClose: () => void
+  isMasters: boolean
 }) {
   return (
     <>
@@ -173,8 +174,21 @@ function Sidebar({
     <div className={`sidebar${isOpen ? ' open' : ''}`}>
       <button className="sidebar-close-btn" onClick={onClose} style={{ display: 'none' }}>✕</button>
       <div className="sidebar-logo">
-        <h1>Fairway <span>Picks</span></h1>
-        <p>PGA Tour Pick'em</p>
+        {isMasters ? (
+          <>
+            <div style={{ fontFamily: "'Pinyon Script', cursive", fontSize: 38, color: 'white', lineHeight: 1.1 }}>
+              The Masters
+            </div>
+            <p style={{ color: 'rgba(255,255,255,0.55)', fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', marginTop: 6 }}>
+              Augusta National · 2026
+            </p>
+          </>
+        ) : (
+          <>
+            <h1>Fairway <span>Picks</span></h1>
+            <p>PGA Tour Pick'em</p>
+          </>
+        )}
       </div>
 
       <nav className="sidebar-nav">
@@ -2709,7 +2723,18 @@ export default function App() {
   const [tabKey, setTabKey] = useState(0)
 
   const isAdmin = ['Eric', 'Chase'].includes(currentPlayer ?? '')
+  const isMasters = !!(tournament?.name?.toLowerCase().includes('masters'))
   const [sidebarOpen, setSidebarOpen] = useState(false)
+
+  // Apply Masters theme to body when Masters tournament is active
+  useEffect(() => {
+    if (isMasters) {
+      document.body.setAttribute('data-theme', 'masters')
+    } else {
+      document.body.removeAttribute('data-theme')
+    }
+    return () => document.body.removeAttribute('data-theme')
+  }, [isMasters])
 
   // Tab change with animation reset
   const handleTabChange = useCallback((t: string) => {
@@ -3045,6 +3070,7 @@ export default function App() {
         tournament={tournament}
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
+        isMasters={isMasters}
       />
       <main className="main-content">
         {!dataLoaded ? (
