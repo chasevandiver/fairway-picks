@@ -258,7 +258,7 @@ export async function fetchLiveScores(): Promise<GolferScore[]> {
       if (status === 'wd' && score === null) {
         const completedRounds = rounds.filter((r: number | null): r is number => r !== null)
         if (completedRounds.length > 0) {
-          score = completedRounds.reduce((a, b) => a + b, 0) - PAR * completedRounds.length
+          score = completedRounds.reduce((a: number, b: number) => a + b, 0) - PAR * completedRounds.length
         }
       }
 
