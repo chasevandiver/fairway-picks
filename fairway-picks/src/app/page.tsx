@@ -421,7 +421,7 @@ function ExpandablePlayerCard({
 
 // ─── Leaderboard Tab ──────────────────────────────────────────────────────────
 function LeaderboardTab({
-  tournament, standings, liveData, pickMap, loading, lastUpdated, onRefresh, money, flashMap
+  tournament, standings, liveData, pickMap, loading, lastUpdated, onRefresh, money, flashMap, isMasters
 }: {
   tournament: Tournament | null
   standings: PlayerStanding[]
@@ -432,6 +432,7 @@ function LeaderboardTab({
   onRefresh: () => void
   money: Record<string, number>
   flashMap: Record<string, 'up' | 'down'>
+  isMasters: boolean
 }) {
   const safeData = Array.isArray(liveData) ? liveData : []
   const par = safeData[0]?.par ?? 72
@@ -445,23 +446,63 @@ function LeaderboardTab({
 
   return (
     <div>
-      <div className="page-header">
-        <div>
-          <div className="page-title">{tournament.name}</div>
-          <div className="page-sub">{tournament.course} · {tournament.date} · Par {par}</div>
+      {isMasters ? (
+        /* ── Masters Tournament Banner ── */
+        <div style={{
+          background: '#006747',
+          borderRadius: 12,
+          padding: '20px 28px',
+          marginBottom: 24,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: 12,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
+            <span style={{ fontSize: 40, lineHeight: 1 }}>⛳</span>
+            <div>
+              <div style={{ fontFamily: "'Pinyon Script', cursive", fontSize: 46, color: '#FFCB05', lineHeight: 1.05 }}>
+                The Masters
+              </div>
+              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.6)', marginTop: 4 }}>
+                Augusta National Golf Club · {tournament.course.includes('Augusta') ? tournament.date : `Par ${par} · ${tournament.date}`}
+              </div>
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {lastUpdated && (
+              <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: 'rgba(255,255,255,0.5)', marginRight: 8 }}>
+                {lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </span>
+            )}
+            <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#FFCB05', boxShadow: '0 0 8px rgba(255,203,5,0.7)', flexShrink: 0 }} />
+            <span style={{ fontFamily: 'DM Mono', fontSize: 12, color: '#FFCB05', letterSpacing: '0.06em', textTransform: 'uppercase' }}>Live</span>
+            <button className="refresh-btn" onClick={onRefresh} disabled={loading} style={{ marginLeft: 8, borderColor: 'rgba(255,255,255,0.25)', color: 'rgba(255,255,255,0.7)' }}>
+              <span className={loading ? 'spin' : ''}>↻</span>
+              {loading ? 'Refreshing…' : 'Refresh'}
+            </button>
+          </div>
         </div>
-        <div className="flex gap-12" style={{ alignItems: 'center' }}>
-          {lastUpdated && (
-            <span style={{ fontFamily: 'DM Mono', fontSize: 12, color: 'var(--text-dim)' }}>
-              Updated {lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-            </span>
-          )}
-          <button className="refresh-btn" onClick={onRefresh} disabled={loading}>
-            <span className={loading ? 'spin' : ''}>↻</span>
-            {loading ? 'Refreshing…' : 'Refresh'}
-          </button>
+      ) : (
+        <div className="page-header">
+          <div>
+            <div className="page-title">{tournament.name}</div>
+            <div className="page-sub">{tournament.course} · {tournament.date} · Par {par}</div>
+          </div>
+          <div className="flex gap-12" style={{ alignItems: 'center' }}>
+            {lastUpdated && (
+              <span style={{ fontFamily: 'DM Mono', fontSize: 12, color: 'var(--text-dim)' }}>
+                Updated {lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </span>
+            )}
+            <button className="refresh-btn" onClick={onRefresh} disabled={loading}>
+              <span className={loading ? 'spin' : ''}>↻</span>
+              {loading ? 'Refreshing…' : 'Refresh'}
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* ── Tournament Progress Bar ── */}
       {(() => {
@@ -545,10 +586,12 @@ function LeaderboardTab({
       {liveData.length > 0 && (
         <div className="card">
           <div className="card-header">
-            <div className="card-title">Tour Leaderboard</div>
+            <div className="card-title">{isMasters ? 'Masters Tournament Leaderboard' : 'Tour Leaderboard'}</div>
             <div className="flex gap-8" style={{ alignItems: 'center' }}>
               <div className="live-dot" />
-              <span style={{ fontFamily: 'DM Mono', fontSize: 12, color: 'var(--text-dim)' }}>ESPN · Live</span>
+              <span style={{ fontFamily: 'DM Mono', fontSize: 12, color: 'var(--text-dim)' }}>
+                {isMasters ? 'Augusta National · Live' : 'ESPN · Live'}
+              </span>
             </div>
           </div>
           <div style={{ overflowX: 'auto' }}>
@@ -679,11 +722,12 @@ function ScorecardRow({ g, par }: { g: any; par: number }) {
   )
 }
 
-function PicksTab({ standings, pickMap, liveData, tournament }: {
+function PicksTab({ standings, pickMap, liveData, tournament, isMasters }: {
   standings: PlayerStanding[]
   pickMap: Record<string, string[]>
   liveData: GolferScore[]
   tournament: Tournament | null
+  isMasters: boolean
 }) {
   if (!tournament) return <div className="empty-state card"><div className="empty-icon">📋</div><p>No active tournament.</p></div>
   if (Object.keys(pickMap).length === 0) return (
@@ -702,10 +746,37 @@ function PicksTab({ standings, pickMap, liveData, tournament }: {
 
   return (
     <div>
-      <div className="page-header">
-        <div className="page-title">Picks · {tournament.name}</div>
-        <div style={{ fontSize: 12, color: 'var(--text-dim)', fontFamily: 'DM Mono' }}>Par {par} · *CUT/WD rounds use avg of R1+R2</div>
-      </div>
+      {isMasters ? (
+        <div style={{
+          background: '#006747',
+          borderRadius: 12,
+          padding: '16px 24px',
+          marginBottom: 24,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: 8,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+            <span style={{ fontSize: 28, lineHeight: 1 }}>🏌️</span>
+            <div>
+              <div style={{ fontFamily: "'Pinyon Script', cursive", fontSize: 32, color: '#FFCB05', lineHeight: 1.1 }}>My Picks</div>
+              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.55)', marginTop: 2 }}>
+                The Masters · Augusta National · Par {par}
+              </div>
+            </div>
+          </div>
+          <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: 'rgba(255,255,255,0.5)', letterSpacing: '0.06em' }}>
+            *CUT/WD rounds use avg of R1+R2
+          </div>
+        </div>
+      ) : (
+        <div className="page-header">
+          <div className="page-title">Picks · {tournament.name}</div>
+          <div style={{ fontSize: 12, color: 'var(--text-dim)', fontFamily: 'DM Mono' }}>Par {par} · *CUT/WD rounds use avg of R1+R2</div>
+        </div>
+      )}
 
       {PLAYERS.map((player) => {
         const playerPicks = pickMap[player] || []
@@ -749,21 +820,21 @@ function PicksTab({ standings, pickMap, liveData, tournament }: {
 
         return (
           <div key={player} className="card mb-24">
-            <div className="card-header" style={{ background: 'var(--surface2)' }}>
+            <div className="card-header" style={isMasters ? { background: '#006747', borderBottom: '1px solid rgba(255,255,255,0.15)' } : { background: 'var(--surface2)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div className="user-avatar" style={{ width: 36, height: 36, fontSize: 14 }}>{player[0]}</div>
+                <div className="user-avatar" style={isMasters ? { width: 36, height: 36, fontSize: 14, background: 'rgba(255,203,5,0.2)', borderColor: 'rgba(255,203,5,0.45)', color: '#FFCB05' } : { width: 36, height: 36, fontSize: 14 }}>{player[0]}</div>
                 <div>
-                  <div style={{ fontWeight: 700, fontSize: 16 }}>{player}</div>
-                  <div style={{ fontSize: 12, color: 'var(--text-dim)', fontFamily: 'DM Mono' }}>
+                  <div style={{ fontWeight: 700, fontSize: 16, color: isMasters ? '#ffffff' : 'var(--text)' }}>{player}</div>
+                  <div style={{ fontSize: 12, fontFamily: 'DM Mono', color: isMasters ? 'rgba(255,255,255,0.55)' : 'var(--text-dim)' }}>
                     {playerPicks.length} golfers picked
                   </div>
                 </div>
               </div>
               <div style={{ textAlign: 'right' }}>
-                <div style={{ fontFamily: 'DM Mono', fontSize: 24, fontWeight: 600 }} className={`score ${scoreClass(s?.totalScore)}`}>
+                <div style={{ fontFamily: 'DM Mono', fontSize: 24, fontWeight: 600, color: isMasters ? (s && s.totalScore < 0 ? '#ff9999' : s && s.totalScore > 0 ? '#ffdddd' : 'rgba(255,255,255,0.7)') : undefined }} className={isMasters ? '' : `score ${scoreClass(s?.totalScore)}`}>
                   {s ? toRelScore(s.totalScore) : '—'}
                 </div>
-                <div style={{ fontSize: 11, color: 'var(--text-dim)', fontFamily: 'DM Mono' }}>
+                <div style={{ fontSize: 11, fontFamily: 'DM Mono', color: isMasters ? 'rgba(255,255,255,0.5)' : 'var(--text-dim)' }}>
                   {grandTotalStrokes > 0 ? `${grandTotalStrokes} strokes` : ''}
                 </div>
               </div>
@@ -772,16 +843,16 @@ function PicksTab({ standings, pickMap, liveData, tournament }: {
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
-                  <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                    <th style={{ padding: '8px 18px', textAlign: 'left', fontFamily: 'DM Mono', fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-dim)', fontWeight: 500 }}>
+                  <tr style={isMasters ? { background: '#004d35', borderBottom: 'none' } : { borderBottom: '1px solid var(--border)' }}>
+                    <th style={{ padding: '8px 18px', textAlign: 'left', fontFamily: 'DM Mono', fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: isMasters ? 'rgba(255,255,255,0.75)' : 'var(--text-dim)', fontWeight: 500 }}>
                       Golfer
                     </th>
                     {ROUND_LABELS.map((r) => (
-                      <th key={r} style={{ padding: '8px 10px', textAlign: 'center', fontFamily: 'DM Mono', fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-dim)', fontWeight: 500, borderLeft: '1px solid var(--border)', minWidth: 60 }}>
+                      <th key={r} style={{ padding: '8px 10px', textAlign: 'center', fontFamily: 'DM Mono', fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: isMasters ? 'rgba(255,255,255,0.75)' : 'var(--text-dim)', fontWeight: 500, borderLeft: isMasters ? '1px solid rgba(255,255,255,0.12)' : '1px solid var(--border)', minWidth: 60 }}>
                         {r}
                       </th>
                     ))}
-                    <th style={{ padding: '8px 14px', textAlign: 'center', fontFamily: 'DM Mono', fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-dim)', fontWeight: 500, borderLeft: '1px solid var(--border-bright)', minWidth: 70 }}>
+                    <th style={{ padding: '8px 14px', textAlign: 'center', fontFamily: 'DM Mono', fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: isMasters ? 'rgba(255,255,255,0.75)' : 'var(--text-dim)', fontWeight: 500, borderLeft: isMasters ? '1px solid rgba(255,255,255,0.2)' : '1px solid var(--border-bright)', minWidth: 70 }}>
                       Total
                     </th>
                   </tr>
@@ -3077,8 +3148,8 @@ export default function App() {
           <SkeletonScreen />
         ) : (
           <div key={tabKey} className="tab-content">
-            {tab === 'live'    && <LeaderboardTab tournament={tournament} standings={standings} liveData={liveData} pickMap={pickMap} loading={loading} lastUpdated={lastUpdated} onRefresh={fetchScores} money={weekMoney} flashMap={flashMap} />}
-            {tab === 'picks'   && <PicksTab standings={standings} pickMap={pickMap} liveData={liveData} tournament={tournament} />}
+            {tab === 'live'    && <LeaderboardTab tournament={tournament} standings={standings} liveData={liveData} pickMap={pickMap} loading={loading} lastUpdated={lastUpdated} onRefresh={fetchScores} money={weekMoney} flashMap={flashMap} isMasters={isMasters} />}
+            {tab === 'picks'   && <PicksTab standings={standings} pickMap={pickMap} liveData={liveData} tournament={tournament} isMasters={isMasters} />}
             {tab === 'money'   && <MoneyTab seasonMoney={seasonMoney} weekMoney={weekMoney} tournament={tournament} history={history} />}
             {tab === 'draft'   && <DraftTab tournament={tournament} picks={picks} liveData={liveData} currentPlayer={currentPlayer} isAdmin={isAdmin} onPickMade={handlePickMade} />}
             {tab === 'history' && <HistoryTab history={history} golferHistory={golferHistory} isAdmin={isAdmin} onDeleteTournament={handleDeleteTournament} onEditResult={handleEditResult} onDeleteResult={handleDeleteResult} />}
