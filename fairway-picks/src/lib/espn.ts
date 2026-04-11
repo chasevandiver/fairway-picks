@@ -34,9 +34,11 @@ export async function fetchLiveScores(): Promise<GolferScore[]> {
     // This is more reliable than counting completed rounds because ESPN sets it as soon
     // as a new round begins, before any golfer has finished a hole.
     const competitionPeriod = competitions[0]?.status?.period
-    const competitionRound = typeof competitionPeriod === 'number'
-      ? competitionPeriod - 1   // convert to 0-based
-      : parseInt(competitionPeriod ?? '')  // fallback string parse
+    // Always subtract 1 to convert to 0-based, whether ESPN gives us a number or a string.
+    const competitionPeriodNum = typeof competitionPeriod === 'number'
+      ? competitionPeriod
+      : parseInt(String(competitionPeriod ?? ''))
+    const competitionRound = isNaN(competitionPeriodNum) ? -1 : competitionPeriodNum - 1
 
     // ── Step 1: Parse all round strokes first (without PAR dependency) ──
     // A completed 18-hole round: linescore.value >= 60 AND nested linescores.length === 18
@@ -218,10 +220,25 @@ export async function fetchLiveScores(): Promise<GolferScore[]> {
         if (lDisplay === 'WD' || lDisplay === 'WITHDRAWN') return 'wd'
       }
 
+      // Check ESPN's top-level active flag.
+      // ESPN sets c.active = false for cut/WD competitors; players who made the cut
+      // and are simply waiting to tee off in R3 remain c.active = true.
+      // Guard: only apply during the weekend and only when the competitor completed
+      // R1+R2 but has no R3 data (avoids mis-flagging players who finished R3 for the day,
+      // whose rounds[2] would be non-null).
+      if (c.active === false && currentRound >= 2) {
+        const rounds = parsedRoundsOnly[idx]
+        if (rounds[0] !== null && rounds[1] !== null && rounds[2] === null) {
+          return 'cut'
+        }
+      }
+
       // Fallback: once R3 has started, a golfer who completed R1+R2 but has NO period-3
       // linescore entry at all is cut. Active players who haven't teed off yet still appear
       // in the ESPN feed with a placeholder {period:3,...} entry (tee time). Cut players
       // simply stop at period 2 — no period-3 entry exists for them.
+      // Note: some tournaments/ESPN versions DO include a period-3 entry for cut players
+      // (zero-hole placeholder); in that case this fallback won't fire but c.active above will.
       if (currentRound >= 2) {
         const rounds = parsedRoundsOnly[idx]
         const completedR1R2 = rounds[0] !== null && rounds[1] !== null
