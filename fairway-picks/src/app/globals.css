@@ -1288,3 +1288,7 @@ body {
   background: rgba(0,103,71,0.08);
   color: #006747;
 }
+
+/* ── Score colors (Masters: red = under par, per traditional scoreboard) ── */
+[data-theme="masters"] .under { color: var(--red); }
+[data-theme="masters"] .over  { color: var(--green); }
