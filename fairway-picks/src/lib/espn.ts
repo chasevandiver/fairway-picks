@@ -233,17 +233,32 @@ export async function fetchLiveScores(): Promise<GolferScore[]> {
         }
       }
 
-      // Fallback: once R3 has started, a golfer who completed R1+R2 but has NO period-3
-      // linescore entry at all is cut. Active players who haven't teed off yet still appear
-      // in the ESPN feed with a placeholder {period:3,...} entry (tee time). Cut players
-      // simply stop at period 2 — no period-3 entry exists for them.
-      // Note: some tournaments/ESPN versions DO include a period-3 entry for cut players
-      // (zero-hole placeholder); in that case this fallback won't fire but c.active above will.
+      // Fallback: once R3 has started, use the period-3 linescore entry to detect cut players.
+      //
+      // PGA Tour behavior: cut players have NO period-3 entry at all.
+      // Masters behavior: ESPN gives EVERY competitor a period-3 placeholder entry (0 holes).
+      //   The distinguishing signal is whether a tee-time date string appears as the 7th stat
+      //   in r3Entry.statistics.categories[0].stats:
+      //     - Active/waiting players: stats[6].displayValue is a date string like
+      //       "Sat Apr 11 14:50:00 PDT 2026"
+      //     - Cut players: only 6 zeroed stats, no tee-time entry
       if (currentRound >= 2) {
         const rounds = parsedRoundsOnly[idx]
         const completedR1R2 = rounds[0] !== null && rounds[1] !== null
-        const hasR3Entry = lines.some((l: any) => l.period >= 3)
-        if (completedR1R2 && !hasR3Entry) return 'cut'
+        if (completedR1R2) {
+          const r3Entry = lines.find((l: any) => l.period >= 3)
+          if (!r3Entry) return 'cut'  // PGA Tour: no period-3 entry → cut
+          const r3Holes = (r3Entry.linescores || []).length
+          if (r3Holes === 0) {
+            // Zero holes played in R3 — distinguish waiting vs cut via tee-time stat
+            const stats: any[] = r3Entry.statistics?.categories?.[0]?.stats || []
+            const hasTeeTime = stats.some((s: any) =>
+              /[A-Za-z].*\d{4}/.test(s.displayValue || '')
+            )
+            if (!hasTeeTime) return 'cut'  // Masters: no tee time → cut
+          }
+          // r3Holes > 0 → actively playing R3 → fall through to active
+        }
       }
 
       return 'active'
