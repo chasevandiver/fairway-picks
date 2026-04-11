@@ -30,6 +30,14 @@ export async function fetchLiveScores(): Promise<GolferScore[]> {
     const raw = competitions[0]?.competitors || []
     if (raw.length < 5) return MOCK_DATA
 
+    // Competition-level current round (1-indexed period from ESPN tournament status).
+    // This is more reliable than counting completed rounds because ESPN sets it as soon
+    // as a new round begins, before any golfer has finished a hole.
+    const competitionPeriod = competitions[0]?.status?.period
+    const competitionRound = typeof competitionPeriod === 'number'
+      ? competitionPeriod - 1   // convert to 0-based
+      : parseInt(competitionPeriod ?? '')  // fallback string parse
+
     // ── Step 1: Parse all round strokes first (without PAR dependency) ──
     // A completed 18-hole round: linescore.value >= 60 AND nested linescores.length === 18
     // An in-progress round: nested linescores.length < 18
@@ -139,6 +147,11 @@ export async function fetchLiveScores(): Promise<GolferScore[]> {
         break
       }
     }
+    // If ESPN's competition-level period is available and ahead of what round data shows
+    // (e.g. R3 just started, no holes completed yet), trust the competition status.
+    if (!isNaN(competitionRound) && competitionRound >= 0 && competitionRound > currentRound) {
+      currentRound = competitionRound
+    }
     const isWeekend = currentRound >= 2
 
     // ── Step 4.5: Fix today for golfers who haven't started the current round ──
@@ -182,28 +195,33 @@ export async function fetchLiveScores(): Promise<GolferScore[]> {
       if (typeName.includes('cut')) return 'cut'
       if (typeName.includes('wd') || typeName.includes('withdraw')) return 'wd'
 
+      // Check status type abbreviation (e.g. "CUT", "MC", "WD")
+      const abbrev = (c.status?.type?.abbreviation || '').toUpperCase()
+      if (abbrev === 'CUT' || abbrev === 'MC') return 'cut'
+      if (abbrev === 'WD') return 'wd'
+
       // Check shortDetail / detail / description
       const shortDetail = (c.status?.type?.shortDetail || c.status?.type?.detail || c.status?.type?.description || '').toUpperCase()
-      if (shortDetail === 'CUT') return 'cut'
+      if (shortDetail === 'CUT' || shortDetail === 'MC' || shortDetail === 'MISSED CUT') return 'cut'
       if (shortDetail === 'WD' || shortDetail === 'WITHDRAWN') return 'wd'
 
       // Check status displayValue
       const displayValue = (c.status?.displayValue || '').toUpperCase()
-      if (displayValue === 'CUT') return 'cut'
+      if (displayValue === 'CUT' || displayValue === 'MC' || displayValue === 'MISSED CUT') return 'cut'
       if (displayValue === 'WD' || displayValue === 'WITHDRAWN') return 'wd'
 
       // Check linescores displayValue
       const lines: any[] = c.linescores || []
       for (const l of lines) {
         const lDisplay = (l.displayValue || '').trim().toUpperCase()
-        if (lDisplay === 'CUT') return 'cut'
+        if (lDisplay === 'CUT' || lDisplay === 'MC') return 'cut'
         if (lDisplay === 'WD' || lDisplay === 'WITHDRAWN') return 'wd'
       }
 
-      // Key ESPN API signal: cut players have NO period 3/4 linescore entries at all.
-      // Active players who haven't teed off in R3 still have a placeholder {period:3,...}
-      // entry with a tee time. Cut players simply stop at period 2.
-      // So: once R3 has started, a player who completed R1+R2 but has no period 3 entry is cut.
+      // Fallback: once R3 has started, a golfer who completed R1+R2 but has NO period-3
+      // linescore entry at all is cut. Active players who haven't teed off yet still appear
+      // in the ESPN feed with a placeholder {period:3,...} entry (tee time). Cut players
+      // simply stop at period 2 — no period-3 entry exists for them.
       if (currentRound >= 2) {
         const rounds = parsedRoundsOnly[idx]
         const completedR1R2 = rounds[0] !== null && rounds[1] !== null
