@@ -466,13 +466,10 @@ function LeaderboardTab({
       {/* ── Tournament Progress Bar ── */}
       {(() => {
         const allFinished = liveData.length > 0 && liveData.filter(g => g.status === 'active').every(g => g.thru === 'F')
-        const roundsPlayed = liveData.length > 0
-          ? Math.max(...liveData.map(g => {
-              const r = g.rounds || []
-              return r.filter((v: any) => v !== null).length
-            }))
-          : 0
-        const currentRound = allFinished ? Math.min(roundsPlayed, 4) : Math.max(roundsPlayed, 1)
+        // Use getCurrentRound (0-based) which detects mid-round golfers via numeric thru,
+        // so R3 shows as active as soon as the first group tees off — not only after someone finishes.
+        const currentRoundIdx = getCurrentRound(liveData)  // 0-based: 0=R1, 1=R2, 2=R3, 3=R4
+        const currentRound = currentRoundIdx >= 0 ? currentRoundIdx + 1 : 1
         const steps = [
           { label: 'Round 1', short: 'R1' },
           { label: 'Round 2', short: 'R2' },
