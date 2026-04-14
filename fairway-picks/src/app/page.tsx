@@ -2948,6 +2948,11 @@ export default function App() {
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+  const PROFILE_KEY = 'fore-picks-profile'
+  const cachedProfile = typeof window !== 'undefined'
+    ? (() => { try { return JSON.parse(localStorage.getItem(PROFILE_KEY) || 'null') } catch { return null } })()
+    : null
+
   const [currentPlayer, setCurrentPlayer] = useState<string | null>(cachedProfile?.display_name ?? null)
   const [tab, setTab] = useState('live')
   const [tournament, setTournament] = useState<Tournament | null>(null)
@@ -2961,11 +2966,6 @@ export default function App() {
   const [loading, setLoading] = useState(false)
   const [dataLoaded, setDataLoaded] = useState(false)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
-  const PROFILE_KEY = 'fore-picks-profile'
-  const cachedProfile = typeof window !== 'undefined'
-    ? (() => { try { return JSON.parse(localStorage.getItem(PROFILE_KEY) || 'null') } catch { return null } })()
-    : null
-
   const [bootstrapped, setBootstrapped] = useState(!!cachedProfile)
   const [tabKey, setTabKey] = useState(0)
   const [user, setUser] = useState<{ id: string; email: string } | null>(null)
