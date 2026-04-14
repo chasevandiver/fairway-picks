@@ -42,13 +42,14 @@ export async function POST(request: NextRequest) {
     }
   )
 
-  // Insert profile — RLS policy: auth.uid() = id
-  const { error: profileErr } = await supabase.from('profiles').insert({
+  // Upsert profile — handles both first-time setup and re-submission
+  // (a profile row may already exist if the user retried the flow)
+  const { error: profileErr } = await supabase.from('profiles').upsert({
     id: user.id,
     display_name,
     email: user.email ?? '',
     is_admin: ADMIN_NAMES.includes(display_name),
-  })
+  }, { onConflict: 'id' })
 
   if (profileErr) {
     return NextResponse.json({ error: profileErr.message }, { status: 500 })
