@@ -1,39 +1,23 @@
-import { createServerClient } from '@supabase/ssr'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
+// With localStorage-based sessions (implicit flow via @supabase/supabase-js),
+// server-side code exchange via @supabase/ssr would store the session in cookies
+// which the browser client never reads. Instead, we pass the code back to the
+// client via a redirect so the browser can call exchangeCodeForSession() itself
+// and store the result in localStorage.
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url)
   const code = searchParams.get('code')
   const next = searchParams.get('next') ?? '/'
 
   if (code) {
-    // Build the redirect response first so we can attach cookies to it directly.
-    // Using cookies() from next/headers + NextResponse.redirect() drops the session
-    // cookies because they're set on the cookie store but not on the response headers.
-    const response = NextResponse.redirect(`${origin}${next}`)
-
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll() {
-            return request.cookies.getAll()
-          },
-          setAll(cookiesToSet: { name: string; value: string; options?: Record<string, unknown> }[]) {
-            cookiesToSet.forEach(({ name, value, options }) =>
-              response.cookies.set(name, value, options as any)
-            )
-          },
-        },
-      }
-    )
-
-    const { error } = await supabase.auth.exchangeCodeForSession(code)
-    if (!error) {
-      return response
-    }
+    // Redirect to the root with the code in the query string.
+    // The client-side useEffect in page.tsx detects ?code= and calls
+    // supabase.auth.exchangeCodeForSession(code), storing the session in localStorage.
+    const url = new URL(next, origin)
+    url.searchParams.set('code', code)
+    return NextResponse.redirect(url.toString())
   }
 
   return NextResponse.redirect(`${origin}/auth?error=auth_failed`)

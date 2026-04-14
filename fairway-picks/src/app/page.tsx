@@ -2933,11 +2933,19 @@ export default function App() {
   const supabase = createClient()
   const router = useRouter()
 
-  // With implicit flow the magic link lands at /#access_token=...
-  // detectSessionInUrl:true handles the token automatically; we just clean the hash.
+  // Handle both auth flows:
+  // - Implicit flow: /#access_token=... (detectSessionInUrl:true handles automatically, just clean hash)
+  // - PKCE flow: /?code=... (flowType:'implicit' may be ignored in supabase-js v2.44+, still sends PKCE)
   useEffect(() => {
     if (window.location.hash.includes('access_token')) {
       window.history.replaceState(null, '', window.location.pathname)
+      return
+    }
+    const code = new URLSearchParams(window.location.search).get('code')
+    if (code) {
+      supabase.auth.exchangeCodeForSession(code).then(() => {
+        window.history.replaceState(null, '', window.location.pathname)
+      })
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
