@@ -27,9 +27,9 @@ export default function AuthPage() {
 
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: {
-        emailRedirectTo: `${location.origin}/auth/callback`,
-      },
+      // No emailRedirectTo — sends a code-only email with no magic link.
+      // Magic links get prefetched by email clients (Gmail, Apple Mail),
+      // which consumes the token before the user can type it.
     })
 
     if (error) {
@@ -111,9 +111,12 @@ export default function AuthPage() {
             <form onSubmit={handleOtp}>
               <input
                 type="text"
-                inputMode="numeric"
+                inputMode="text"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
                 value={otp}
-                onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                onChange={(e) => setOtp(e.target.value.trim())}
                 placeholder="123456"
                 required
                 style={{
@@ -124,7 +127,7 @@ export default function AuthPage() {
                 }}
               />
               {otpError && <p style={{ color: 'var(--red)', fontSize: 13, marginBottom: 12 }}>{otpError}</p>}
-              <button type="submit" className="btn btn-primary" style={{ width: '100%' }} disabled={otpLoading || otp.length < 6}>
+              <button type="submit" className="btn btn-primary" style={{ width: '100%' }} disabled={otpLoading || otp.length < 4}>
                 {otpLoading ? 'Verifying…' : 'Sign In'}
               </button>
             </form>
