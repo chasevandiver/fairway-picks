@@ -1548,7 +1548,7 @@ function DraftTab({
 function AdminTab({
   tournament, standings, weekMoney, picks, liveData,
   leagueId, inviteCode, leagueRules,
-  onSetupTournament, onFinalize, onClearTournament, onClearPicks, onSwapGolfer, onSaveRules
+  onSetupTournament, onFinalize, onClearTournament, onClearPicks, onSwapGolfer, onSaveRules, onSaveInviteCode
 }: {
   tournament: Tournament | null
   standings: PlayerStanding[]
@@ -1564,6 +1564,7 @@ function AdminTab({
   onClearPicks: () => Promise<void>
   onSwapGolfer: (pickId: string, newGolferName: string) => Promise<void>
   onSaveRules: (rules: Partial<LeagueRules>) => Promise<void>
+  onSaveInviteCode: (code: string) => Promise<void>
 }) {
   const [selectedEvent, setSelectedEvent] = useState('')
   const [participants, setParticipants] = useState<string[]>(PLAYERS)
@@ -1578,6 +1579,19 @@ function AdminTab({
   const [rTop3, setRTop3] = useState(leagueRules.scoring.top3_bonus)
   const [rPicksPerPlayer, setRPicksPerPlayer] = useState(leagueRules.picks_per_player)
   const [savingRules, setSavingRules] = useState(false)
+  const [codeInput, setCodeInput] = useState(inviteCode)
+  const [savingCode, setSavingCode] = useState(false)
+  const [editingCode, setEditingCode] = useState(!inviteCode)
+
+  const handleSaveCode = async () => {
+    if (!codeInput.trim()) return
+    setSavingCode(true)
+    await onSaveInviteCode(codeInput)
+    setEditingCode(false)
+    setSavingCode(false)
+    setMsg('✅ Invite code saved!')
+    setTimeout(() => setMsg(''), 3000)
+  }
 
   const copyToClipboard = (text: string, field: 'invite' | 'id') => {
     navigator.clipboard.writeText(text).then(() => {
@@ -1675,17 +1689,48 @@ function AdminTab({
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontFamily: 'DM Mono', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-dim)', marginBottom: 4 }}>Invite Code</div>
-                <div style={{ fontFamily: 'DM Mono', fontSize: 22, fontWeight: 700, color: 'var(--green)', letterSpacing: '0.12em' }}>
-                  {inviteCode || '—'}
-                </div>
+                {editingCode ? (
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <input
+                      type="text"
+                      value={codeInput}
+                      onChange={e => setCodeInput(e.target.value.toUpperCase())}
+                      placeholder="e.g. EAGLE1"
+                      style={{
+                        background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8,
+                        padding: '8px 12px', color: 'var(--text)', fontSize: 18, fontFamily: 'DM Mono',
+                        letterSpacing: '0.15em', outline: 'none', width: 160,
+                      }}
+                    />
+                    <button className="btn btn-green btn-sm" onClick={handleSaveCode} disabled={savingCode || !codeInput.trim()}>
+                      {savingCode ? 'Saving…' : 'Save'}
+                    </button>
+                    {inviteCode && (
+                      <button className="btn btn-outline btn-sm" onClick={() => { setCodeInput(inviteCode); setEditingCode(false) }}>
+                        Cancel
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <div style={{ fontFamily: 'DM Mono', fontSize: 22, fontWeight: 700, color: 'var(--green)', letterSpacing: '0.12em' }}>
+                      {inviteCode || '—'}
+                    </div>
+                    <button className="btn btn-outline btn-sm" onClick={() => setEditingCode(true)} style={{ fontSize: 11 }}>
+                      Edit
+                    </button>
+                  </div>
+                )}
               </div>
-              <button
-                className="btn btn-outline btn-sm"
-                onClick={() => inviteCode && copyToClipboard(inviteCode, 'invite')}
-                disabled={!inviteCode}
-              >
-                {copiedField === 'invite' ? '✓ Copied!' : '📋 Copy Code'}
-              </button>
+              {!editingCode && (
+                <button
+                  className="btn btn-outline btn-sm"
+                  onClick={() => inviteCode && copyToClipboard(inviteCode, 'invite')}
+                  disabled={!inviteCode}
+                >
+                  {copiedField === 'invite' ? '✓ Copied!' : '📋 Copy Code'}
+                </button>
+              )}
             </div>
             <div className="divider" />
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
@@ -3385,25 +3430,20 @@ export default function App() {
       if (session?.user) {
         const u = { id: session.user.id, email: session.user.email ?? '' }
         setUser(u)
-        // Fetch profile + league membership in parallel
-        const [{ data }, { data: membership }] = await Promise.all([
-          supabase.from('profiles').select('display_name, is_admin').eq('id', u.id).single(),
-          supabase.from('league_members').select('league_id, leagues(name, rules)').eq('user_id', u.id).limit(1).maybeSingle(),
-        ])
-        if (data) {
+        // Use server-side init route — bypasses RLS, no auth round-trip
+        const res = await fetch(`/api/init-user?user_id=${u.id}`).then(r => r.json()).catch(() => null)
+        const { profile, membership } = res ?? {}
+        if (profile) {
           profileLoadedRef.current = true
-          setUserProfile(data)
-          setCurrentPlayer(data.display_name)
+          setUserProfile(profile)
+          setCurrentPlayer(profile.display_name)
           if (membership) {
             setLeagueId(membership.league_id)
             const l = membership.leagues as any
             if (l) { setLeagueName(l.name); setLeagueRules(mergeRules(l.rules ?? {})) }
-          } else {
-            // Has profile but no league — send to league creation
-            setBootstrapped(true)
-            router.push('/create')
-            return
           }
+          // If no membership, still show the app with the default founding league
+          // (rather than routing to /create, which breaks for existing users)
         }
         // If no profile: bootstrapped fires below and SetupProfileScreen is shown
       }
@@ -3421,15 +3461,13 @@ export default function App() {
       if (session?.user) {
         const u = { id: session.user.id, email: session.user.email ?? '' }
         setUser(u)
-        // Fetch profile + league membership in parallel
-        const [{ data }, { data: membership }] = await Promise.all([
-          supabase.from('profiles').select('display_name, is_admin').eq('id', u.id).single(),
-          supabase.from('league_members').select('league_id, leagues(name, rules)').eq('user_id', u.id).limit(1).maybeSingle(),
-        ])
-        if (data) {
+        // Use server-side init route — bypasses RLS
+        const res = await fetch(`/api/init-user?user_id=${u.id}`).then(r => r.json()).catch(() => null)
+        const { profile, membership } = res ?? {}
+        if (profile) {
           profileLoadedRef.current = true
-          setUserProfile(data)
-          setCurrentPlayer(data.display_name)
+          setUserProfile(profile)
+          setCurrentPlayer(profile.display_name)
           if (membership) {
             setLeagueId(membership.league_id)
             const l = membership.leagues as any
@@ -3458,44 +3496,26 @@ export default function App() {
 
   // ── Fetch DB data when logged in (scoped to current league) ──
   const loadData = useCallback(async () => {
-    const [{ data: t }, { data: sm }, { data: leagueRow }] = await Promise.all([
-      supabase.from('tournaments').select('*').eq('status', 'active').eq('league_id', leagueId).maybeSingle(),
-      supabase.from('season_money').select('*'),
-      supabase.from('leagues').select('invite_code').eq('id', leagueId).maybeSingle(),
-    ])
-    if (sm) setSeasonMoney(sm)
-    if (leagueRow) setInviteCode(leagueRow.invite_code ?? '')
+    // Single API call — service role on the server, no auth round-trip needed for reads
+    const leagueDataRes = await fetch(`/api/league-data?league_id=${leagueId}`)
+      .then(r => r.json()).catch(() => null)
 
-    // Only load picks for the active tournament
-    if (t) {
-      setTournament(t)
-      const { data: p } = await supabase
-        .from('picks').select('*')
-        .eq('tournament_id', t.id)
-        .order('pick_order')
-      if (p) setPicks(p)
-      else setPicks([])
-    } else {
-      setTournament(null)
-      setPicks([])
-    }
+    if (leagueDataRes) {
+      const { activeTournament, seasonMoney: sm, results, golferResults, picks: p, inviteCode: ic } = leagueDataRes
+      if (ic != null) setInviteCode(ic)
 
-    // Load history: results scoped to this league's tournaments
-    const { data: leagueTournaments } = await supabase
-      .from('tournaments')
-      .select('id')
-      .eq('league_id', leagueId)
+      if (sm) setSeasonMoney(sm)
 
-    const tournamentIds = (leagueTournaments ?? []).map((t: any) => t.id)
+      if (activeTournament) {
+        setTournament(activeTournament)
+        setPicks(p ?? [])
+      } else {
+        setTournament(null)
+        setPicks([])
+      }
 
-    if (tournamentIds.length > 0) {
-      const { data: results } = await supabase
-        .from('results')
-        .select('*, tournaments(name, date, is_major)')
-        .in('tournament_id', tournamentIds)
-        .order('created_at', { ascending: false })
-
-      if (results) {
+      // Build history from results
+      if (results?.length > 0) {
         const grouped: Record<string, any> = {}
         for (const r of results) {
           const tid = r.tournament_id
@@ -3522,18 +3542,11 @@ export default function App() {
           if (r.rank === 1) grouped[tid].winner_player = r.player_name
         }
         setHistory(Object.values(grouped))
+      } else {
+        setHistory([])
       }
 
-      // Load golfer-level history
-      const { data: gr } = await supabase
-        .from('golfer_results')
-        .select('*, tournaments(name, date, is_major)')
-        .in('tournament_id', tournamentIds)
-        .order('created_at', { ascending: false })
-      if (gr) setGolferHistory(gr)
-    } else {
-      setHistory([])
-      setGolferHistory([])
+      setGolferHistory(golferResults ?? [])
     }
 
     setDataLoaded(true)
@@ -3775,6 +3788,18 @@ export default function App() {
     setLeagueRules(merged)
   }
 
+  const handleSaveInviteCode = async (code: string) => {
+    const session = await supabase.auth.getSession()
+    const token = session.data.session?.access_token
+    if (!token) return
+    const res = await fetch('/api/league-info', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ invite_code: code.trim().toUpperCase() }),
+    })
+    if (res.ok) setInviteCode(code.trim().toUpperCase())
+  }
+
   if (!bootstrapped) return <div className="loading-screen"><div className="spin" style={{ fontSize: 32 }}>⛳</div>Loading…</div>
   if (!user) return <LandingPage />
   if (!userProfile) return (
@@ -3853,7 +3878,7 @@ export default function App() {
             {tab === 'history' && <HistoryTab history={history} golferHistory={golferHistory} isAdmin={isAdmin} onDeleteTournament={handleDeleteTournament} onEditResult={handleEditResult} onDeleteResult={handleDeleteResult} />}
             {tab === 'stats'   && <StatsTab history={history} />}
             {tab === 'recap'   && <SeasonRecapTab history={history} golferHistory={golferHistory} seasonMoney={seasonMoney} />}
-            {tab === 'admin'   && isAdmin && <AdminTab tournament={tournament} standings={standings} weekMoney={weekMoney} picks={picks} liveData={liveData} leagueId={leagueId} inviteCode={inviteCode} leagueRules={leagueRules} onSetupTournament={handleSetupTournament} onFinalize={handleFinalize} onClearTournament={handleClearTournament} onClearPicks={handleClearPicks} onSwapGolfer={handleSwapGolfer} onSaveRules={handleSaveRules} />}
+            {tab === 'admin'   && isAdmin && <AdminTab tournament={tournament} standings={standings} weekMoney={weekMoney} picks={picks} liveData={liveData} leagueId={leagueId} inviteCode={inviteCode} leagueRules={leagueRules} onSetupTournament={handleSetupTournament} onFinalize={handleFinalize} onClearTournament={handleClearTournament} onClearPicks={handleClearPicks} onSwapGolfer={handleSwapGolfer} onSaveRules={handleSaveRules} onSaveInviteCode={handleSaveInviteCode} />}
           </div>
         )}
       </main>
