@@ -253,25 +253,35 @@ function SetupProfileScreen({
     const name = claimedName ?? displayName.trim()
     if (!name) { setLoading(false); return }
 
-    const isAdminUser = ['Eric', 'Chase'].includes(name)
-    const { error: profileErr } = await supabase.from('profiles').insert({
-      id: userId,
-      display_name: name,
-      email: userEmail,
-      is_admin: isAdminUser,
-    })
-    if (profileErr) { setError(profileErr.message); setLoading(false); return }
+    try {
+      const isAdminUser = ['Eric', 'Chase'].includes(name)
 
-    if (claimedName) {
-      await supabase.from('player_aliases').insert({ user_id: userId, player_name: claimedName })
-      // Auto-join the founding league for legacy players
-      await supabase.from('league_members').insert({
-        league_id: '00000000-0000-0000-0000-000000000001',
-        user_id: userId,
-      })
+      // Race DB insert against a 6s timeout — Supabase requests can hang if
+      // the project is paused or the table doesn't exist yet.
+      const timeout = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Request timed out. Check that your Supabase project is active and migrations have been run.')), 6000)
+      )
+
+      const { error: profileErr } = await Promise.race([
+        supabase.from('profiles').insert({ id: userId, display_name: name, email: userEmail, is_admin: isAdminUser }),
+        timeout,
+      ]) as any
+
+      if (profileErr) { setError(profileErr.message); return }
+
+      if (claimedName) {
+        await supabase.from('player_aliases').insert({ user_id: userId, player_name: claimedName })
+        await supabase.from('league_members').insert({
+          league_id: '00000000-0000-0000-0000-000000000001',
+          user_id: userId,
+        })
+      }
+      onComplete(name, isAdminUser)
+    } catch (err: any) {
+      setError(err.message || 'Something went wrong. Please try again.')
+    } finally {
+      setLoading(false)
     }
-    onComplete(name, isAdminUser)
-    setLoading(false)
   }
 
   return (
