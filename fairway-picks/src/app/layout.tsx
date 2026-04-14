@@ -2,8 +2,8 @@ import type { Metadata, Viewport } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'Fairway Picks · PGA Tour Pick\'em',
-  description: 'Golf pick\'em league tracker with live scores',
+  title: 'Fore Picks · PGA Tour Pick\'em',
+  description: 'Run your golf league your way. Custom rules, live PGA Tour scoring, snake draft.',
   icons: {
     apple: '/apple-touch-icon.png',
   },
