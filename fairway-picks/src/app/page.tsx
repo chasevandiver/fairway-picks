@@ -3503,44 +3503,33 @@ export default function App() {
 
   // ── Fetch DB data when logged in (scoped to current league) ──
   const loadData = useCallback(async () => {
-    const [{ data: t }, { data: sm }, leagueInfoRes] = await Promise.all([
-      supabase.from('tournaments').select('*').eq('status', 'active').eq('league_id', leagueId).maybeSingle(),
-      supabase.from('season_money').select('*'),
-      fetch('/api/league-info').then(r => r.json()).catch(() => null),
+    // Fetch invite code and all league data via server-side routes (service role, bypasses RLS)
+    const session = await supabase.auth.getSession()
+    const token = session.data.session?.access_token ?? ''
+    const authHeaders = { Authorization: `Bearer ${token}` }
+
+    const [leagueInfoRes, leagueDataRes] = await Promise.all([
+      fetch('/api/league-info', { headers: authHeaders }).then(r => r.json()).catch(() => null),
+      fetch(`/api/league-data?league_id=${leagueId}`, { headers: authHeaders }).then(r => r.json()).catch(() => null),
     ])
-    if (sm) setSeasonMoney(sm)
+
     if (leagueInfoRes?.invite_code != null) setInviteCode(leagueInfoRes.invite_code)
 
-    // Only load picks for the active tournament
-    if (t) {
-      setTournament(t)
-      const { data: p } = await supabase
-        .from('picks').select('*')
-        .eq('tournament_id', t.id)
-        .order('pick_order')
-      if (p) setPicks(p)
-      else setPicks([])
-    } else {
-      setTournament(null)
-      setPicks([])
-    }
+    if (leagueDataRes) {
+      const { activeTournament, seasonMoney: sm, results, golferResults, picks: p } = leagueDataRes
 
-    // Load history: results scoped to this league's tournaments
-    const { data: leagueTournaments } = await supabase
-      .from('tournaments')
-      .select('id')
-      .eq('league_id', leagueId)
+      if (sm) setSeasonMoney(sm)
 
-    const tournamentIds = (leagueTournaments ?? []).map((t: any) => t.id)
+      if (activeTournament) {
+        setTournament(activeTournament)
+        setPicks(p ?? [])
+      } else {
+        setTournament(null)
+        setPicks([])
+      }
 
-    if (tournamentIds.length > 0) {
-      const { data: results } = await supabase
-        .from('results')
-        .select('*, tournaments(name, date, is_major)')
-        .in('tournament_id', tournamentIds)
-        .order('created_at', { ascending: false })
-
-      if (results) {
+      // Build history from results
+      if (results?.length > 0) {
         const grouped: Record<string, any> = {}
         for (const r of results) {
           const tid = r.tournament_id
@@ -3567,18 +3556,11 @@ export default function App() {
           if (r.rank === 1) grouped[tid].winner_player = r.player_name
         }
         setHistory(Object.values(grouped))
+      } else {
+        setHistory([])
       }
 
-      // Load golfer-level history
-      const { data: gr } = await supabase
-        .from('golfer_results')
-        .select('*, tournaments(name, date, is_major)')
-        .in('tournament_id', tournamentIds)
-        .order('created_at', { ascending: false })
-      if (gr) setGolferHistory(gr)
-    } else {
-      setHistory([])
-      setGolferHistory([])
+      setGolferHistory(golferResults ?? [])
     }
 
     setDataLoaded(true)
