@@ -34,13 +34,13 @@ export async function POST(request: NextRequest) {
   // Set the session so subsequent DB calls run as this user
   await supabase.auth.setSession({ access_token: accessToken, refresh_token: '' })
 
-  // Insert profile
-  const { error: profileErr } = await supabase.from('profiles').insert({
+  // Upsert profile — safe to call multiple times (idempotent)
+  const { error: profileErr } = await supabase.from('profiles').upsert({
     id: user.id,
     display_name,
     email: user.email ?? '',
     is_admin: ADMIN_NAMES.includes(display_name),
-  })
+  }, { onConflict: 'id' })
 
   if (profileErr) {
     return NextResponse.json({ error: profileErr.message }, { status: 500 })
@@ -48,14 +48,14 @@ export async function POST(request: NextRequest) {
 
   // If claiming a legacy player name, record alias and auto-join founding league
   if (claimed_name) {
-    await supabase.from('player_aliases').insert({
+    await supabase.from('player_aliases').upsert({
       user_id: user.id,
       player_name: claimed_name,
-    })
-    await supabase.from('league_members').insert({
+    }, { onConflict: 'user_id' })
+    await supabase.from('league_members').upsert({
       league_id: FOUNDING_LEAGUE_ID,
       user_id: user.id,
-    })
+    }, { onConflict: 'league_id,user_id' })
   }
 
   return NextResponse.json({ success: true })

@@ -241,9 +241,15 @@ function SetupProfileScreen({
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    supabase.from('player_aliases').select('player_name').then(({ data }) => {
-      const claimed = (data ?? []).map((a: any) => a.player_name)
-      setUnclaimedNames(PLAYERS.filter((p) => !claimed.includes(p)))
+    supabase.from('player_aliases').select('player_name, user_id').then(({ data }) => {
+      // Only hide names claimed by OTHER users — current user's alias stays selectable
+      const claimedByOthers = (data ?? [])
+        .filter((a: any) => a.user_id !== userId)
+        .map((a: any) => a.player_name)
+      setUnclaimedNames(PLAYERS.filter((p) => !claimedByOthers.includes(p)))
+      // Pre-select if this user already has an alias (handles missing-profile edge case)
+      const mine = (data ?? []).find((a: any) => a.user_id === userId)
+      if (mine) setClaimedName(mine.player_name)
     })
   }, [])
 
@@ -362,10 +368,12 @@ function SetupProfileScreen({
 // legacy player name (e.g. they signed up before the alias system existed).
 function ClaimPlayerModal({
   supabase,
+  userId,
   onComplete,
   onClose,
 }: {
   supabase: ReturnType<typeof createClient>
+  userId: string
   onComplete: (displayName: string, isAdmin: boolean) => void
   onClose: () => void
 }) {
@@ -375,9 +383,13 @@ function ClaimPlayerModal({
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    supabase.from('player_aliases').select('player_name').then(({ data }) => {
-      const claimed = (data ?? []).map((a: any) => a.player_name)
-      setUnclaimedNames(PLAYERS.filter((p) => !claimed.includes(p)))
+    supabase.from('player_aliases').select('player_name, user_id').then(({ data }) => {
+      const claimedByOthers = (data ?? [])
+        .filter((a: any) => a.user_id !== userId)
+        .map((a: any) => a.player_name)
+      setUnclaimedNames(PLAYERS.filter((p) => !claimedByOthers.includes(p)))
+      const mine = (data ?? []).find((a: any) => a.user_id === userId)
+      if (mine) setClaimedName(mine.player_name)
     })
   }, [])
 
@@ -3804,6 +3816,7 @@ export default function App() {
       {showClaimModal && user && (
         <ClaimPlayerModal
           supabase={supabase}
+          userId={user.id}
           onComplete={(name, isAdminUser) => {
             setCurrentPlayer(name)
             setUserProfile({ display_name: name, is_admin: isAdminUser })
