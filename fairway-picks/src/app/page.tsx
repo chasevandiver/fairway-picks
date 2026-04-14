@@ -224,15 +224,16 @@ function LandingPage() {
 // Shown to a newly authenticated user who doesn't have a profile yet.
 // They either claim a legacy player name or enter a new display name.
 function SetupProfileScreen({
+  supabase,
   userId,
   userEmail,
   onComplete,
 }: {
+  supabase: ReturnType<typeof createClient>
   userId: string
   userEmail: string
   onComplete: (displayName: string, isAdmin: boolean) => void
 }) {
-  const supabase = createClient()
   const [displayName, setDisplayName] = useState(userEmail.split('@')[0])
   const [claimedName, setClaimedName] = useState<string | null>(null)
   const [unclaimedNames, setUnclaimedNames] = useState<string[]>([])
@@ -253,20 +254,30 @@ function SetupProfileScreen({
     const name = claimedName ?? displayName.trim()
     if (!name) { setLoading(false); return }
 
-    const isAdminUser = ['Eric', 'Chase'].includes(name)
-    const { error: profileErr } = await supabase.from('profiles').insert({
-      id: userId,
-      display_name: name,
-      email: userEmail,
-      is_admin: isAdminUser,
-    })
-    if (profileErr) { setError(profileErr.message); setLoading(false); return }
+    try {
+      const isAdminUser = ['Eric', 'Chase'].includes(name)
 
-    if (claimedName) {
-      await supabase.from('player_aliases').insert({ user_id: userId, player_name: claimedName })
+      // Get the current access token to send with the API request
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.access_token ?? ''
+
+      const res = await fetch('/api/setup-profile', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ display_name: name, claimed_name: claimedName }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || 'Failed to create profile')
+
+      onComplete(name, isAdminUser)
+    } catch (err: any) {
+      setError(err.message || 'Something went wrong. Please try again.')
+    } finally {
+      setLoading(false)
     }
-    onComplete(name, isAdminUser)
-    setLoading(false)
   }
 
   return (
@@ -2921,6 +2932,23 @@ function SeasonRecapTab({ history, golferHistory, seasonMoney }: {
 export default function App() {
   const supabase = createClient()
   const router = useRouter()
+
+  // Handle both auth flows:
+  // - Implicit flow: /#access_token=... (detectSessionInUrl:true handles automatically, just clean hash)
+  // - PKCE flow: /?code=... (flowType:'implicit' may be ignored in supabase-js v2.44+, still sends PKCE)
+  useEffect(() => {
+    if (window.location.hash.includes('access_token')) {
+      window.history.replaceState(null, '', window.location.pathname)
+      return
+    }
+    const code = new URLSearchParams(window.location.search).get('code')
+    if (code) {
+      supabase.auth.exchangeCodeForSession(code).then(() => {
+        window.history.replaceState(null, '', window.location.pathname)
+      })
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
   const [currentPlayer, setCurrentPlayer] = useState<string | null>(null)
   const [tab, setTab] = useState('live')
   const [tournament, setTournament] = useState<Tournament | null>(null)
@@ -2965,7 +2993,15 @@ export default function App() {
 
   // ── Auth state management ──
   useEffect(() => {
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
+    // Race getSession() against a 4s timeout — supabase-js v2 sometimes does a
+    // server-side token validation network request inside getSession(), which can
+    // hang indefinitely if the server is slow or the token is invalid.
+    const sessionRace = Promise.race([
+      supabase.auth.getSession(),
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error('auth_timeout')), 4000)),
+    ])
+
+    sessionRace.then(async ({ data: { session } }: any) => {
       if (session?.user) {
         const u = { id: session.user.id, email: session.user.email ?? '' }
         setUser(u)
@@ -2973,25 +3009,29 @@ export default function App() {
         if (data) {
           setUserProfile(data)
           setCurrentPlayer(data.display_name)
+          // Only check league membership if the user already has a profile
+          const { data: membership } = await supabase
+            .from('league_members')
+            .select('league_id, leagues(name, rules)')
+            .eq('user_id', u.id)
+            .limit(1)
+            .maybeSingle()
+          if (membership) {
+            setLeagueId(membership.league_id)
+            const l = membership.leagues as any
+            if (l) { setLeagueName(l.name); setLeagueRules(mergeRules(l.rules ?? {})) }
+          } else {
+            // Has profile but no league — send to league creation
+            setBootstrapped(true)
+            router.push('/create')
+            return
+          }
         }
-        // Load user's first league
-        const { data: membership } = await supabase
-          .from('league_members')
-          .select('league_id, leagues(name, rules)')
-          .eq('user_id', u.id)
-          .limit(1)
-          .maybeSingle()
-        if (membership) {
-          setLeagueId(membership.league_id)
-          const l = membership.leagues as any
-          if (l) { setLeagueName(l.name); setLeagueRules(mergeRules(l.rules ?? {})) }
-        } else {
-          // New user with no leagues — send to league creation
-          setBootstrapped(true)
-          router.push('/create')
-          return
-        }
+        // If no profile: bootstrapped fires below and SetupProfileScreen is shown
       }
+      setBootstrapped(true)
+    }).catch(() => {
+      // Timeout or error — show whatever state we have rather than spinning forever
       setBootstrapped(true)
     })
 
@@ -3003,15 +3043,30 @@ export default function App() {
         if (data) {
           setUserProfile(data)
           setCurrentPlayer(data.display_name)
+          // Also load league in case getSession() timed out and this is first auth
+          const { data: membership } = await supabase
+            .from('league_members')
+            .select('league_id, leagues(name, rules)')
+            .eq('user_id', u.id)
+            .limit(1)
+            .maybeSingle()
+          if (membership) {
+            setLeagueId(membership.league_id)
+            const l = membership.leagues as any
+            if (l) { setLeagueName(l.name); setLeagueRules(mergeRules(l.rules ?? {})) }
+          }
+          setBootstrapped(true)
         } else {
           setUser(u)
           setUserProfile(null)
           setCurrentPlayer(null)
+          setBootstrapped(true)
         }
       } else {
         setUser(null)
         setUserProfile(null)
         setCurrentPlayer(null)
+        setBootstrapped(true)
       }
     })
 
@@ -3333,11 +3388,29 @@ export default function App() {
   if (!user) return <LandingPage />
   if (!userProfile) return (
     <SetupProfileScreen
+      supabase={supabase}
       userId={user.id}
       userEmail={user.email}
       onComplete={(displayName, isAdmin) => {
         setUserProfile({ display_name: displayName, is_admin: isAdmin })
         setCurrentPlayer(displayName)
+        // League defaults to founding league (00000000-...) which is correct
+        // for existing members. Load the actual name/rules in background.
+        void (async () => {
+          try {
+            const { data: membership } = await supabase
+              .from('league_members')
+              .select('league_id, leagues(name, rules)')
+              .eq('user_id', user.id)
+              .limit(1)
+              .maybeSingle()
+            if (membership) {
+              setLeagueId(membership.league_id)
+              const l = membership.leagues as any
+              if (l) { setLeagueName(l.name); setLeagueRules(mergeRules(l.rules ?? {})) }
+            }
+          } catch { /* silently fail — default leagueId is correct */ }
+        })()
       }}
     />
   )
@@ -3351,7 +3424,7 @@ export default function App() {
         </button>
       )}
       <Sidebar
-        currentPlayer={currentPlayer}
+        currentPlayer={currentPlayer ?? ''}
         tab={tab}
         setTab={handleTabChange}
         isAdmin={isAdmin}
@@ -3370,7 +3443,7 @@ export default function App() {
             {tab === 'live'    && <LeaderboardTab tournament={tournament} standings={standings} liveData={liveData} pickMap={pickMap} loading={loading} lastUpdated={lastUpdated} onRefresh={fetchScores} money={weekMoney} flashMap={flashMap} />}
             {tab === 'picks'   && <PicksTab standings={standings} pickMap={pickMap} liveData={liveData} tournament={tournament} />}
             {tab === 'money'   && <MoneyTab seasonMoney={seasonMoney} weekMoney={weekMoney} tournament={tournament} history={history} />}
-            {tab === 'draft'   && <DraftTab tournament={tournament} picks={picks} liveData={liveData} currentPlayer={currentPlayer} isAdmin={isAdmin} onPickMade={handlePickMade} />}
+            {tab === 'draft'   && <DraftTab tournament={tournament} picks={picks} liveData={liveData} currentPlayer={currentPlayer ?? ''} isAdmin={isAdmin} onPickMade={handlePickMade} />}
             {tab === 'history' && <HistoryTab history={history} golferHistory={golferHistory} isAdmin={isAdmin} onDeleteTournament={handleDeleteTournament} onEditResult={handleEditResult} onDeleteResult={handleDeleteResult} />}
             {tab === 'stats'   && <StatsTab history={history} />}
             {tab === 'recap'   && <SeasonRecapTab history={history} golferHistory={golferHistory} seasonMoney={seasonMoney} />}
@@ -3404,3 +3477,4 @@ export default function App() {
     </div>
   )
 }
+

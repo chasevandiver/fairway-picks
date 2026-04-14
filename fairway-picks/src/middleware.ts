@@ -1,53 +1,12 @@
-import { createServerClient } from '@supabase/ssr'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
+// With implicit-flow auth (localStorage sessions), the server can't read
+// the session — so we can't do server-side route protection here.
+// Auth is enforced client-side: unauthenticated users see the LandingPage
+// at / and are redirected to /auth from the client when needed.
 export async function middleware(request: NextRequest) {
-  let response = NextResponse.next({
-    request: { headers: request.headers },
-  })
-
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        get(name) {
-          return request.cookies.get(name)?.value
-        },
-        set(name, value, options) {
-          request.cookies.set({ name, value, ...options })
-          response = NextResponse.next({ request: { headers: request.headers } })
-          response.cookies.set({ name, value, ...options })
-        },
-        remove(name, options) {
-          request.cookies.set({ name, value: '', ...options })
-          response = NextResponse.next({ request: { headers: request.headers } })
-          response.cookies.set({ name, value: '', ...options })
-        },
-      },
-    }
-  )
-
-  const { data: { user } } = await supabase.auth.getUser()
-
-  const pathname = request.nextUrl.pathname
-  const isAuthRoute = pathname.startsWith('/auth')
-  const isApiRoute = pathname.startsWith('/api')
-  // Public routes visible to unauthenticated users
-  const isPublicRoute = pathname === '/' || pathname === '/join' || pathname.startsWith('/join/')
-
-  // Unauthenticated users: allow public routes, redirect everything else to /auth
-  if (!user && !isAuthRoute && !isApiRoute && !isPublicRoute) {
-    return NextResponse.redirect(new URL('/auth', request.url))
-  }
-
-  // Authenticated users visiting /auth: send to app
-  if (user && pathname === '/auth') {
-    return NextResponse.redirect(new URL('/', request.url))
-  }
-
-  return response
+  return NextResponse.next()
 }
 
 export const config = {
