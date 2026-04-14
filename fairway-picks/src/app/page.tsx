@@ -2933,19 +2933,12 @@ export default function App() {
   const supabase = createClient()
   const router = useRouter()
 
-  // Handle both auth flows:
-  // - Implicit flow: /#access_token=... (detectSessionInUrl:true handles automatically, just clean hash)
-  // - PKCE flow: /?code=... (flowType:'implicit' may be ignored in supabase-js v2.44+, still sends PKCE)
+  // The /auth/callback page handles token extraction and redirects here
+  // after storing the session in localStorage. Nothing to do here except
+  // clean up any stray hash that might remain.
   useEffect(() => {
     if (window.location.hash.includes('access_token')) {
       window.history.replaceState(null, '', window.location.pathname)
-      return
-    }
-    const code = new URLSearchParams(window.location.search).get('code')
-    if (code) {
-      supabase.auth.exchangeCodeForSession(code).then(() => {
-        window.history.replaceState(null, '', window.location.pathname)
-      })
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
