@@ -28,15 +28,17 @@ export async function GET(request: NextRequest) {
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   )
 
-  // Fetch everything in parallel
+  // Fetch everything in parallel — including invite_code so the client makes only one API call
   const [
     { data: tournaments },
     { data: seasonMoney },
     { data: activeTournament },
+    { data: leagueRow },
   ] = await Promise.all([
     db.from('tournaments').select('id').eq('league_id', leagueId).eq('status', 'completed'),
     db.from('season_money').select('*'),
     db.from('tournaments').select('*').eq('league_id', leagueId).eq('status', 'active').maybeSingle(),
+    db.from('leagues').select('invite_code').eq('id', leagueId).maybeSingle(),
   ])
 
   const tournamentIds = (tournaments ?? []).map((t: any) => t.id)
@@ -76,5 +78,6 @@ export async function GET(request: NextRequest) {
     golferResults,
     picks,
     tournamentIds,
+    inviteCode: leagueRow?.invite_code ?? '',
   })
 }

@@ -3503,20 +3503,18 @@ export default function App() {
 
   // ── Fetch DB data when logged in (scoped to current league) ──
   const loadData = useCallback(async () => {
-    // Fetch invite code and all league data via server-side routes (service role, bypasses RLS)
+    // Single API call — service role on the server, bypasses all RLS
     const session = await supabase.auth.getSession()
     const token = session.data.session?.access_token ?? ''
-    const authHeaders = { Authorization: `Bearer ${token}` }
 
-    const [leagueInfoRes, leagueDataRes] = await Promise.all([
-      fetch('/api/league-info', { headers: authHeaders }).then(r => r.json()).catch(() => null),
-      fetch(`/api/league-data?league_id=${leagueId}`, { headers: authHeaders }).then(r => r.json()).catch(() => null),
-    ])
-
-    if (leagueInfoRes?.invite_code != null) setInviteCode(leagueInfoRes.invite_code)
+    const leagueDataRes = await fetch(
+      `/api/league-data?league_id=${leagueId}`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    ).then(r => r.json()).catch(() => null)
 
     if (leagueDataRes) {
-      const { activeTournament, seasonMoney: sm, results, golferResults, picks: p } = leagueDataRes
+      const { activeTournament, seasonMoney: sm, results, golferResults, picks: p, inviteCode: ic } = leagueDataRes
+      if (ic != null) setInviteCode(ic)
 
       if (sm) setSeasonMoney(sm)
 
