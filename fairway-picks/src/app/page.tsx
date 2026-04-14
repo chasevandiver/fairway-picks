@@ -2948,7 +2948,7 @@ export default function App() {
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const [currentPlayer, setCurrentPlayer] = useState<string | null>(null)
+  const [currentPlayer, setCurrentPlayer] = useState<string | null>(cachedProfile?.display_name ?? null)
   const [tab, setTab] = useState('live')
   const [tournament, setTournament] = useState<Tournament | null>(null)
   const [picks, setPicks] = useState<Pick[]>([])
@@ -2961,12 +2961,17 @@ export default function App() {
   const [loading, setLoading] = useState(false)
   const [dataLoaded, setDataLoaded] = useState(false)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
-  const [bootstrapped, setBootstrapped] = useState(false)
+  const PROFILE_KEY = 'fore-picks-profile'
+  const cachedProfile = typeof window !== 'undefined'
+    ? (() => { try { return JSON.parse(localStorage.getItem(PROFILE_KEY) || 'null') } catch { return null } })()
+    : null
+
+  const [bootstrapped, setBootstrapped] = useState(!!cachedProfile)
   const [tabKey, setTabKey] = useState(0)
   const [user, setUser] = useState<{ id: string; email: string } | null>(null)
-  const [userProfile, setUserProfile] = useState<{ display_name: string; is_admin: boolean } | null>(null)
+  const [userProfile, setUserProfile] = useState<{ display_name: string; is_admin: boolean } | null>(cachedProfile)
   // Tracks whether we have a confirmed profile so auth events can't wipe it mid-session
-  const profileConfirmedRef = useRef(false)
+  const profileConfirmedRef = useRef(!!cachedProfile)
   const [leagueId, setLeagueId] = useState<string>('00000000-0000-0000-0000-000000000001')
   const [leagueName, setLeagueName] = useState<string>('Fore Picks')
   const [leagueRules, setLeagueRules] = useState<LeagueRules>(DEFAULT_RULES)
@@ -3007,6 +3012,7 @@ export default function App() {
       // SIGNED_OUT: clear everything and reset the confirmed-profile guard.
       if (event === 'SIGNED_OUT' || !session?.user) {
         profileConfirmedRef.current = false
+        localStorage.removeItem(PROFILE_KEY)
         setUser(null)
         setUserProfile(null)
         setCurrentPlayer(null)
@@ -3031,6 +3037,7 @@ export default function App() {
 
       if (profile) {
         profileConfirmedRef.current = true
+        localStorage.setItem(PROFILE_KEY, JSON.stringify(profile))
         setUserProfile(profile)
         setCurrentPlayer(profile.display_name)
 
@@ -3060,10 +3067,8 @@ export default function App() {
 
   // ── Fetch DB data when logged in (scoped to current league) ──
   const loadData = useCallback(async () => {
-    // Include tournaments where league_id matches OR is null (pre-migration rows)
-    const leagueFilter = `league_id.eq.${leagueId},league_id.is.null`
     const [{ data: t }, { data: sm }] = await Promise.all([
-      supabase.from('tournaments').select('*').eq('status', 'active').or(leagueFilter).maybeSingle(),
+      supabase.from('tournaments').select('*').eq('status', 'active').eq('league_id', leagueId).maybeSingle(),
       supabase.from('season_money').select('*'),
     ])
     if (sm) setSeasonMoney(sm)
@@ -3082,11 +3087,11 @@ export default function App() {
       setPicks([])
     }
 
-    // Load history: all tournaments for this league (including null league_id pre-migration rows)
+    // Load history for this league
     const { data: leagueTournaments } = await supabase
       .from('tournaments')
       .select('id')
-      .or(leagueFilter)
+      .eq('league_id', leagueId)
 
     const tournamentIds = (leagueTournaments ?? []).map((t: any) => t.id)
 
@@ -3379,7 +3384,8 @@ export default function App() {
       userId={user.id}
       userEmail={user.email}
       onComplete={(displayName, isAdmin) => {
-        profileConfirmedRef.current = true  // lock out any racing auth event
+        profileConfirmedRef.current = true
+        localStorage.setItem(PROFILE_KEY, JSON.stringify({ display_name: displayName, is_admin: isAdmin }))
         setUserProfile({ display_name: displayName, is_admin: isAdmin })
         setCurrentPlayer(displayName)
         // League defaults to founding league (00000000-...) which is correct
