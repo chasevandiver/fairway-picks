@@ -2986,85 +2986,64 @@ export default function App() {
 
   // ── Auth state management ──
   useEffect(() => {
-    // Race getSession() against a 4s timeout — supabase-js v2 sometimes does a
-    // server-side token validation network request inside getSession(), which can
-    // hang indefinitely if the server is slow or the token is invalid.
-    const sessionRace = Promise.race([
-      supabase.auth.getSession(),
-      new Promise<never>((_, reject) => setTimeout(() => reject(new Error('auth_timeout')), 4000)),
-    ])
-
-    sessionRace.then(async ({ data: { session } }: any) => {
-      if (session?.user) {
-        const u = { id: session.user.id, email: session.user.email ?? '' }
-        setUser(u)
-        const { data } = await supabase.from('profiles').select('display_name, is_admin').eq('id', u.id).single()
-        if (data) {
-          setUserProfile(data)
-          setCurrentPlayer(data.display_name)
-          // Only check league membership if the user already has a profile
-          const { data: membership } = await supabase
-            .from('league_members')
-            .select('league_id, leagues(name, rules)')
-            .eq('user_id', u.id)
-            .limit(1)
-            .maybeSingle()
-          if (membership) {
-            setLeagueId(membership.league_id)
-            const l = membership.leagues as any
-            if (l) { setLeagueName(l.name); setLeagueRules(mergeRules(l.rules ?? {})) }
-          } else {
-            // Has profile but no league — send to league creation
-            setBootstrapped(true)
-            router.push('/create')
-            return
-          }
-        }
-        // If no profile: bootstrapped fires below and SetupProfileScreen is shown
-      }
-      setBootstrapped(true)
-    }).catch(() => {
-      // Timeout or error — show whatever state we have rather than spinning forever
-      setBootstrapped(true)
-    })
-
+    // onAuthStateChange fires INITIAL_SESSION immediately with the current session
+    // (or null if signed out), so we don't need a separate getSession() call.
+    // Using a single handler eliminates races between two parallel async chains.
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (session?.user) {
-        const u = { id: session.user.id, email: session.user.email ?? '' }
-        setUser(u)
-        const { data } = await supabase.from('profiles').select('display_name, is_admin').eq('id', u.id).single()
-        if (data) {
-          setUserProfile(data)
-          setCurrentPlayer(data.display_name)
-          // Also load league in case getSession() timed out and this is first auth
-          const { data: membership } = await supabase
-            .from('league_members')
-            .select('league_id, leagues(name, rules)')
-            .eq('user_id', u.id)
-            .limit(1)
-            .maybeSingle()
-          if (membership) {
-            setLeagueId(membership.league_id)
-            const l = membership.leagues as any
-            if (l) { setLeagueName(l.name); setLeagueRules(mergeRules(l.rules ?? {})) }
-          }
-          setBootstrapped(true)
-        } else {
-          setUser(u)
-          setUserProfile(null)
-          setCurrentPlayer(null)
-          setBootstrapped(true)
-        }
-      } else {
+      // TOKEN_REFRESHED: token rotated silently — no need to re-query the DB.
+      // Just update the user identity and leave everything else alone.
+      if (event === 'TOKEN_REFRESHED') {
+        if (session?.user) setUser({ id: session.user.id, email: session.user.email ?? '' })
+        return
+      }
+
+      // SIGNED_OUT: clear all user state.
+      if (event === 'SIGNED_OUT' || !session?.user) {
         setUser(null)
         setUserProfile(null)
         setCurrentPlayer(null)
         setBootstrapped(true)
+        return
       }
+
+      // INITIAL_SESSION / SIGNED_IN / USER_UPDATED: full profile + league load.
+      const u = { id: session.user.id, email: session.user.email ?? '' }
+      setUser(u)
+
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles').select('display_name, is_admin').eq('id', u.id).single()
+
+      if (profile) {
+        setUserProfile(profile)
+        setCurrentPlayer(profile.display_name)
+
+        const { data: membership } = await supabase
+          .from('league_members')
+          .select('league_id, leagues(name, rules)')
+          .eq('user_id', u.id)
+          .limit(1)
+          .maybeSingle()
+
+        if (membership) {
+          setLeagueId(membership.league_id)
+          const l = membership.leagues as any
+          if (l) { setLeagueName(l.name); setLeagueRules(mergeRules(l.rules ?? {})) }
+        }
+        // No profile but no league — fall through to the app with default leagueId.
+        // (Don't redirect to /create which doesn't exist yet.)
+      } else if (profileError?.code === 'PGRST116') {
+        // "0 rows returned" — profile genuinely doesn't exist; show setup screen.
+        setUserProfile(null)
+        setCurrentPlayer(null)
+      }
+      // Any other error (network, etc.) — leave existing userProfile in place
+      // so a transient failure doesn't flash the setup screen.
+
+      setBootstrapped(true)
     })
 
     return () => subscription.unsubscribe()
-  }, [])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Fetch DB data when logged in (scoped to current league) ──
   const loadData = useCallback(async () => {

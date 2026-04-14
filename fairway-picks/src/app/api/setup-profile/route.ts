@@ -55,16 +55,22 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: profileErr.message }, { status: 500 })
   }
 
-  // If claiming a legacy player name, record alias and auto-join founding league
+  // If claiming a legacy player name, record alias and auto-join founding league.
+  // Use upsert/ignore-on-conflict so re-submissions don't fail.
   if (claimed_name) {
-    await supabase.from('player_aliases').insert({
+    const { error: aliasErr } = await supabase.from('player_aliases').upsert({
       user_id: user.id,
       player_name: claimed_name,
-    })
-    await supabase.from('league_members').insert({
+    }, { onConflict: 'player_name' })
+    if (aliasErr) {
+      return NextResponse.json({ error: aliasErr.message }, { status: 500 })
+    }
+
+    // league_members has UNIQUE(league_id, user_id) — ignore if already a member
+    await supabase.from('league_members').upsert({
       league_id: FOUNDING_LEAGUE_ID,
       user_id: user.id,
-    })
+    }, { onConflict: 'league_id,user_id', ignoreDuplicates: true })
   }
 
   return NextResponse.json({ success: true })
