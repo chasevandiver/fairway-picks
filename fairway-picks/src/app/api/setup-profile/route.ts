@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
   }
 
-  // First verify the token is valid and get the user identity
+  // Verify the token and get the user identity
   const verifyClient = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -29,21 +29,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid token' }, { status: 401 })
   }
 
-  // Create a client that sends the user's JWT on every request so RLS
-  // sees auth.uid() = user.id. Using global headers is more reliable than
-  // setSession() which requires a valid refresh_token.
+  // Client with user's JWT in headers so RLS sees auth.uid() = user.id
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      global: {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      },
-    }
+    { global: { headers: { Authorization: `Bearer ${accessToken}` } } }
   )
 
-  // Upsert profile — handles both first-time setup and re-submission
-  // (a profile row may already exist if the user retried the flow)
+  // Upsert profile — works for both first-time and re-submissions
   const { error: profileErr } = await supabase.from('profiles').upsert({
     id: user.id,
     display_name,
@@ -55,22 +48,44 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: profileErr.message }, { status: 500 })
   }
 
-  // If claiming a legacy player name, record alias and auto-join founding league.
-  // Use upsert/ignore-on-conflict so re-submissions don't fail.
   if (claimed_name) {
-    const { error: aliasErr } = await supabase.from('player_aliases').upsert({
-      user_id: user.id,
-      player_name: claimed_name,
-    }, { onConflict: 'player_name' })
-    if (aliasErr) {
-      return NextResponse.json({ error: aliasErr.message }, { status: 500 })
-    }
+    // Check if the alias already exists before inserting.
+    // We avoid upsert here because player_aliases has no UPDATE policy.
+    const { data: existingAlias } = await supabase
+      .from('player_aliases')
+      .select('user_id')
+      .eq('player_name', claimed_name)
+      .maybeSingle()
 
-    // league_members has UNIQUE(league_id, user_id) — ignore if already a member
-    await supabase.from('league_members').upsert({
-      league_id: FOUNDING_LEAGUE_ID,
-      user_id: user.id,
-    }, { onConflict: 'league_id,user_id', ignoreDuplicates: true })
+    if (!existingAlias) {
+      // Not claimed yet — insert fresh
+      const { error: aliasErr } = await supabase.from('player_aliases').insert({
+        user_id: user.id,
+        player_name: claimed_name,
+      })
+      if (aliasErr) {
+        return NextResponse.json({ error: aliasErr.message }, { status: 500 })
+      }
+    } else if (existingAlias.user_id !== user.id) {
+      // Claimed by someone else
+      return NextResponse.json({ error: `${claimed_name} has already been claimed by another account` }, { status: 400 })
+    }
+    // existingAlias.user_id === user.id → already claimed by this user, nothing to do
+
+    // Add to founding league if not already a member
+    const { data: existingMember } = await supabase
+      .from('league_members')
+      .select('id')
+      .eq('league_id', FOUNDING_LEAGUE_ID)
+      .eq('user_id', user.id)
+      .maybeSingle()
+
+    if (!existingMember) {
+      await supabase.from('league_members').insert({
+        league_id: FOUNDING_LEAGUE_ID,
+        user_id: user.id,
+      })
+    }
   }
 
   return NextResponse.json({ success: true })
