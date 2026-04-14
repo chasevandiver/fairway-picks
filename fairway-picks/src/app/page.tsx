@@ -3060,8 +3060,10 @@ export default function App() {
 
   // ── Fetch DB data when logged in (scoped to current league) ──
   const loadData = useCallback(async () => {
+    // Include tournaments where league_id matches OR is null (pre-migration rows)
+    const leagueFilter = `league_id.eq.${leagueId},league_id.is.null`
     const [{ data: t }, { data: sm }] = await Promise.all([
-      supabase.from('tournaments').select('*').eq('status', 'active').eq('league_id', leagueId).maybeSingle(),
+      supabase.from('tournaments').select('*').eq('status', 'active').or(leagueFilter).maybeSingle(),
       supabase.from('season_money').select('*'),
     ])
     if (sm) setSeasonMoney(sm)
@@ -3080,11 +3082,11 @@ export default function App() {
       setPicks([])
     }
 
-    // Load history: results scoped to this league's tournaments
+    // Load history: all tournaments for this league (including null league_id pre-migration rows)
     const { data: leagueTournaments } = await supabase
       .from('tournaments')
       .select('id')
-      .eq('league_id', leagueId)
+      .or(leagueFilter)
 
     const tournamentIds = (leagueTournaments ?? []).map((t: any) => t.id)
 
