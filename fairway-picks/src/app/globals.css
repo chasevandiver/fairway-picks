@@ -1394,3 +1394,16 @@ html, body {
   max-width: 100%;
   overflow-x: hidden;
 }
+
+/* Prevent iOS Safari from auto-zooming when an input is focused.
+   Safari zooms if font-size < 16px — override to 16px on mobile only. */
+@media (max-width: 768px) {
+  input[type="text"],
+  input[type="email"],
+  input[type="number"],
+  input[type="password"],
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}

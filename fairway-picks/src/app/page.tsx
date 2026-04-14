@@ -3324,6 +3324,9 @@ export default function App() {
   const isMasters = !!(tournament?.name?.toLowerCase().includes('masters'))
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [showClaimModal, setShowClaimModal] = useState(false)
+  // Tracks whether we've completed the initial profile load for the current user.
+  // Used to prevent TOKEN_REFRESHED events from clearing already-loaded state.
+  const profileLoadedRef = useRef(false)
 
   // Apply Masters theme to body when Masters tournament is active
   useEffect(() => {
@@ -3362,6 +3365,7 @@ export default function App() {
           supabase.from('league_members').select('league_id, leagues(name, rules)').eq('user_id', u.id).limit(1).maybeSingle(),
         ])
         if (data) {
+          profileLoadedRef.current = true
           setUserProfile(data)
           setCurrentPlayer(data.display_name)
           if (membership) {
@@ -3384,6 +3388,10 @@ export default function App() {
     })
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      // TOKEN_REFRESHED fires on tab focus, scroll, and every token expiry.
+      // The user and profile haven't changed — skip to avoid flashing SetupProfileScreen.
+      if (event === 'TOKEN_REFRESHED') return
+
       if (session?.user) {
         const u = { id: session.user.id, email: session.user.email ?? '' }
         setUser(u)
@@ -3393,6 +3401,7 @@ export default function App() {
           supabase.from('league_members').select('league_id, leagues(name, rules)').eq('user_id', u.id).limit(1).maybeSingle(),
         ])
         if (data) {
+          profileLoadedRef.current = true
           setUserProfile(data)
           setCurrentPlayer(data.display_name)
           if (membership) {
@@ -3401,13 +3410,16 @@ export default function App() {
             if (l) { setLeagueName(l.name); setLeagueRules(mergeRules(l.rules ?? {})) }
           }
           setBootstrapped(true)
-        } else {
-          setUser(u)
+        } else if (!profileLoadedRef.current) {
+          // Genuinely new user with no profile — show SetupProfileScreen
           setUserProfile(null)
           setCurrentPlayer(null)
           setBootstrapped(true)
         }
+        // If profile fetch returned null but we're already loaded (transient error),
+        // keep existing state — don't flash SetupProfileScreen
       } else {
+        profileLoadedRef.current = false
         setUser(null)
         setUserProfile(null)
         setCurrentPlayer(null)
