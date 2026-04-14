@@ -564,7 +564,7 @@ function Sidebar({
             title="Switch player"
           >↩</button>
         </div>
-        {!PLAYERS.includes(currentPlayer) && onClaimPlayer && (
+        {!(PLAYERS as string[]).includes(currentPlayer) && onClaimPlayer && (
           <button
             type="button"
             onClick={onClaimPlayer}
