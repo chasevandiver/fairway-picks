@@ -34,7 +34,7 @@ export default function CreateLeague() {
     setError(null)
 
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) { router.push('/auth'); return }
+    if (!user) { sessionStorage.setItem('pending_redirect', '/create'); router.push('/auth'); return }
 
     const rules = mergeRules(customRules ? {
       picks_per_player: picksPerPlayer,
