@@ -3783,6 +3783,7 @@ export default function App() {
       userId={user.id}
       userEmail={user.email}
       onComplete={(displayName, isAdmin) => {
+        profileLoadedRef.current = true
         setUserProfile({ display_name: displayName, is_admin: isAdmin })
         setCurrentPlayer(displayName)
         // League defaults to founding league (00000000-...) which is correct
@@ -3832,6 +3833,7 @@ export default function App() {
           supabase={supabase}
           userId={user.id}
           onComplete={(name, isAdminUser) => {
+            profileLoadedRef.current = true
             setCurrentPlayer(name)
             setUserProfile({ display_name: name, is_admin: isAdminUser })
             setShowClaimModal(false)
