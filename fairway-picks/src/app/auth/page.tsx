@@ -53,8 +53,9 @@ export default function AuthPage() {
 
     if (error) {
       setOtpError(error.message)
+    } else {
+      window.location.href = '/'
     }
-    // On success, onAuthStateChange in the app fires and handles navigation
     setOtpLoading(false)
   }
 
