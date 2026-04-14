@@ -357,6 +357,111 @@ function SetupProfileScreen({
   )
 }
 
+// ─── Claim Player Modal ───────────────────────────────────────────────────────
+// Shown when a signed-in user with an existing profile hasn't yet claimed a
+// legacy player name (e.g. they signed up before the alias system existed).
+function ClaimPlayerModal({
+  supabase,
+  onComplete,
+  onClose,
+}: {
+  supabase: ReturnType<typeof createClient>
+  onComplete: (displayName: string, isAdmin: boolean) => void
+  onClose: () => void
+}) {
+  const [claimedName, setClaimedName] = useState<string | null>(null)
+  const [unclaimedNames, setUnclaimedNames] = useState<string[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    supabase.from('player_aliases').select('player_name').then(({ data }) => {
+      const claimed = (data ?? []).map((a: any) => a.player_name)
+      setUnclaimedNames(PLAYERS.filter((p) => !claimed.includes(p)))
+    })
+  }, [])
+
+  const handleClaim = async () => {
+    if (!claimedName) return
+    setLoading(true)
+    setError(null)
+    try {
+      const isAdminUser = ['Eric', 'Chase'].includes(claimedName)
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.access_token ?? ''
+      const res = await fetch('/api/setup-profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ display_name: claimedName, claimed_name: claimedName }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || 'Failed to claim name')
+      onComplete(claimedName, isAdminUser)
+    } catch (err: any) {
+      setError(err.message || 'Something went wrong. Please try again.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 200,
+      background: 'rgba(0,0,0,0.75)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      padding: 24,
+    }}>
+      <div className="card" style={{ maxWidth: 420, width: '100%' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <div className="card-title">Claim Your Player Name</div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 20, lineHeight: 1 }}>✕</button>
+        </div>
+        <p style={{ color: 'var(--text-dim)', fontSize: 13, marginBottom: 16 }}>
+          Link your account to your player history.
+        </p>
+        {unclaimedNames.length === 0 ? (
+          <p style={{ color: 'var(--text-dim)', fontSize: 13, textAlign: 'center', padding: '12px 0' }}>
+            All player names have already been claimed.
+          </p>
+        ) : (
+          <>
+            <div className="player-btns">
+              {unclaimedNames.map((name) => (
+                <button
+                  key={name}
+                  className={`player-btn${claimedName === name ? ' active' : ''}`}
+                  type="button"
+                  onClick={() => setClaimedName(claimedName === name ? null : name)}
+                >
+                  <div className="player-btn-avatar">{name[0]}</div>
+                  {name}
+                </button>
+              ))}
+            </div>
+            {claimedName && (
+              <p style={{ color: 'var(--green)', fontSize: 12, textAlign: 'center', marginTop: 8 }}>
+                You'll be linked to all of {claimedName}'s existing history.
+              </p>
+            )}
+          </>
+        )}
+        {error && <p style={{ color: 'var(--red)', fontSize: 13, marginTop: 12 }}>{error}</p>}
+        <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
+          <button className="btn btn-outline" style={{ flex: 1 }} onClick={onClose}>Cancel</button>
+          <button
+            className="btn btn-primary"
+            style={{ flex: 2 }}
+            disabled={!claimedName || loading}
+            onClick={handleClaim}
+          >
+            {loading ? 'Claiming…' : claimedName ? `Claim ${claimedName}` : 'Select a name'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Sidebar ──────────────────────────────────────────────────────────────────
 const NAV_ITEMS = [
   { key: 'live',    icon: '⛳', label: 'Leaderboard' },
@@ -370,7 +475,7 @@ const NAV_ITEMS = [
 ]
 
 function Sidebar({
-  currentPlayer, tab, setTab, isAdmin, onLogout, tournament, isOpen, onClose, isMasters, leagueName
+  currentPlayer, tab, setTab, isAdmin, onLogout, tournament, isOpen, onClose, isMasters, leagueName, onClaimPlayer
 }: {
   currentPlayer: string
   tab: string
@@ -382,6 +487,7 @@ function Sidebar({
   onClose: () => void
   isMasters: boolean
   leagueName: string
+  onClaimPlayer?: () => void
 }) {
   return (
     <>
@@ -458,6 +564,19 @@ function Sidebar({
             title="Switch player"
           >↩</button>
         </div>
+        {!PLAYERS.includes(currentPlayer) && onClaimPlayer && (
+          <button
+            type="button"
+            onClick={onClaimPlayer}
+            style={{
+              marginTop: 8, width: '100%', background: 'none', border: '1px solid var(--border)',
+              borderRadius: 8, padding: '7px 10px', color: 'var(--green)', fontSize: 12,
+              cursor: 'pointer', fontFamily: 'var(--font-mono)', textAlign: 'center',
+            }}
+          >
+            Claim your player name →
+          </button>
+        )}
       </div>
     </div>
     </>
@@ -3204,6 +3323,7 @@ export default function App() {
   const isAdmin = userProfile?.is_admin ?? ['Eric', 'Chase'].includes(currentPlayer ?? '')
   const isMasters = !!(tournament?.name?.toLowerCase().includes('masters'))
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [showClaimModal, setShowClaimModal] = useState(false)
 
   // Apply Masters theme to body when Masters tournament is active
   useEffect(() => {
@@ -3667,7 +3787,19 @@ export default function App() {
         onClose={() => setSidebarOpen(false)}
         isMasters={isMasters}
         leagueName={leagueName}
+        onClaimPlayer={() => setShowClaimModal(true)}
       />
+      {showClaimModal && user && (
+        <ClaimPlayerModal
+          supabase={supabase}
+          onComplete={(name, isAdminUser) => {
+            setCurrentPlayer(name)
+            setUserProfile({ display_name: name, is_admin: isAdminUser })
+            setShowClaimModal(false)
+          }}
+          onClose={() => setShowClaimModal(false)}
+        />
+      )}
       <main className="main-content">
         {!dataLoaded ? (
           <SkeletonScreen />
