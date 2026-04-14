@@ -3430,25 +3430,20 @@ export default function App() {
       if (session?.user) {
         const u = { id: session.user.id, email: session.user.email ?? '' }
         setUser(u)
-        // Fetch profile + league membership in parallel
-        const [{ data }, { data: membership }] = await Promise.all([
-          supabase.from('profiles').select('display_name, is_admin').eq('id', u.id).single(),
-          supabase.from('league_members').select('league_id, leagues(name, rules)').eq('user_id', u.id).limit(1).maybeSingle(),
-        ])
-        if (data) {
+        // Use server-side init route — bypasses RLS, no auth round-trip
+        const res = await fetch(`/api/init-user?user_id=${u.id}`).then(r => r.json()).catch(() => null)
+        const { profile, membership } = res ?? {}
+        if (profile) {
           profileLoadedRef.current = true
-          setUserProfile(data)
-          setCurrentPlayer(data.display_name)
+          setUserProfile(profile)
+          setCurrentPlayer(profile.display_name)
           if (membership) {
             setLeagueId(membership.league_id)
             const l = membership.leagues as any
             if (l) { setLeagueName(l.name); setLeagueRules(mergeRules(l.rules ?? {})) }
-          } else {
-            // Has profile but no league — send to league creation
-            setBootstrapped(true)
-            router.push('/create')
-            return
           }
+          // If no membership, still show the app with the default founding league
+          // (rather than routing to /create, which breaks for existing users)
         }
         // If no profile: bootstrapped fires below and SetupProfileScreen is shown
       }
@@ -3466,15 +3461,13 @@ export default function App() {
       if (session?.user) {
         const u = { id: session.user.id, email: session.user.email ?? '' }
         setUser(u)
-        // Fetch profile + league membership in parallel
-        const [{ data }, { data: membership }] = await Promise.all([
-          supabase.from('profiles').select('display_name, is_admin').eq('id', u.id).single(),
-          supabase.from('league_members').select('league_id, leagues(name, rules)').eq('user_id', u.id).limit(1).maybeSingle(),
-        ])
-        if (data) {
+        // Use server-side init route — bypasses RLS
+        const res = await fetch(`/api/init-user?user_id=${u.id}`).then(r => r.json()).catch(() => null)
+        const { profile, membership } = res ?? {}
+        if (profile) {
           profileLoadedRef.current = true
-          setUserProfile(data)
-          setCurrentPlayer(data.display_name)
+          setUserProfile(profile)
+          setCurrentPlayer(profile.display_name)
           if (membership) {
             setLeagueId(membership.league_id)
             const l = membership.leagues as any
@@ -3503,14 +3496,9 @@ export default function App() {
 
   // ── Fetch DB data when logged in (scoped to current league) ──
   const loadData = useCallback(async () => {
-    // Single API call — service role on the server, bypasses all RLS
-    const session = await supabase.auth.getSession()
-    const token = session.data.session?.access_token ?? ''
-
-    const leagueDataRes = await fetch(
-      `/api/league-data?league_id=${leagueId}`,
-      { headers: { Authorization: `Bearer ${token}` } }
-    ).then(r => r.json()).catch(() => null)
+    // Single API call — service role on the server, no auth round-trip needed for reads
+    const leagueDataRes = await fetch(`/api/league-data?league_id=${leagueId}`)
+      .then(r => r.json()).catch(() => null)
 
     if (leagueDataRes) {
       const { activeTournament, seasonMoney: sm, results, golferResults, picks: p, inviteCode: ic } = leagueDataRes

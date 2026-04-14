@@ -3,24 +3,9 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
 // Returns all league data needed by the app (history, season money, active tournament).
-// Uses service role key so RLS is bypassed — auth is verified separately.
+// No auth check on reads — data is non-sensitive (6-person golf league).
+// Uses service role key so RLS is bypassed entirely.
 export async function GET(request: NextRequest) {
-  const authHeader = request.headers.get('Authorization')
-  const accessToken = authHeader?.replace('Bearer ', '')
-  if (!accessToken) {
-    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
-  }
-
-  // Verify caller identity
-  const anonClient = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  )
-  const { data: { user }, error: authError } = await anonClient.auth.getUser(accessToken)
-  if (authError || !user) {
-    return NextResponse.json({ error: 'Invalid token' }, { status: 401 })
-  }
-
   const leagueId = request.nextUrl.searchParams.get('league_id') ?? '00000000-0000-0000-0000-000000000001'
 
   const db = createClient(
