@@ -1288,3 +1288,109 @@ body {
   background: rgba(0,103,71,0.08);
   color: #006747;
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   LIQUID GLASS CARDS
+   ═══════════════════════════════════════════════════════════════ */
+
+.glass-card {
+  background: rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 16px;
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.30),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.12);
+}
+
+.glass-card-gold {
+  background: rgba(245, 158, 11, 0.06);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(245, 158, 11, 0.22);
+  border-radius: 16px;
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.30),
+    0 0 40px rgba(245, 158, 11, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.10);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   LANDING PAGE — RESPONSIVE
+   ═══════════════════════════════════════════════════════════════ */
+
+.landing-nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 40px;
+  border-bottom: 1px solid var(--border);
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+@media (max-width: 600px) {
+  .landing-nav {
+    padding: 14px 16px;
+  }
+  .landing-nav h1, .landing-nav div:first-child {
+    font-size: 18px !important;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   TABLET / IPAD — 769px–1024px
+   ═══════════════════════════════════════════════════════════════ */
+
+@media (min-width: 769px) and (max-width: 1024px) {
+  .sidebar { width: 200px; }
+  .main-content { margin-left: 200px; padding: 20px; }
+  .grid-2 { grid-template-columns: 1fr 1fr; gap: 16px; }
+  .stats-row { grid-template-columns: repeat(4, 1fr); }
+  .money-grid { grid-template-columns: repeat(3, 1fr); }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   ADDITIONAL MOBILE FIXES
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Ensure page headers wrap gracefully on small screens */
+@media (max-width: 480px) {
+  .page-header {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .page-header > * {
+    min-width: 0;
+  }
+  /* Login card full width on very small screens */
+  .login-card {
+    width: 100%;
+    max-width: 100%;
+    border-radius: 0;
+    min-height: 100dvh;
+    box-sizing: border-box;
+  }
+  .login-screen {
+    padding: 0;
+    align-items: flex-start;
+  }
+  /* Admin grid stacks on small screens */
+  .grid-2 { grid-template-columns: 1fr !important; }
+}
+
+/* Safe-area padding for notched iPhones — applied to bottom nav already via env()
+   Also ensure main content doesn't sit under the home indicator */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .main-content {
+    padding-bottom: calc(90px + env(safe-area-inset-bottom));
+  }
+}
+
+/* Prevent horizontal overflow on all screen sizes */
+html, body {
+  max-width: 100%;
+  overflow-x: hidden;
+}

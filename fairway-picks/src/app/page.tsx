@@ -116,7 +116,7 @@ function LandingPage() {
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bg)', color: 'var(--text)' }}>
       {/* Nav */}
-      <nav style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px 40px', borderBottom: '1px solid var(--border)', maxWidth: 1200, margin: '0 auto' }}>
+      <nav className="landing-nav">
         <div style={{ fontFamily: "'DM Serif Display', serif", fontSize: 22, fontWeight: 700 }}>
           Fore <span style={{ color: 'var(--green)' }}>Picks</span>
         </div>
@@ -1094,6 +1094,9 @@ function MoneyTab({ seasonMoney, weekMoney, tournament, history }: {
   history: any[]
 }) {
   const sorted = [...seasonMoney].sort((a, b) => b.total - a.total)
+  // Total dollars that changed hands (sum of positive balances = what winners collected)
+  const totalPot = seasonMoney.reduce((s, sm) => s + Math.max(0, sm.total), 0)
+  const tournamentsPlayed = history.length
 
   return (
     <div>
@@ -1101,16 +1104,52 @@ function MoneyTab({ seasonMoney, weekMoney, tournament, history }: {
         <div className="page-title">Money</div>
       </div>
 
+      {/* ── Total Season Pot — Liquid Glass hero card ── */}
+      {(totalPot > 0 || tournamentsPlayed > 0) && (
+        <div className="glass-card-gold mb-24" style={{
+          padding: '28px 32px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: 16,
+        }}>
+          <div>
+            <div style={{ fontFamily: 'DM Mono', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--gold)', marginBottom: 6 }}>
+              💰 Season Total Pot
+            </div>
+            <div style={{ fontFamily: 'DM Serif Display', fontSize: 'clamp(32px, 6vw, 48px)', fontWeight: 700, color: 'var(--gold)', lineHeight: 1 }}>
+              ${totalPot}
+            </div>
+            <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: 'var(--text-dim)', marginTop: 6 }}>
+              {tournamentsPlayed} tournament{tournamentsPlayed !== 1 ? 's' : ''} · total won by leaders
+            </div>
+          </div>
+          {sorted[0] && (
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontFamily: 'DM Mono', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-dim)', marginBottom: 4 }}>
+                Season Leader
+              </div>
+              <div style={{ fontWeight: 700, fontSize: 18, color: 'var(--text)' }}>{sorted[0].player_name}</div>
+              <AnimatedMoney value={sorted[0].total} style={{ fontFamily: 'DM Serif Display', fontSize: 24, color: sorted[0].total >= 0 ? 'var(--green)' : 'var(--red)' }} />
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="mb-24">
-        <h3 style={{ fontFamily: 'DM Serif Display', fontSize: 20, marginBottom: 16 }}>Season Standings</h3>
+        <h3 style={{ fontFamily: 'DM Serif Display', fontSize: 20, marginBottom: 16 }}>Season Totals</h3>
         <div className="money-grid">
           {sorted.map((sm, i) => {
             const v = sm.total
+            const glassClass = i === 0 ? 'glass-card gradient-card-gold leader-glow' : i === 1 ? 'glass-card gradient-card-green' : i === 2 ? 'glass-card gradient-card-indigo' : 'glass-card'
             return (
-              <div key={sm.player_name} className={`money-card ${i === 0 ? 'gradient-card-gold leader-glow' : i === 1 ? 'gradient-card-green' : i === 2 ? 'gradient-card-indigo' : ''}`}>
-                <div style={{ fontWeight: 600, fontSize: 15 }}>{sm.player_name}</div>
+              <div key={sm.player_name} className={`money-card ${glassClass}`}>
+                <div style={{ fontWeight: 600, fontSize: 15 }}>
+                  {i === 0 ? '🥇 ' : i === 1 ? '🥈 ' : i === 2 ? '🥉 ' : ''}{sm.player_name}
+                </div>
                 <AnimatedMoney value={v} className={`money-amount ${moneyClass(v)}`} />
-                <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Season</div>
+                <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Season Total</div>
               </div>
             )
           })}
@@ -1362,18 +1401,24 @@ function DraftTab({
 
 // ─── Admin Tab ────────────────────────────────────────────────────────────────
 function AdminTab({
-  tournament, standings, weekMoney, picks, liveData, onSetupTournament, onFinalize, onClearTournament, onClearPicks, onSwapGolfer
+  tournament, standings, weekMoney, picks, liveData,
+  leagueId, inviteCode, leagueRules,
+  onSetupTournament, onFinalize, onClearTournament, onClearPicks, onSwapGolfer, onSaveRules
 }: {
   tournament: Tournament | null
   standings: PlayerStanding[]
   weekMoney: Record<string, number>
   picks: Pick[]
   liveData: GolferScore[]
+  leagueId: string
+  inviteCode: string
+  leagueRules: LeagueRules
   onSetupTournament: (data: { name: string; course: string; date: string; draft_order: string[]; is_major: boolean }) => Promise<void>
   onFinalize: () => Promise<void>
   onClearTournament: () => Promise<void>
   onClearPicks: () => Promise<void>
   onSwapGolfer: (pickId: string, newGolferName: string) => Promise<void>
+  onSaveRules: (rules: Partial<LeagueRules>) => Promise<void>
 }) {
   const [selectedEvent, setSelectedEvent] = useState('')
   const [participants, setParticipants] = useState<string[]>(PLAYERS)
@@ -1381,6 +1426,48 @@ function AdminTab({
   const [saving, setSaving] = useState(false)
   const [finalizing, setFinalizing] = useState(false)
   const [msg, setMsg] = useState('')
+  const [copiedField, setCopiedField] = useState<'invite' | 'id' | null>(null)
+  // Rules editor state — initialized from leagueRules
+  const [rWeeklyWinner, setRWeeklyWinner] = useState(leagueRules.scoring.weekly_winner)
+  const [rOutrightWinner, setROutrightWinner] = useState(leagueRules.scoring.outright_winner)
+  const [rTop3, setRTop3] = useState(leagueRules.scoring.top3_bonus)
+  const [rPicksPerPlayer, setRPicksPerPlayer] = useState(leagueRules.picks_per_player)
+  const [savingRules, setSavingRules] = useState(false)
+
+  const copyToClipboard = (text: string, field: 'invite' | 'id') => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedField(field)
+      setTimeout(() => setCopiedField(null), 2000)
+    })
+  }
+
+  const handleSaveRules = async () => {
+    setSavingRules(true)
+    await onSaveRules({
+      picks_per_player: rPicksPerPlayer,
+      scoring: { weekly_winner: rWeeklyWinner, outright_winner: rOutrightWinner, top3_bonus: rTop3 },
+    })
+    setMsg('✅ Rules saved!')
+    setSavingRules(false)
+    setTimeout(() => setMsg(''), 3000)
+  }
+
+  const moveParticipantUp = (i: number) => {
+    if (i === 0) return
+    setParticipants(prev => {
+      const next = [...prev]
+      ;[next[i - 1], next[i]] = [next[i], next[i - 1]]
+      return next
+    })
+  }
+  const moveParticipantDown = (i: number) => {
+    setParticipants(prev => {
+      if (i >= prev.length - 1) return prev
+      const next = [...prev]
+      ;[next[i], next[i + 1]] = [next[i + 1], next[i]]
+      return next
+    })
+  }
 
   // Golfer swap state
   const [swapPlayer, setSwapPlayer] = useState<string>('')
@@ -1435,6 +1522,105 @@ function AdminTab({
 
       {msg && <div className="alert alert-green mb-24">{msg}</div>}
 
+      {/* ── League Info ── */}
+      <div className="card mb-24">
+        <div className="card-header"><div className="card-title">League Info</div></div>
+        <div className="card-body">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontFamily: 'DM Mono', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-dim)', marginBottom: 4 }}>Invite Code</div>
+                <div style={{ fontFamily: 'DM Mono', fontSize: 22, fontWeight: 700, color: 'var(--green)', letterSpacing: '0.12em' }}>
+                  {inviteCode || '—'}
+                </div>
+              </div>
+              <button
+                className="btn btn-outline btn-sm"
+                onClick={() => inviteCode && copyToClipboard(inviteCode, 'invite')}
+                disabled={!inviteCode}
+              >
+                {copiedField === 'invite' ? '✓ Copied!' : '📋 Copy Code'}
+              </button>
+            </div>
+            <div className="divider" />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontFamily: 'DM Mono', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-dim)', marginBottom: 4 }}>League ID</div>
+                <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: 'var(--text-mid)', wordBreak: 'break-all' }}>
+                  {leagueId}
+                </div>
+              </div>
+              <button
+                className="btn btn-outline btn-sm"
+                onClick={() => copyToClipboard(leagueId, 'id')}
+              >
+                {copiedField === 'id' ? '✓ Copied!' : '📋 Copy ID'}
+              </button>
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 4 }}>
+              Share the <strong style={{ color: 'var(--text)' }}>Invite Code</strong> with players. They can enter it at the Join page to join your league.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── League Rules Editor ── */}
+      <div className="card mb-24">
+        <div className="card-header"><div className="card-title">League Rules</div></div>
+        <div className="card-body">
+          <div className="grid-2" style={{ gap: 16, marginBottom: 16 }}>
+            <div className="form-group">
+              <label className="form-label">Weekly Winner Payout ($)</label>
+              <input
+                type="number"
+                className="form-input"
+                value={rWeeklyWinner}
+                min={0}
+                onChange={e => setRWeeklyWinner(Number(e.target.value))}
+              />
+              <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 4 }}>Player with lowest total strokes wins this × (players − 1)</div>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Outright Winner Payout ($)</label>
+              <input
+                type="number"
+                className="form-input"
+                value={rOutrightWinner}
+                min={0}
+                onChange={e => setROutrightWinner(Number(e.target.value))}
+              />
+              <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 4 }}>Bonus for picking the actual PGA Tour winner</div>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Top 3 Bonus ($)</label>
+              <input
+                type="number"
+                className="form-input"
+                value={rTop3}
+                min={0}
+                onChange={e => setRTop3(Number(e.target.value))}
+              />
+              <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 4 }}>Per golfer finishing T2 or T3 in the real tournament</div>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Picks per Player</label>
+              <input
+                type="number"
+                className="form-input"
+                value={rPicksPerPlayer}
+                min={1}
+                max={8}
+                onChange={e => setRPicksPerPlayer(Number(e.target.value))}
+              />
+              <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 4 }}>How many golfers each player drafts per tournament</div>
+            </div>
+          </div>
+          <button className="btn btn-green" onClick={handleSaveRules} disabled={savingRules}>
+            {savingRules ? '⏳ Saving…' : '💾 Save Rules'}
+          </button>
+        </div>
+      </div>
+
       <div className="grid-2">
         <div>
           <div className="card mb-24">
@@ -1475,39 +1661,83 @@ function AdminTab({
               )}
 
               <div className="form-group">
-                <label className="form-label">Participants & Draft Order</label>
+                <label className="form-label">Participants &amp; Draft Order</label>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  {PLAYERS.map((p, idx) => {
-                    const checked = participants.includes(p)
-                    const order = participants.indexOf(p)
-                    return (
-                      <div key={p} onClick={() => toggleParticipant(p)} style={{
-                        display: 'flex', alignItems: 'center', gap: 10,
-                        padding: '8px 12px', borderRadius: 8, cursor: 'pointer',
-                        background: checked ? 'var(--green-dim)' : 'var(--surface2)',
-                        border: `1px solid ${checked ? 'rgba(74,222,128,0.25)' : 'var(--border)'}`,
-                        transition: 'all 0.15s',
-                      }}>
-                        <div style={{
-                          width: 18, height: 18, borderRadius: 4, flexShrink: 0,
-                          border: `2px solid ${checked ? 'var(--green)' : 'var(--border-bright)'}`,
-                          background: checked ? 'var(--green)' : 'transparent',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        }}>
-                          {checked && <span style={{ color: '#0a0c0f', fontSize: 11, fontWeight: 900 }}>✓</span>}
-                        </div>
-                        <span style={{ fontWeight: 600, fontSize: 14, color: checked ? 'var(--green)' : 'var(--text-dim)', flex: 1 }}>{p}</span>
-                        {checked && (
-                          <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: 'var(--text-dim)' }}>
-                            Pick #{order + 1}
-                          </span>
-                        )}
+                  {/* Active participants in draft order with move buttons */}
+                  {participants.map((p, i) => (
+                    <div key={p} style={{
+                      display: 'flex', alignItems: 'center', gap: 8,
+                      padding: '8px 12px', borderRadius: 8,
+                      background: 'var(--green-dim)',
+                      border: '1px solid rgba(74,222,128,0.25)',
+                      transition: 'all 0.15s',
+                    }}>
+                      <span style={{ fontFamily: 'DM Mono', fontSize: 12, color: 'var(--green)', fontWeight: 700, minWidth: 22, textAlign: 'center' }}>
+                        #{i + 1}
+                      </span>
+                      <span style={{ fontWeight: 600, fontSize: 14, color: 'var(--green)', flex: 1 }}>{p}</span>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                        <button
+                          type="button"
+                          onClick={() => moveParticipantUp(i)}
+                          disabled={i === 0}
+                          style={{
+                            background: 'none', border: '1px solid var(--border)', borderRadius: 4,
+                            color: i === 0 ? 'var(--border-bright)' : 'var(--text-dim)',
+                            cursor: i === 0 ? 'default' : 'pointer', fontSize: 10, width: 24, height: 20,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0,
+                          }}
+                          title="Move up"
+                        >▲</button>
+                        <button
+                          type="button"
+                          onClick={() => moveParticipantDown(i)}
+                          disabled={i === participants.length - 1}
+                          style={{
+                            background: 'none', border: '1px solid var(--border)', borderRadius: 4,
+                            color: i === participants.length - 1 ? 'var(--border-bright)' : 'var(--text-dim)',
+                            cursor: i === participants.length - 1 ? 'default' : 'pointer', fontSize: 10, width: 24, height: 20,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0,
+                          }}
+                          title="Move down"
+                        >▼</button>
                       </div>
-                    )
-                  })}
+                      <button
+                        type="button"
+                        onClick={() => toggleParticipant(p)}
+                        style={{
+                          background: 'none', border: '1px solid rgba(248,113,113,0.3)', borderRadius: 4,
+                          color: 'var(--red)', cursor: 'pointer', fontSize: 11, padding: '2px 6px',
+                        }}
+                        title="Remove from draft"
+                      >✕</button>
+                    </div>
+                  ))}
+                  {/* Players not yet in the draft */}
+                  {PLAYERS.filter(p => !participants.includes(p)).map((p) => (
+                    <div key={p} style={{
+                      display: 'flex', alignItems: 'center', gap: 8,
+                      padding: '8px 12px', borderRadius: 8,
+                      background: 'var(--surface2)',
+                      border: '1px solid var(--border)',
+                      opacity: 0.6,
+                    }}>
+                      <span style={{ fontFamily: 'DM Mono', fontSize: 12, color: 'var(--text-dim)', minWidth: 22, textAlign: 'center' }}>—</span>
+                      <span style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-dim)', flex: 1 }}>{p}</span>
+                      <button
+                        type="button"
+                        onClick={() => toggleParticipant(p)}
+                        style={{
+                          background: 'var(--green-dim)', border: '1px solid rgba(74,222,128,0.3)', borderRadius: 4,
+                          color: 'var(--green)', cursor: 'pointer', fontSize: 11, padding: '2px 8px',
+                        }}
+                        title="Add to draft"
+                      >+ Add</button>
+                    </div>
+                  ))}
                 </div>
                 <div style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 8 }}>
-                  Check order = draft order. Snake draft reverses on even rounds.
+                  Use ▲ ▼ to set draft order. Snake draft reverses on even rounds.
                 </div>
               </div>
               <div className="form-group">
@@ -1959,7 +2189,7 @@ function HistoryTab({ history, golferHistory, isAdmin, onDeleteTournament, onEdi
               </tr>
             </thead>
             <tbody>
-              {(h.standings || []).map((s: any) => {
+              {[...(h.standings || [])].sort((a: any, b: any) => a.rank - b.rank).map((s: any) => {
                 const moneyVal = h.money?.[s.player] || 0
                 const isEditingScore = isAdmin && editing?.tid === h.tournament_id && editing?.player === s.player && editing?.field === 'total_score'
                 const isEditingMoney = isAdmin && editing?.tid === h.tournament_id && editing?.player === s.player && editing?.field === 'money_won'
@@ -2969,6 +3199,7 @@ export default function App() {
   const [leagueId, setLeagueId] = useState<string>('00000000-0000-0000-0000-000000000001')
   const [leagueName, setLeagueName] = useState<string>('Fore Picks')
   const [leagueRules, setLeagueRules] = useState<LeagueRules>(DEFAULT_RULES)
+  const [inviteCode, setInviteCode] = useState<string>('')
 
   const isAdmin = userProfile?.is_admin ?? ['Eric', 'Chase'].includes(currentPlayer ?? '')
   const isMasters = !!(tournament?.name?.toLowerCase().includes('masters'))
@@ -3005,17 +3236,14 @@ export default function App() {
       if (session?.user) {
         const u = { id: session.user.id, email: session.user.email ?? '' }
         setUser(u)
-        const { data } = await supabase.from('profiles').select('display_name, is_admin').eq('id', u.id).single()
+        // Fetch profile + league membership in parallel
+        const [{ data }, { data: membership }] = await Promise.all([
+          supabase.from('profiles').select('display_name, is_admin').eq('id', u.id).single(),
+          supabase.from('league_members').select('league_id, leagues(name, rules)').eq('user_id', u.id).limit(1).maybeSingle(),
+        ])
         if (data) {
           setUserProfile(data)
           setCurrentPlayer(data.display_name)
-          // Only check league membership if the user already has a profile
-          const { data: membership } = await supabase
-            .from('league_members')
-            .select('league_id, leagues(name, rules)')
-            .eq('user_id', u.id)
-            .limit(1)
-            .maybeSingle()
           if (membership) {
             setLeagueId(membership.league_id)
             const l = membership.leagues as any
@@ -3039,17 +3267,14 @@ export default function App() {
       if (session?.user) {
         const u = { id: session.user.id, email: session.user.email ?? '' }
         setUser(u)
-        const { data } = await supabase.from('profiles').select('display_name, is_admin').eq('id', u.id).single()
+        // Fetch profile + league membership in parallel
+        const [{ data }, { data: membership }] = await Promise.all([
+          supabase.from('profiles').select('display_name, is_admin').eq('id', u.id).single(),
+          supabase.from('league_members').select('league_id, leagues(name, rules)').eq('user_id', u.id).limit(1).maybeSingle(),
+        ])
         if (data) {
           setUserProfile(data)
           setCurrentPlayer(data.display_name)
-          // Also load league in case getSession() timed out and this is first auth
-          const { data: membership } = await supabase
-            .from('league_members')
-            .select('league_id, leagues(name, rules)')
-            .eq('user_id', u.id)
-            .limit(1)
-            .maybeSingle()
           if (membership) {
             setLeagueId(membership.league_id)
             const l = membership.leagues as any
@@ -3075,11 +3300,13 @@ export default function App() {
 
   // ── Fetch DB data when logged in (scoped to current league) ──
   const loadData = useCallback(async () => {
-    const [{ data: t }, { data: sm }] = await Promise.all([
+    const [{ data: t }, { data: sm }, { data: leagueRow }] = await Promise.all([
       supabase.from('tournaments').select('*').eq('status', 'active').eq('league_id', leagueId).maybeSingle(),
       supabase.from('season_money').select('*'),
+      supabase.from('leagues').select('invite_code').eq('id', leagueId).maybeSingle(),
     ])
     if (sm) setSeasonMoney(sm)
+    if (leagueRow) setInviteCode(leagueRow.invite_code ?? '')
 
     // Only load picks for the active tournament
     if (t) {
@@ -3134,7 +3361,7 @@ export default function App() {
             golfers_cut: r.golfers_cut || 0,
           })
           grouped[tid].money[r.player_name] = r.money_won
-          if (r.has_winner) grouped[tid].winner_player = r.player_name
+          if (r.rank === 1) grouped[tid].winner_player = r.player_name
         }
         setHistory(Object.values(grouped))
       }
@@ -3384,6 +3611,12 @@ export default function App() {
     await loadData()
   }
 
+  const handleSaveRules = async (newRules: Partial<LeagueRules>) => {
+    const merged = mergeRules(newRules)
+    await supabase.from('leagues').update({ rules: merged }).eq('id', leagueId)
+    setLeagueRules(merged)
+  }
+
   if (!bootstrapped) return <div className="loading-screen"><div className="spin" style={{ fontSize: 32 }}>⛳</div>Loading…</div>
   if (!user) return <LandingPage />
   if (!userProfile) return (
@@ -3447,7 +3680,7 @@ export default function App() {
             {tab === 'history' && <HistoryTab history={history} golferHistory={golferHistory} isAdmin={isAdmin} onDeleteTournament={handleDeleteTournament} onEditResult={handleEditResult} onDeleteResult={handleDeleteResult} />}
             {tab === 'stats'   && <StatsTab history={history} />}
             {tab === 'recap'   && <SeasonRecapTab history={history} golferHistory={golferHistory} seasonMoney={seasonMoney} />}
-            {tab === 'admin'   && isAdmin && <AdminTab tournament={tournament} standings={standings} weekMoney={weekMoney} picks={picks} liveData={liveData} onSetupTournament={handleSetupTournament} onFinalize={handleFinalize} onClearTournament={handleClearTournament} onClearPicks={handleClearPicks} onSwapGolfer={handleSwapGolfer} />}
+            {tab === 'admin'   && isAdmin && <AdminTab tournament={tournament} standings={standings} weekMoney={weekMoney} picks={picks} liveData={liveData} leagueId={leagueId} inviteCode={inviteCode} leagueRules={leagueRules} onSetupTournament={handleSetupTournament} onFinalize={handleFinalize} onClearTournament={handleClearTournament} onClearPicks={handleClearPicks} onSwapGolfer={handleSwapGolfer} onSaveRules={handleSaveRules} />}
           </div>
         )}
       </main>

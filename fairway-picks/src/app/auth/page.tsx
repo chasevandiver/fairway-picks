@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase'
 
 export default function AuthPage() {
@@ -9,6 +9,12 @@ export default function AuthPage() {
   const [sent, setSent] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [showPwaHelp, setShowPwaHelp] = useState(false)
+  const [isStandalone, setIsStandalone] = useState(false)
+
+  useEffect(() => {
+    setIsStandalone(window.matchMedia('(display-mode: standalone)').matches)
+  }, [])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -118,6 +124,47 @@ export default function AuthPage() {
         >
           No password needed — we'll email you a link to sign in.
         </p>
+
+        {/* iPhone Home Screen help */}
+        <div style={{ marginTop: 20, borderTop: '1px solid var(--border)', paddingTop: 16 }}>
+          <button
+            type="button"
+            onClick={() => setShowPwaHelp(!showPwaHelp)}
+            style={{
+              background: 'none', border: 'none', color: 'var(--text-dim)', fontSize: 12,
+              cursor: 'pointer', width: '100%', textAlign: 'center', fontFamily: 'var(--font-mono)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+            }}
+          >
+            <span>{showPwaHelp ? '▲' : '▼'}</span>
+            {isStandalone ? '📱 Signing in from Home Screen app?' : '📱 Using the Home Screen app?'}
+          </button>
+          {showPwaHelp && (
+            <div style={{
+              marginTop: 12, padding: '12px 14px', background: 'var(--surface2)',
+              borderRadius: 8, border: '1px solid var(--border)', fontSize: 12,
+              color: 'var(--text-dim)', lineHeight: 1.7,
+            }}>
+              {isStandalone ? (
+                <>
+                  <strong style={{ color: 'var(--text)' }}>You're in the Home Screen app.</strong>
+                  <br />
+                  Enter your email above and tap <em>Send Magic Link</em>. The link in your email
+                  will open in Safari — tap it there, then <strong>return to this app</strong> from
+                  your home screen. You'll be signed in automatically.
+                </>
+              ) : (
+                <>
+                  <strong style={{ color: 'var(--text)' }}>For the best sign-in experience:</strong>
+                  <br />
+                  Sign in here in Safari <em>first</em>, then use the Share button → <em>Add to Home Screen</em>.
+                  Your session will carry over. If you're already using the home screen app, open this
+                  page in Safari to sign in, then reopen from your home screen.
+                </>
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )
