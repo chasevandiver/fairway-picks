@@ -3388,20 +3388,21 @@ export default function App() {
         setCurrentPlayer(displayName)
         // League defaults to founding league (00000000-...) which is correct
         // for existing members. Load the actual name/rules in background.
-        supabase
-          .from('league_members')
-          .select('league_id, leagues(name, rules)')
-          .eq('user_id', user.id)
-          .limit(1)
-          .maybeSingle()
-          .then(({ data: membership }) => {
+        void (async () => {
+          try {
+            const { data: membership } = await supabase
+              .from('league_members')
+              .select('league_id, leagues(name, rules)')
+              .eq('user_id', user.id)
+              .limit(1)
+              .maybeSingle()
             if (membership) {
               setLeagueId(membership.league_id)
               const l = membership.leagues as any
               if (l) { setLeagueName(l.name); setLeagueRules(mergeRules(l.rules ?? {})) }
             }
-          })
-          .catch(() => {/* silently fail — default leagueId is correct */})
+          } catch { /* silently fail — default leagueId is correct */ }
+        })()
       }}
     />
   )
