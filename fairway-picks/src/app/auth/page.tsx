@@ -9,8 +9,12 @@ export default function AuthPage() {
   const [sent, setSent] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
-  const [showPwaHelp, setShowPwaHelp] = useState(false)
   const [isStandalone, setIsStandalone] = useState(false)
+
+  // OTP code flow for PWA — user types the 6-digit code instead of clicking the link
+  const [otp, setOtp] = useState('')
+  const [otpLoading, setOtpLoading] = useState(false)
+  const [otpError, setOtpError] = useState<string | null>(null)
 
   useEffect(() => {
     setIsStandalone(window.matchMedia('(display-mode: standalone)').matches)
@@ -36,6 +40,24 @@ export default function AuthPage() {
     setLoading(false)
   }
 
+  async function handleOtp(e: React.FormEvent) {
+    e.preventDefault()
+    setOtpLoading(true)
+    setOtpError(null)
+
+    const { error } = await supabase.auth.verifyOtp({
+      email,
+      token: otp.trim(),
+      type: 'email',
+    })
+
+    if (error) {
+      setOtpError(error.message)
+    }
+    // On success, onAuthStateChange in the app fires and handles navigation
+    setOtpLoading(false)
+  }
+
   return (
     <div className="login-screen">
       <div className="login-card">
@@ -44,127 +66,78 @@ export default function AuthPage() {
           <p>PGA TOUR PICK'EM LEAGUE</p>
         </div>
 
-        {sent ? (
-          <div style={{ textAlign: 'center' }}>
-            <p style={{ color: 'var(--green)', marginBottom: 8, fontWeight: 600 }}>
+        {!sent ? (
+          <>
+            <form onSubmit={handleSubmit}>
+              <div style={{ marginBottom: 16 }}>
+                <label style={{
+                  display: 'block', color: 'var(--text-dim)', fontSize: 12, marginBottom: 6,
+                  fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '0.1em',
+                }}>
+                  Email Address
+                </label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@example.com"
+                  required
+                  style={{
+                    width: '100%', background: 'var(--surface2)', border: '1px solid var(--border)',
+                    borderRadius: 8, padding: '10px 14px', color: 'var(--text)', fontSize: 15,
+                    outline: 'none', boxSizing: 'border-box',
+                  }}
+                />
+              </div>
+              {error && <p style={{ color: 'var(--red)', fontSize: 13, marginBottom: 12 }}>{error}</p>}
+              <button type="submit" className="btn btn-primary" style={{ width: '100%' }} disabled={loading}>
+                {loading ? 'Sending…' : 'Send Code'}
+              </button>
+            </form>
+            <p style={{ textAlign: 'center', color: 'var(--text-dim)', fontSize: 12, marginTop: 16 }}>
+              We'll email you a 6-digit code to sign in.
+            </p>
+          </>
+        ) : (
+          <>
+            <p style={{ textAlign: 'center', color: 'var(--green)', marginBottom: 6, fontWeight: 600 }}>
               Check your email!
             </p>
-            <p style={{ color: 'var(--text-dim)', fontSize: 13 }}>
-              We sent a magic link to{' '}
-              <strong style={{ color: 'var(--text)' }}>{email}</strong>.
-              <br />
-              Click it to sign in. Check your spam if you don't see it.
+            <p style={{ textAlign: 'center', color: 'var(--text-dim)', fontSize: 13, marginBottom: 20 }}>
+              Sent to <strong style={{ color: 'var(--text)' }}>{email}</strong>.
+              Enter the 6-digit code below.
             </p>
-            <button
-              className="btn btn-outline"
-              style={{ marginTop: 20 }}
-              onClick={() => setSent(false)}
-            >
-              Try a different email
-            </button>
-          </div>
-        ) : (
-          <form onSubmit={handleSubmit}>
-            <div style={{ marginBottom: 16 }}>
-              <label
-                style={{
-                  display: 'block',
-                  color: 'var(--text-dim)',
-                  fontSize: 12,
-                  marginBottom: 6,
-                  fontFamily: 'var(--font-mono)',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.1em',
-                }}
-              >
-                Email Address
-              </label>
+
+            <form onSubmit={handleOtp}>
               <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@example.com"
+                type="text"
+                inputMode="numeric"
+                value={otp}
+                onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                placeholder="123456"
                 required
                 style={{
-                  width: '100%',
-                  background: 'var(--surface2)',
-                  border: '1px solid var(--border)',
-                  borderRadius: 8,
-                  padding: '10px 14px',
-                  color: 'var(--text)',
-                  fontSize: 15,
-                  outline: 'none',
-                  boxSizing: 'border-box',
+                  width: '100%', background: 'var(--surface2)', border: '1px solid var(--border)',
+                  borderRadius: 8, padding: '12px 14px', color: 'var(--text)', fontSize: 24,
+                  outline: 'none', boxSizing: 'border-box', textAlign: 'center',
+                  letterSpacing: '0.3em', fontFamily: 'var(--font-mono)', marginBottom: 12,
                 }}
               />
-            </div>
-            {error && (
-              <p style={{ color: 'var(--red)', fontSize: 13, marginBottom: 12 }}>
-                {error}
-              </p>
-            )}
+              {otpError && <p style={{ color: 'var(--red)', fontSize: 13, marginBottom: 12 }}>{otpError}</p>}
+              <button type="submit" className="btn btn-primary" style={{ width: '100%' }} disabled={otpLoading || otp.length < 6}>
+                {otpLoading ? 'Verifying…' : 'Sign In'}
+              </button>
+            </form>
+
             <button
-              type="submit"
-              className="btn btn-primary"
-              style={{ width: '100%' }}
-              disabled={loading}
+              className="btn btn-outline"
+              style={{ width: '100%', marginTop: 10 }}
+              onClick={() => { setSent(false); setOtp(''); setOtpError(null) }}
             >
-              {loading ? 'Sending…' : 'Send Magic Link'}
+              Use a different email
             </button>
-          </form>
+          </>
         )}
-
-        <p
-          style={{
-            textAlign: 'center',
-            color: 'var(--text-dim)',
-            fontSize: 12,
-            marginTop: 20,
-          }}
-        >
-          No password needed — we'll email you a link to sign in.
-        </p>
-
-        {/* iPhone Home Screen help */}
-        <div style={{ marginTop: 20, borderTop: '1px solid var(--border)', paddingTop: 16 }}>
-          <button
-            type="button"
-            onClick={() => setShowPwaHelp(!showPwaHelp)}
-            style={{
-              background: 'none', border: 'none', color: 'var(--text-dim)', fontSize: 12,
-              cursor: 'pointer', width: '100%', textAlign: 'center', fontFamily: 'var(--font-mono)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-            }}
-          >
-            <span>{showPwaHelp ? '▲' : '▼'}</span>
-            {isStandalone ? '📱 Signing in from Home Screen app?' : '📱 Using the Home Screen app?'}
-          </button>
-          {showPwaHelp && (
-            <div style={{
-              marginTop: 12, padding: '12px 14px', background: 'var(--surface2)',
-              borderRadius: 8, border: '1px solid var(--border)', fontSize: 12,
-              color: 'var(--text-dim)', lineHeight: 1.7,
-            }}>
-              {isStandalone ? (
-                <>
-                  <strong style={{ color: 'var(--text)' }}>You're in the Home Screen app.</strong>
-                  <br />
-                  Enter your email above and tap <em>Send Magic Link</em>. The link in your email
-                  will open in Safari — tap it there, then <strong>return to this app</strong> from
-                  your home screen. You'll be signed in automatically.
-                </>
-              ) : (
-                <>
-                  <strong style={{ color: 'var(--text)' }}>For the best sign-in experience:</strong>
-                  <br />
-                  Sign in here in Safari <em>first</em>, then use the Share button → <em>Add to Home Screen</em>.
-                  Your session will carry over. If you're already using the home screen app, open this
-                  page in Safari to sign in, then reopen from your home screen.
-                </>
-              )}
-            </div>
-          )}
-        </div>
       </div>
     </div>
   )
