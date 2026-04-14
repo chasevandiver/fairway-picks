@@ -19,22 +19,30 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
   }
 
-  // Use service-like pattern: verify the token then act on behalf of the user
-  const supabase = createClient(
+  // First verify the token is valid and get the user identity
+  const verifyClient = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
-
-  // Verify the token and get the user
-  const { data: { user }, error: authError } = await supabase.auth.getUser(accessToken)
+  const { data: { user }, error: authError } = await verifyClient.auth.getUser(accessToken)
   if (authError || !user) {
     return NextResponse.json({ error: 'Invalid token' }, { status: 401 })
   }
 
-  // Set the session so subsequent DB calls run as this user
-  await supabase.auth.setSession({ access_token: accessToken, refresh_token: '' })
+  // Create a client that sends the user's JWT on every request so RLS
+  // sees auth.uid() = user.id. Using global headers is more reliable than
+  // setSession() which requires a valid refresh_token.
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      global: {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      },
+    }
+  )
 
-  // Insert profile
+  // Insert profile — RLS policy: auth.uid() = id
   const { error: profileErr } = await supabase.from('profiles').insert({
     id: user.id,
     display_name,
