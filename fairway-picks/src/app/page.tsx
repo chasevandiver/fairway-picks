@@ -241,11 +241,17 @@ function SetupProfileScreen({
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    supabase.from('player_aliases').select('player_name').then(({ data }) => {
-      const claimed = (data ?? []).map((a: any) => a.player_name)
-      setUnclaimedNames(PLAYERS.filter((p) => !claimed.includes(p)))
+    // Fetch all aliases. Show names that are either unclaimed OR already claimed
+    // by this user — so the user can re-link their own name after a partial setup.
+    supabase.from('player_aliases').select('player_name, user_id').then(({ data }) => {
+      const aliases = data ?? []
+      const available = PLAYERS.filter((p) => {
+        const alias = aliases.find((a: any) => a.player_name === p)
+        return !alias || alias.user_id === userId  // unclaimed OR owned by this user
+      })
+      setUnclaimedNames(available)
     })
-  }, [])
+  }, [userId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSubmit = async (e?: React.FormEvent) => {
     e?.preventDefault()
@@ -3031,13 +3037,14 @@ export default function App() {
         }
         // No profile but no league — fall through to the app with default leagueId.
         // (Don't redirect to /create which doesn't exist yet.)
-      } else if (profileError?.code === 'PGRST116') {
-        // "0 rows returned" — profile genuinely doesn't exist; show setup screen.
+      } else if (!profile) {
+        // Profile not found (PGRST116 = 0 rows, or null+null from some SDK versions).
+        // Show setup screen so the user can create their profile.
         setUserProfile(null)
         setCurrentPlayer(null)
       }
       // Any other error (network, etc.) — leave existing userProfile in place
-      // so a transient failure doesn't flash the setup screen.
+      // so a transient failure doesn't flash the setup screen back.
 
       setBootstrapped(true)
     })
