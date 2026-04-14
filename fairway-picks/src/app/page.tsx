@@ -257,26 +257,16 @@ function SetupProfileScreen({
     try {
       const isAdminUser = ['Eric', 'Chase'].includes(name)
 
-      // Race DB insert against a 6s timeout — Supabase requests can hang if
-      // the project is paused or the table doesn't exist yet.
-      const timeout = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('Request timed out. Check that your Supabase project is active and migrations have been run.')), 6000)
-      )
+      // Use a server-side API route so the insert runs server-to-server
+      // (bypasses browser CORS / client-auth issues that can hang the request)
+      const res = await fetch('/api/setup-profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ display_name: name, claimed_name: claimedName }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || 'Failed to create profile')
 
-      const { error: profileErr } = await Promise.race([
-        supabase.from('profiles').insert({ id: userId, display_name: name, email: userEmail, is_admin: isAdminUser }),
-        timeout,
-      ]) as any
-
-      if (profileErr) { setError(profileErr.message); return }
-
-      if (claimedName) {
-        await supabase.from('player_aliases').insert({ user_id: userId, player_name: claimedName })
-        await supabase.from('league_members').insert({
-          league_id: '00000000-0000-0000-0000-000000000001',
-          user_id: userId,
-        })
-      }
       onComplete(name, isAdminUser)
     } catch (err: any) {
       setError(err.message || 'Something went wrong. Please try again.')
