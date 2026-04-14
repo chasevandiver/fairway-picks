@@ -1,5 +1,6 @@
 import type { Pick } from './types'
-import { PLAYERS, PAYOUT_RULES } from './types'
+import { PLAYERS } from './types'
+import { type LeagueRules, DEFAULT_RULES } from './rules'
 
 export function toRelScore(s: number | null | undefined): string {
   if (s === null || s === undefined || isNaN(s)) return '—'
@@ -176,29 +177,35 @@ export function computeStandings(liveData: any[], pickMap: Record<string, string
   })
 }
 
-export function computeMoney(standings: any[], players: string[] = PLAYERS): Record<string, number> {
+export function computeMoney(
+  standings: any[],
+  players: string[] = PLAYERS,
+  rules: LeagueRules = DEFAULT_RULES
+): Record<string, number> {
   const money: Record<string, number> = {}
   players.forEach((p) => (money[p] = 0))
   if (!standings.length) return money
 
+  const { weekly_winner, outright_winner, top3_bonus } = rules.scoring
+
   const winner = standings[0]
   const others = players.filter((p) => p !== winner.player)
-  money[winner.player] += PAYOUT_RULES.lowestStrokes * others.length
-  others.forEach((p) => (money[p] -= PAYOUT_RULES.lowestStrokes))
+  money[winner.player] += weekly_winner * others.length
+  others.forEach((p) => (money[p] -= weekly_winner))
 
   standings.forEach((s) => {
     if (s.hasWinner) {
       const oth = players.filter((p) => p !== s.player)
-      money[s.player] += PAYOUT_RULES.outrightWinner * oth.length
-      oth.forEach((p) => (money[p] -= PAYOUT_RULES.outrightWinner))
+      money[s.player] += outright_winner * oth.length
+      oth.forEach((p) => (money[p] -= outright_winner))
     }
   })
 
   standings.forEach((s) => {
     if (s.top3Count > 0) {
       const oth = players.filter((p) => p !== s.player)
-      money[s.player] += PAYOUT_RULES.top3 * oth.length * s.top3Count
-      oth.forEach((p) => (money[p] -= PAYOUT_RULES.top3 * s.top3Count))
+      money[s.player] += top3_bonus * oth.length * s.top3Count
+      oth.forEach((p) => (money[p] -= top3_bonus * s.top3Count))
     }
   })
 

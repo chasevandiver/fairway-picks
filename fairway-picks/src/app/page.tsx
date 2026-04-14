@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useCallback, useRef } from 'react'
+import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import {
   toRelScore, scoreClass, formatMoney, moneyClass,
@@ -8,6 +9,8 @@ import {
   getCurrentRound, buildCutDisplayRounds
 } from '@/lib/scoring'
 import { PLAYERS, PAYOUT_RULES } from '@/lib/types'
+import { DEFAULT_RULES, mergeRules } from '@/lib/rules'
+import type { LeagueRules } from '@/lib/rules'
 import type { Tournament, Pick, GolferScore, PlayerStanding, SeasonMoney } from '@/lib/types'
 
 const PICKS_PER_PLAYER = 4
@@ -107,26 +110,237 @@ function AnimatedMoney({ value, className, style }: { value: number; className?:
   )
 }
 
-// ─── Login Screen ─────────────────────────────────────────────────────────────
-function LoginScreen({ onLogin }: { onLogin: (name: string) => void }) {
+// ─── Landing Page ─────────────────────────────────────────────────────────────
+// Shown to unauthenticated users visiting /
+function LandingPage() {
+  return (
+    <div style={{ minHeight: '100vh', background: 'var(--bg)', color: 'var(--text)' }}>
+      {/* Nav */}
+      <nav style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px 40px', borderBottom: '1px solid var(--border)', maxWidth: 1200, margin: '0 auto' }}>
+        <div style={{ fontFamily: "'DM Serif Display', serif", fontSize: 22, fontWeight: 700 }}>
+          Fore <span style={{ color: 'var(--green)' }}>Picks</span>
+        </div>
+        <a href="/auth" className="btn btn-primary" style={{ textDecoration: 'none', padding: '8px 20px' }}>
+          Sign In
+        </a>
+      </nav>
+
+      {/* Hero */}
+      <section style={{ textAlign: 'center', padding: '80px 24px 60px', maxWidth: 720, margin: '0 auto' }}>
+        <div style={{ display: 'inline-block', background: 'rgba(74,222,128,0.1)', border: '1px solid rgba(74,222,128,0.3)', borderRadius: 20, padding: '4px 14px', fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--green)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 24 }}>
+          Free · No Download · Live PGA Scores
+        </div>
+        <h1 style={{ fontFamily: "'DM Serif Display', serif", fontSize: 'clamp(36px, 6vw, 62px)', lineHeight: 1.1, marginBottom: 20, fontWeight: 700 }}>
+          Run your golf league,<br />
+          <span style={{ color: 'var(--green)' }}>your way.</span>
+        </h1>
+        <p style={{ color: 'var(--text-dim)', fontSize: 'clamp(15px, 2vw, 18px)', lineHeight: 1.6, marginBottom: 36, maxWidth: 560, margin: '0 auto 36px' }}>
+          Pick golfers, set your stakes, trash-talk your friends.
+          Live PGA Tour scoring, snake draft, customizable rules.
+        </p>
+        <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
+          <a href="/auth" className="btn btn-primary" style={{ textDecoration: 'none', padding: '14px 32px', fontSize: 16, fontWeight: 700 }}>
+            Create Your League — Free
+          </a>
+          <a href="/join" className="btn btn-outline" style={{ textDecoration: 'none', padding: '14px 32px', fontSize: 16 }}>
+            Join a League
+          </a>
+        </div>
+      </section>
+
+      {/* How it works */}
+      <section style={{ padding: '60px 24px', maxWidth: 900, margin: '0 auto' }}>
+        <h2 style={{ textAlign: 'center', fontFamily: "'DM Serif Display', serif", fontSize: 32, marginBottom: 48 }}>
+          How it works
+        </h2>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 24 }}>
+          {[
+            { icon: '🏌️', step: '01', title: 'Create your league', desc: 'Set your rules or use our proven defaults. Takes 30 seconds.' },
+            { icon: '📨', step: '02', title: 'Invite your friends', desc: 'Share a 6-character code. Anyone with the link can join instantly.' },
+            { icon: '⛳', step: '03', title: 'Draft & compete', desc: 'Snake draft your golfers every tournament. Live scores update every 2 minutes.' },
+          ].map(({ icon, step, title, desc }) => (
+            <div key={step} className="card" style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: 36, marginBottom: 12 }}>{icon}</div>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.15em', marginBottom: 8 }}>Step {step}</div>
+              <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 8 }}>{title}</div>
+              <div style={{ color: 'var(--text-dim)', fontSize: 13, lineHeight: 1.5 }}>{desc}</div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Features */}
+      <section style={{ padding: '60px 24px', background: 'var(--surface)', borderTop: '1px solid var(--border)', borderBottom: '1px solid var(--border)' }}>
+        <div style={{ maxWidth: 900, margin: '0 auto' }}>
+          <h2 style={{ textAlign: 'center', fontFamily: "'DM Serif Display', serif", fontSize: 32, marginBottom: 48 }}>
+            Your league, your rules
+          </h2>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 20 }}>
+            {[
+              { icon: '💰', title: 'Custom payouts', desc: 'Set stakes per winner. $5, $10, $100 — your call.' },
+              { icon: '🏌️', title: 'Flexible rosters', desc: '2 to 6 golfers per player. You decide.' },
+              { icon: '📋', title: 'Snake draft', desc: 'Live real-time draft every tournament. No one waits.' },
+              { icon: '📡', title: 'Live scores', desc: 'ESPN-powered scoring. Updates every 2 minutes, automatically.' },
+              { icon: '📈', title: 'Season tracking', desc: 'Money standings, history, and stats across the full season.' },
+              { icon: '🏆', title: 'Majors support', desc: 'Masters, US Open, PGA Championship — automatically flagged.' },
+            ].map(({ icon, title, desc }) => (
+              <div key={title} style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
+                <div style={{ fontSize: 24, flexShrink: 0 }}>{icon}</div>
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4 }}>{title}</div>
+                  <div style={{ color: 'var(--text-dim)', fontSize: 12, lineHeight: 1.5 }}>{desc}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* CTA */}
+      <section style={{ textAlign: 'center', padding: '80px 24px' }}>
+        <h2 style={{ fontFamily: "'DM Serif Display', serif", fontSize: 36, marginBottom: 16 }}>
+          Ready to run a real golf league?
+        </h2>
+        <p style={{ color: 'var(--text-dim)', fontSize: 16, marginBottom: 32 }}>
+          Free forever. No credit card. Works on any device.
+        </p>
+        <a href="/auth" className="btn btn-primary" style={{ textDecoration: 'none', padding: '14px 40px', fontSize: 16, fontWeight: 700 }}>
+          Create Your League — Free
+        </a>
+      </section>
+
+      {/* Footer */}
+      <footer style={{ borderTop: '1px solid var(--border)', padding: '24px 40px', textAlign: 'center', color: 'var(--text-dim)', fontSize: 12 }}>
+        <span style={{ fontFamily: "'DM Serif Display', serif", fontWeight: 700, marginRight: 8 }}>
+          Fore Picks
+        </span>
+        · Live scores powered by ESPN PGA Tour data · Free to use
+      </footer>
+    </div>
+  )
+}
+
+// ─── Setup Profile Screen ─────────────────────────────────────────────────────
+// Shown to a newly authenticated user who doesn't have a profile yet.
+// They either claim a legacy player name or enter a new display name.
+function SetupProfileScreen({
+  userId,
+  userEmail,
+  onComplete,
+}: {
+  userId: string
+  userEmail: string
+  onComplete: (displayName: string, isAdmin: boolean) => void
+}) {
+  const supabase = createClient()
+  const [displayName, setDisplayName] = useState(userEmail.split('@')[0])
+  const [claimedName, setClaimedName] = useState<string | null>(null)
+  const [unclaimedNames, setUnclaimedNames] = useState<string[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    supabase.from('player_aliases').select('player_name').then(({ data }) => {
+      const claimed = (data ?? []).map((a: any) => a.player_name)
+      setUnclaimedNames(PLAYERS.filter((p) => !claimed.includes(p)))
+    })
+  }, [])
+
+  const handleSubmit = async (e?: React.FormEvent) => {
+    e?.preventDefault()
+    setLoading(true)
+    setError(null)
+    const name = claimedName ?? displayName.trim()
+    if (!name) { setLoading(false); return }
+
+    const isAdminUser = ['Eric', 'Chase'].includes(name)
+    const { error: profileErr } = await supabase.from('profiles').insert({
+      id: userId,
+      display_name: name,
+      email: userEmail,
+      is_admin: isAdminUser,
+    })
+    if (profileErr) { setError(profileErr.message); setLoading(false); return }
+
+    if (claimedName) {
+      await supabase.from('player_aliases').insert({ user_id: userId, player_name: claimedName })
+    }
+    onComplete(name, isAdminUser)
+    setLoading(false)
+  }
+
   return (
     <div className="login-screen">
       <div className="login-card">
         <div className="login-logo">
-          <h1>Fairway <span>Picks</span></h1>
+          <h1>Fore <span>Picks</span></h1>
           <p>PGA TOUR PICK'EM LEAGUE</p>
         </div>
-        <div style={{ marginBottom: 20, color: 'var(--text-dim)', fontSize: 13, textAlign: 'center' }}>
-          Who are you?
-        </div>
-        <div className="player-btns">
-          {PLAYERS.map((name) => (
-            <button key={name} className="player-btn" onClick={() => onLogin(name)}>
-              <div className="player-btn-avatar">{name[0]}</div>
-              {name}
+        <p style={{ textAlign: 'center', color: 'var(--text-dim)', fontSize: 13, marginBottom: 20 }}>
+          Welcome! Let's set up your profile.
+        </p>
+
+        {unclaimedNames.length > 0 && (
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ color: 'var(--text-dim)', fontSize: 12, fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 8 }}>
+              Are you one of these players?
+            </div>
+            <div className="player-btns">
+              {unclaimedNames.map((name) => (
+                <button
+                  key={name}
+                  className={`player-btn${claimedName === name ? ' active' : ''}`}
+                  type="button"
+                  onClick={() => {
+                    setClaimedName(claimedName === name ? null : name)
+                    setDisplayName(name)
+                  }}
+                >
+                  <div className="player-btn-avatar">{name[0]}</div>
+                  {name}
+                </button>
+              ))}
+            </div>
+            {claimedName && (
+              <p style={{ color: 'var(--green)', fontSize: 12, textAlign: 'center', marginTop: 8 }}>
+                You'll be linked to all of {claimedName}'s existing history.
+              </p>
+            )}
+          </div>
+        )}
+
+        {!claimedName ? (
+          <form onSubmit={handleSubmit}>
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ display: 'block', color: 'var(--text-dim)', fontSize: 12, marginBottom: 6, fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+                Display Name
+              </label>
+              <input
+                type="text"
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                placeholder="Your name"
+                required
+                maxLength={30}
+                style={{ width: '100%', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, padding: '10px 14px', color: 'var(--text)', fontSize: 15, outline: 'none', boxSizing: 'border-box' }}
+              />
+            </div>
+            {error && <p style={{ color: 'var(--red)', fontSize: 13, marginBottom: 12 }}>{error}</p>}
+            <button type="submit" className="btn btn-primary" style={{ width: '100%' }} disabled={loading}>
+              {loading ? 'Setting up…' : 'Get Started'}
             </button>
-          ))}
-        </div>
+          </form>
+        ) : (
+          <div>
+            {error && <p style={{ color: 'var(--red)', fontSize: 13, marginBottom: 12 }}>{error}</p>}
+            <button className="btn btn-primary" style={{ width: '100%' }} disabled={loading} onClick={() => handleSubmit()}>
+              {loading ? 'Setting up…' : `Continue as ${claimedName}`}
+            </button>
+            <button className="btn btn-outline" style={{ width: '100%', marginTop: 8 }} onClick={() => { setClaimedName(null); setDisplayName(userEmail.split('@')[0]) }}>
+              Use a different name
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )
@@ -145,7 +359,7 @@ const NAV_ITEMS = [
 ]
 
 function Sidebar({
-  currentPlayer, tab, setTab, isAdmin, onLogout, tournament, isOpen, onClose, isMasters
+  currentPlayer, tab, setTab, isAdmin, onLogout, tournament, isOpen, onClose, isMasters, leagueName
 }: {
   currentPlayer: string
   tab: string
@@ -156,6 +370,7 @@ function Sidebar({
   isOpen: boolean
   onClose: () => void
   isMasters: boolean
+  leagueName: string
 }) {
   return (
     <>
@@ -185,8 +400,10 @@ function Sidebar({
           </>
         ) : (
           <>
-            <h1>Fairway <span>Picks</span></h1>
-            <p>PGA Tour Pick'em</p>
+            <h1>Fore <span>Picks</span></h1>
+            <p style={{ fontSize: 10, color: 'var(--text-dim)', marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {leagueName}
+            </p>
           </>
         )}
       </div>
@@ -2703,6 +2920,7 @@ function SeasonRecapTab({ history, golferHistory, seasonMoney }: {
 }
 export default function App() {
   const supabase = createClient()
+  const router = useRouter()
   const [currentPlayer, setCurrentPlayer] = useState<string | null>(null)
   const [tab, setTab] = useState('live')
   const [tournament, setTournament] = useState<Tournament | null>(null)
@@ -2718,8 +2936,13 @@ export default function App() {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   const [bootstrapped, setBootstrapped] = useState(false)
   const [tabKey, setTabKey] = useState(0)
+  const [user, setUser] = useState<{ id: string; email: string } | null>(null)
+  const [userProfile, setUserProfile] = useState<{ display_name: string; is_admin: boolean } | null>(null)
+  const [leagueId, setLeagueId] = useState<string>('00000000-0000-0000-0000-000000000001')
+  const [leagueName, setLeagueName] = useState<string>('Fore Picks')
+  const [leagueRules, setLeagueRules] = useState<LeagueRules>(DEFAULT_RULES)
 
-  const isAdmin = ['Eric', 'Chase'].includes(currentPlayer ?? '')
+  const isAdmin = userProfile?.is_admin ?? ['Eric', 'Chase'].includes(currentPlayer ?? '')
   const isMasters = !!(tournament?.name?.toLowerCase().includes('masters'))
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
@@ -2740,17 +2963,65 @@ export default function App() {
     setSidebarOpen(false)
   }, [])
 
-  // ── Load from localStorage on mount ──
+  // ── Auth state management ──
   useEffect(() => {
-    const saved = localStorage.getItem('fairway_player')
-    if (saved) setCurrentPlayer(saved)
-    setBootstrapped(true)
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (session?.user) {
+        const u = { id: session.user.id, email: session.user.email ?? '' }
+        setUser(u)
+        const { data } = await supabase.from('profiles').select('display_name, is_admin').eq('id', u.id).single()
+        if (data) {
+          setUserProfile(data)
+          setCurrentPlayer(data.display_name)
+        }
+        // Load user's first league
+        const { data: membership } = await supabase
+          .from('league_members')
+          .select('league_id, leagues(name, rules)')
+          .eq('user_id', u.id)
+          .limit(1)
+          .maybeSingle()
+        if (membership) {
+          setLeagueId(membership.league_id)
+          const l = membership.leagues as any
+          if (l) { setLeagueName(l.name); setLeagueRules(mergeRules(l.rules ?? {})) }
+        } else {
+          // New user with no leagues — send to league creation
+          setBootstrapped(true)
+          router.push('/create')
+          return
+        }
+      }
+      setBootstrapped(true)
+    })
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (session?.user) {
+        const u = { id: session.user.id, email: session.user.email ?? '' }
+        setUser(u)
+        const { data } = await supabase.from('profiles').select('display_name, is_admin').eq('id', u.id).single()
+        if (data) {
+          setUserProfile(data)
+          setCurrentPlayer(data.display_name)
+        } else {
+          setUser(u)
+          setUserProfile(null)
+          setCurrentPlayer(null)
+        }
+      } else {
+        setUser(null)
+        setUserProfile(null)
+        setCurrentPlayer(null)
+      }
+    })
+
+    return () => subscription.unsubscribe()
   }, [])
 
-  // ── Fetch DB data when logged in ──
+  // ── Fetch DB data when logged in (scoped to current league) ──
   const loadData = useCallback(async () => {
     const [{ data: t }, { data: sm }] = await Promise.all([
-      supabase.from('tournaments').select('*').eq('status', 'active').single(),
+      supabase.from('tournaments').select('*').eq('status', 'active').eq('league_id', leagueId).maybeSingle(),
       supabase.from('season_money').select('*'),
     ])
     if (sm) setSeasonMoney(sm)
@@ -2769,50 +3040,64 @@ export default function App() {
       setPicks([])
     }
 
-    // Load history: join results + tournaments
-    const { data: results } = await supabase
-      .from('results')
-      .select('*, tournaments(name, date, is_major)')
-      .order('created_at', { ascending: false })
+    // Load history: results scoped to this league's tournaments
+    const { data: leagueTournaments } = await supabase
+      .from('tournaments')
+      .select('id')
+      .eq('league_id', leagueId)
 
-    if (results) {
-      // Group by tournament
-      const grouped: Record<string, any> = {}
-      for (const r of results) {
-        const tid = r.tournament_id
-        if (!grouped[tid]) {
-          grouped[tid] = {
-            tournament_id: tid,
-            tournament_name: r.tournaments?.name,
-            date: r.tournaments?.date,
-            is_major: r.tournaments?.is_major || false,
-            standings: [],
-            money: {},
-            winner_player: null,
+    const tournamentIds = (leagueTournaments ?? []).map((t: any) => t.id)
+
+    if (tournamentIds.length > 0) {
+      const { data: results } = await supabase
+        .from('results')
+        .select('*, tournaments(name, date, is_major)')
+        .in('tournament_id', tournamentIds)
+        .order('created_at', { ascending: false })
+
+      if (results) {
+        const grouped: Record<string, any> = {}
+        for (const r of results) {
+          const tid = r.tournament_id
+          if (!grouped[tid]) {
+            grouped[tid] = {
+              tournament_id: tid,
+              tournament_name: r.tournaments?.name,
+              date: r.tournaments?.date,
+              is_major: r.tournaments?.is_major || false,
+              standings: [],
+              money: {},
+              winner_player: null,
+            }
           }
+          grouped[tid].standings.push({
+            player: r.player_name,
+            score: r.total_score,
+            rank: r.rank,
+            has_winner: r.has_winner,
+            has_top3: r.has_top3,
+            golfers_cut: r.golfers_cut || 0,
+          })
+          grouped[tid].money[r.player_name] = r.money_won
+          if (r.has_winner) grouped[tid].winner_player = r.player_name
         }
-        grouped[tid].standings.push({
-          player: r.player_name,
-          score: r.total_score,
-          rank: r.rank,
-          has_winner: r.has_winner,
-          has_top3: r.has_top3,
-          golfers_cut: r.golfers_cut || 0,
-        })
-        grouped[tid].money[r.player_name] = r.money_won
-        if (r.has_winner) grouped[tid].winner_player = r.player_name
+        setHistory(Object.values(grouped))
       }
-      setHistory(Object.values(grouped))
+
+      // Load golfer-level history
+      const { data: gr } = await supabase
+        .from('golfer_results')
+        .select('*, tournaments(name, date, is_major)')
+        .in('tournament_id', tournamentIds)
+        .order('created_at', { ascending: false })
+      if (gr) setGolferHistory(gr)
+    } else {
+      setHistory([])
+      setGolferHistory([])
     }
 
-    // Load golfer-level history
-    const { data: gr } = await supabase
-      .from('golfer_results')
-      .select('*, tournaments(name, date, is_major)')
-      .order('created_at', { ascending: false })
-    if (gr) setGolferHistory(gr)
     setDataLoaded(true)
-  }, [])
+  }, [leagueId])
 
   useEffect(() => {
     if (currentPlayer) loadData()
@@ -2868,17 +3153,14 @@ export default function App() {
   const participants = tournament?.draft_order ?? []
   const pickMap = buildPickMap(picks)
   const standings = computeStandings(liveData, pickMap, participants.length > 0 ? participants : undefined)
-  const weekMoney = computeMoney(standings, participants.length > 0 ? participants : undefined)
+  const weekMoney = computeMoney(standings, participants.length > 0 ? participants : undefined, leagueRules)
 
   // ── Handlers ──
-  const handleLogin = (name: string) => {
-    setCurrentPlayer(name)
-    localStorage.setItem('fairway_player', name)
-  }
-
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await supabase.auth.signOut()
+    setUser(null)
+    setUserProfile(null)
     setCurrentPlayer(null)
-    localStorage.removeItem('fairway_player')
     setTab('live')
   }
 
@@ -2889,7 +3171,7 @@ export default function App() {
       await supabase.from('picks').delete().eq('tournament_id', oldT.id)
       await supabase.from('tournaments').update({ status: 'finalized' }).eq('id', oldT.id)
     }
-    const { data: t } = await supabase.from('tournaments').insert({ ...data, status: 'active' }).select().single()
+    const { data: t } = await supabase.from('tournaments').insert({ ...data, status: 'active', league_id: leagueId, rules_snapshot: leagueRules }).select().single()
     if (t) setTournament(t)
     setPicks([])
     await loadData()
@@ -3048,7 +3330,17 @@ export default function App() {
   }
 
   if (!bootstrapped) return <div className="loading-screen"><div className="spin" style={{ fontSize: 32 }}>⛳</div>Loading…</div>
-  if (!currentPlayer) return <LoginScreen onLogin={handleLogin} />
+  if (!user) return <LandingPage />
+  if (!userProfile) return (
+    <SetupProfileScreen
+      userId={user.id}
+      userEmail={user.email}
+      onComplete={(displayName, isAdmin) => {
+        setUserProfile({ display_name: displayName, is_admin: isAdmin })
+        setCurrentPlayer(displayName)
+      }}
+    />
+  )
 
   return (
     <div className="app-shell">
@@ -3068,6 +3360,7 @@ export default function App() {
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
         isMasters={isMasters}
+        leagueName={leagueName}
       />
       <main className="main-content">
         {!dataLoaded ? (

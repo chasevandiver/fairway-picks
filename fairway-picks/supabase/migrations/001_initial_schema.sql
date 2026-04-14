@@ -1,5 +1,5 @@
 -- ─────────────────────────────────────────────────────────────────────────────
--- Fairway Picks · Supabase Schema
+-- Fore Picks · Supabase Schema
 -- Run this in the Supabase SQL editor (Database → SQL Editor → New Query)
 -- ─────────────────────────────────────────────────────────────────────────────
 
