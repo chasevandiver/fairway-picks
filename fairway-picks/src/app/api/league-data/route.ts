@@ -34,27 +34,29 @@ export async function GET(request: NextRequest) {
   let golferResults: any[] = []
   let picks: any[] = []
 
-  const fetchPromises: Promise<any>[] = []
+  const fetchPromises: Promise<void>[] = []
 
   if (activeId) {
     fetchPromises.push(
-      db.from('tournaments').select('*').eq('id', activeId).single().then(({ data }) => { activeTournament = data }),
-      db.from('picks').select('*').eq('tournament_id', activeId).order('pick_order').then(({ data }) => { picks = data ?? [] })
+      Promise.resolve(db.from('tournaments').select('*').eq('id', activeId).single()).then(({ data }) => { activeTournament = data }),
+      Promise.resolve(db.from('picks').select('*').eq('tournament_id', activeId).order('pick_order')).then(({ data }) => { picks = data ?? [] })
     )
   }
 
   if (tournamentIds.length > 0) {
     fetchPromises.push(
-      db.from('results')
-        .select('*, tournaments(name, date, is_major)')
-        .in('tournament_id', tournamentIds)
-        .order('created_at', { ascending: false })
-        .then(({ data }) => { results = data ?? [] }),
-      db.from('golfer_results')
-        .select('*, tournaments(name, date, is_major)')
-        .in('tournament_id', tournamentIds)
-        .order('created_at', { ascending: false })
-        .then(({ data }) => { golferResults = data ?? [] })
+      Promise.resolve(
+        db.from('results')
+          .select('*, tournaments(name, date, is_major)')
+          .in('tournament_id', tournamentIds)
+          .order('created_at', { ascending: false })
+      ).then(({ data }) => { results = data ?? [] }),
+      Promise.resolve(
+        db.from('golfer_results')
+          .select('*, tournaments(name, date, is_major)')
+          .in('tournament_id', tournamentIds)
+          .order('created_at', { ascending: false })
+      ).then(({ data }) => { golferResults = data ?? [] })
     )
   }
 
