@@ -264,6 +264,11 @@ function SetupProfileScreen({
 
     if (claimedName) {
       await supabase.from('player_aliases').insert({ user_id: userId, player_name: claimedName })
+      // Auto-join the founding league for legacy players
+      await supabase.from('league_members').insert({
+        league_id: '00000000-0000-0000-0000-000000000001',
+        user_id: userId,
+      })
     }
     onComplete(name, isAdminUser)
     setLoading(false)
@@ -2973,24 +2978,25 @@ export default function App() {
         if (data) {
           setUserProfile(data)
           setCurrentPlayer(data.display_name)
+          // Only check league membership if the user already has a profile
+          const { data: membership } = await supabase
+            .from('league_members')
+            .select('league_id, leagues(name, rules)')
+            .eq('user_id', u.id)
+            .limit(1)
+            .maybeSingle()
+          if (membership) {
+            setLeagueId(membership.league_id)
+            const l = membership.leagues as any
+            if (l) { setLeagueName(l.name); setLeagueRules(mergeRules(l.rules ?? {})) }
+          } else {
+            // Has profile but no league — send to league creation
+            setBootstrapped(true)
+            router.push('/create')
+            return
+          }
         }
-        // Load user's first league
-        const { data: membership } = await supabase
-          .from('league_members')
-          .select('league_id, leagues(name, rules)')
-          .eq('user_id', u.id)
-          .limit(1)
-          .maybeSingle()
-        if (membership) {
-          setLeagueId(membership.league_id)
-          const l = membership.leagues as any
-          if (l) { setLeagueName(l.name); setLeagueRules(mergeRules(l.rules ?? {})) }
-        } else {
-          // New user with no leagues — send to league creation
-          setBootstrapped(true)
-          router.push('/create')
-          return
-        }
+        // If no profile: bootstrapped fires below and SetupProfileScreen is shown
       }
       setBootstrapped(true)
     })
@@ -3335,9 +3341,24 @@ export default function App() {
     <SetupProfileScreen
       userId={user.id}
       userEmail={user.email}
-      onComplete={(displayName, isAdmin) => {
+      onComplete={async (displayName, isAdmin) => {
         setUserProfile({ display_name: displayName, is_admin: isAdmin })
         setCurrentPlayer(displayName)
+        // Load league info now that membership exists
+        const { data: membership } = await supabase
+          .from('league_members')
+          .select('league_id, leagues(name, rules)')
+          .eq('user_id', user.id)
+          .limit(1)
+          .maybeSingle()
+        if (membership) {
+          setLeagueId(membership.league_id)
+          const l = membership.leagues as any
+          if (l) { setLeagueName(l.name); setLeagueRules(mergeRules(l.rules ?? {})) }
+        } else {
+          // No league after setup (non-founding member with new name)
+          router.push('/create')
+        }
       }}
     />
   )
