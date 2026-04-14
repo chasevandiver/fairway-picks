@@ -262,21 +262,26 @@ function SetupProfileScreen({
 
     try {
       const isAdminUser = ['Eric', 'Chase'].includes(name)
+      const FOUNDING_LEAGUE = '00000000-0000-0000-0000-000000000001'
 
-      // Get the current access token to send with the API request
-      const { data: { session } } = await supabase.auth.getSession()
-      const token = session?.access_token ?? ''
+      const { error: profileErr } = await supabase.from('profiles').upsert({
+        id: userId,
+        display_name: name,
+        email: userEmail,
+        is_admin: isAdminUser,
+      }, { onConflict: 'id' })
+      if (profileErr) throw new Error(profileErr.message)
 
-      const res = await fetch('/api/setup-profile', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({ display_name: name, claimed_name: claimedName }),
-      })
-      const json = await res.json()
-      if (!res.ok) throw new Error(json.error || 'Failed to create profile')
+      if (claimedName) {
+        await supabase.from('player_aliases').upsert(
+          { user_id: userId, player_name: claimedName },
+          { onConflict: 'user_id' }
+        )
+        await supabase.from('league_members').upsert(
+          { league_id: FOUNDING_LEAGUE, user_id: userId },
+          { onConflict: 'league_id,user_id' }
+        )
+      }
 
       onComplete(name, isAdminUser)
     } catch (err: any) {
@@ -399,15 +404,24 @@ function ClaimPlayerModal({
     setError(null)
     try {
       const isAdminUser = ['Eric', 'Chase'].includes(claimedName)
-      const { data: { session } } = await supabase.auth.getSession()
-      const token = session?.access_token ?? ''
-      const res = await fetch('/api/setup-profile', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ display_name: claimedName, claimed_name: claimedName }),
-      })
-      const json = await res.json()
-      if (!res.ok) throw new Error(json.error || 'Failed to claim name')
+      const FOUNDING_LEAGUE = '00000000-0000-0000-0000-000000000001'
+
+      const { error: profileErr } = await supabase.from('profiles').upsert({
+        id: userId,
+        display_name: claimedName,
+        is_admin: isAdminUser,
+      }, { onConflict: 'id' })
+      if (profileErr) throw new Error(profileErr.message)
+
+      await supabase.from('player_aliases').upsert(
+        { user_id: userId, player_name: claimedName },
+        { onConflict: 'user_id' }
+      )
+      await supabase.from('league_members').upsert(
+        { league_id: FOUNDING_LEAGUE, user_id: userId },
+        { onConflict: 'league_id,user_id' }
+      )
+
       onComplete(claimedName, isAdminUser)
     } catch (err: any) {
       setError(err.message || 'Something went wrong. Please try again.')
