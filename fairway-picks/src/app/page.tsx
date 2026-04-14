@@ -2965,6 +2965,8 @@ export default function App() {
   const [tabKey, setTabKey] = useState(0)
   const [user, setUser] = useState<{ id: string; email: string } | null>(null)
   const [userProfile, setUserProfile] = useState<{ display_name: string; is_admin: boolean } | null>(null)
+  // Tracks whether we have a confirmed profile so auth events can't wipe it mid-session
+  const profileConfirmedRef = useRef(false)
   const [leagueId, setLeagueId] = useState<string>('00000000-0000-0000-0000-000000000001')
   const [leagueName, setLeagueName] = useState<string>('Fore Picks')
   const [leagueRules, setLeagueRules] = useState<LeagueRules>(DEFAULT_RULES)
@@ -2996,15 +2998,15 @@ export default function App() {
     // (or null if signed out), so we don't need a separate getSession() call.
     // Using a single handler eliminates races between two parallel async chains.
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      // TOKEN_REFRESHED: token rotated silently — no need to re-query the DB.
-      // Just update the user identity and leave everything else alone.
+      // TOKEN_REFRESHED: token rotated silently — no DB re-query needed.
       if (event === 'TOKEN_REFRESHED') {
         if (session?.user) setUser({ id: session.user.id, email: session.user.email ?? '' })
         return
       }
 
-      // SIGNED_OUT: clear all user state.
+      // SIGNED_OUT: clear everything and reset the confirmed-profile guard.
       if (event === 'SIGNED_OUT' || !session?.user) {
+        profileConfirmedRef.current = false
         setUser(null)
         setUserProfile(null)
         setCurrentPlayer(null)
@@ -3012,14 +3014,23 @@ export default function App() {
         return
       }
 
-      // INITIAL_SESSION / SIGNED_IN / USER_UPDATED: full profile + league load.
+      // INITIAL_SESSION / SIGNED_IN / USER_UPDATED
       const u = { id: session.user.id, email: session.user.email ?? '' }
       setUser(u)
 
-      const { data: profile, error: profileError } = await supabase
+      // If we already confirmed the profile this session (via onComplete or a
+      // previous successful query), skip the DB round-trip — prevents a race
+      // between a fresh auth event and the just-written profile row.
+      if (profileConfirmedRef.current) {
+        setBootstrapped(true)
+        return
+      }
+
+      const { data: profile } = await supabase
         .from('profiles').select('display_name, is_admin').eq('id', u.id).single()
 
       if (profile) {
+        profileConfirmedRef.current = true
         setUserProfile(profile)
         setCurrentPlayer(profile.display_name)
 
@@ -3035,16 +3046,11 @@ export default function App() {
           const l = membership.leagues as any
           if (l) { setLeagueName(l.name); setLeagueRules(mergeRules(l.rules ?? {})) }
         }
-        // No profile but no league — fall through to the app with default leagueId.
-        // (Don't redirect to /create which doesn't exist yet.)
-      } else if (!profile) {
-        // Profile not found (PGRST116 = 0 rows, or null+null from some SDK versions).
-        // Show setup screen so the user can create their profile.
+      } else {
+        // No profile found — show setup screen (only reached if not yet confirmed).
         setUserProfile(null)
         setCurrentPlayer(null)
       }
-      // Any other error (network, etc.) — leave existing userProfile in place
-      // so a transient failure doesn't flash the setup screen back.
 
       setBootstrapped(true)
     })
@@ -3371,6 +3377,7 @@ export default function App() {
       userId={user.id}
       userEmail={user.email}
       onComplete={(displayName, isAdmin) => {
+        profileConfirmedRef.current = true  // lock out any racing auth event
         setUserProfile({ display_name: displayName, is_admin: isAdmin })
         setCurrentPlayer(displayName)
         // League defaults to founding league (00000000-...) which is correct
