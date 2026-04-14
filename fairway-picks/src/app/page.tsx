@@ -2983,7 +2983,15 @@ export default function App() {
 
   // ── Auth state management ──
   useEffect(() => {
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
+    // Race getSession() against a 4s timeout — supabase-js v2 sometimes does a
+    // server-side token validation network request inside getSession(), which can
+    // hang indefinitely if the server is slow or the token is invalid.
+    const sessionRace = Promise.race([
+      supabase.auth.getSession(),
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error('auth_timeout')), 4000)),
+    ])
+
+    sessionRace.then(async ({ data: { session } }: any) => {
       if (session?.user) {
         const u = { id: session.user.id, email: session.user.email ?? '' }
         setUser(u)
@@ -3013,7 +3021,7 @@ export default function App() {
       }
       setBootstrapped(true)
     }).catch(() => {
-      // Never leave the user stuck on the loading screen
+      // Timeout or error — show whatever state we have rather than spinning forever
       setBootstrapped(true)
     })
 
@@ -3025,15 +3033,30 @@ export default function App() {
         if (data) {
           setUserProfile(data)
           setCurrentPlayer(data.display_name)
+          // Also load league in case getSession() timed out and this is first auth
+          const { data: membership } = await supabase
+            .from('league_members')
+            .select('league_id, leagues(name, rules)')
+            .eq('user_id', u.id)
+            .limit(1)
+            .maybeSingle()
+          if (membership) {
+            setLeagueId(membership.league_id)
+            const l = membership.leagues as any
+            if (l) { setLeagueName(l.name); setLeagueRules(mergeRules(l.rules ?? {})) }
+          }
+          setBootstrapped(true)
         } else {
           setUser(u)
           setUserProfile(null)
           setCurrentPlayer(null)
+          setBootstrapped(true)
         }
       } else {
         setUser(null)
         setUserProfile(null)
         setCurrentPlayer(null)
+        setBootstrapped(true)
       }
     })
 
