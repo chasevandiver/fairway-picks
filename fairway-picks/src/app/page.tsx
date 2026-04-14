@@ -224,15 +224,16 @@ function LandingPage() {
 // Shown to a newly authenticated user who doesn't have a profile yet.
 // They either claim a legacy player name or enter a new display name.
 function SetupProfileScreen({
+  supabase,
   userId,
   userEmail,
   onComplete,
 }: {
+  supabase: ReturnType<typeof createClient>
   userId: string
   userEmail: string
   onComplete: (displayName: string, isAdmin: boolean) => void
 }) {
-  const supabase = createClient()
   const [displayName, setDisplayName] = useState(userEmail.split('@')[0])
   const [claimedName, setClaimedName] = useState<string | null>(null)
   const [unclaimedNames, setUnclaimedNames] = useState<string[]>([])
@@ -3388,6 +3389,7 @@ export default function App() {
   if (!user) return <LandingPage />
   if (!userProfile) return (
     <SetupProfileScreen
+      supabase={supabase}
       userId={user.id}
       userEmail={user.email}
       onComplete={async (displayName, isAdmin) => {
