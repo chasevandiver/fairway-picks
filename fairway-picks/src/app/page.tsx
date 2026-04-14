@@ -1,7 +1,7 @@
 'use client'
 
-import React, { useState, useEffect, useCallback, useRef, Suspense } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
+import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import {
   toRelScore, scoreClass, formatMoney, moneyClass,
@@ -2923,18 +2923,17 @@ function SeasonRecapTab({ history, golferHistory, seasonMoney }: {
     </div>
   )
 }
-function AppInner() {
+export default function App() {
   const supabase = createClient()
   const router = useRouter()
-  const searchParams = useSearchParams()
 
   // Handle magic link code landing at / instead of /auth/callback
-  // (happens when Supabase Site URL is set to the root and emailRedirectTo isn't allowlisted)
+  // (fallback for when Supabase redirect URLs aren't configured — uses window.location
+  // directly to avoid needing useSearchParams + Suspense)
   useEffect(() => {
-    const code = searchParams.get('code')
+    const code = new URLSearchParams(window.location.search).get('code')
     if (code) {
-      supabase.auth.exchangeCodeForSession(code).then(({ error }) => {
-        // Clear the code from the URL regardless of outcome
+      supabase.auth.exchangeCodeForSession(code).then(() => {
         router.replace('/')
       })
     }
@@ -3012,6 +3011,9 @@ function AppInner() {
         }
         // If no profile: bootstrapped fires below and SetupProfileScreen is shown
       }
+      setBootstrapped(true)
+    }).catch(() => {
+      // Never leave the user stuck on the loading screen
       setBootstrapped(true)
     })
 
@@ -3440,10 +3442,3 @@ function AppInner() {
   )
 }
 
-export default function App() {
-  return (
-    <Suspense fallback={<div className="loading-screen"><div className="spin" style={{ fontSize: 32 }}>⛳</div>Loading…</div>}>
-      <AppInner />
-    </Suspense>
-  )
-}
