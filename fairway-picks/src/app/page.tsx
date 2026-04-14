@@ -257,11 +257,16 @@ function SetupProfileScreen({
     try {
       const isAdminUser = ['Eric', 'Chase'].includes(name)
 
-      // Use a server-side API route so the insert runs server-to-server
-      // (bypasses browser CORS / client-auth issues that can hang the request)
+      // Get the current access token to send with the API request
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.access_token ?? ''
+
       const res = await fetch('/api/setup-profile', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
         body: JSON.stringify({ display_name: name, claimed_name: claimedName }),
       })
       const json = await res.json()
@@ -2928,15 +2933,11 @@ export default function App() {
   const supabase = createClient()
   const router = useRouter()
 
-  // Handle magic link code landing at / instead of /auth/callback
-  // (fallback for when Supabase redirect URLs aren't configured — uses window.location
-  // directly to avoid needing useSearchParams + Suspense)
+  // With implicit flow the magic link lands at /#access_token=...
+  // detectSessionInUrl:true handles the token automatically; we just clean the hash.
   useEffect(() => {
-    const code = new URLSearchParams(window.location.search).get('code')
-    if (code) {
-      supabase.auth.exchangeCodeForSession(code).then(() => {
-        router.replace('/')
-      })
+    if (window.location.hash.includes('access_token')) {
+      window.history.replaceState(null, '', window.location.pathname)
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -3382,24 +3383,25 @@ export default function App() {
       supabase={supabase}
       userId={user.id}
       userEmail={user.email}
-      onComplete={async (displayName, isAdmin) => {
+      onComplete={(displayName, isAdmin) => {
         setUserProfile({ display_name: displayName, is_admin: isAdmin })
         setCurrentPlayer(displayName)
-        // Load league info now that membership exists
-        const { data: membership } = await supabase
+        // League defaults to founding league (00000000-...) which is correct
+        // for existing members. Load the actual name/rules in background.
+        supabase
           .from('league_members')
           .select('league_id, leagues(name, rules)')
           .eq('user_id', user.id)
           .limit(1)
           .maybeSingle()
-        if (membership) {
-          setLeagueId(membership.league_id)
-          const l = membership.leagues as any
-          if (l) { setLeagueName(l.name); setLeagueRules(mergeRules(l.rules ?? {})) }
-        } else {
-          // No league after setup (non-founding member with new name)
-          router.push('/create')
-        }
+          .then(({ data: membership }) => {
+            if (membership) {
+              setLeagueId(membership.league_id)
+              const l = membership.leagues as any
+              if (l) { setLeagueName(l.name); setLeagueRules(mergeRules(l.rules ?? {})) }
+            }
+          })
+          .catch(() => {/* silently fail — default leagueId is correct */})
       }}
     />
   )
