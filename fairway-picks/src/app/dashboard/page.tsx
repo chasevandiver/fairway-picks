@@ -94,7 +94,7 @@ export default function Dashboard() {
           {leagues.map((league) => (
             <button
               key={league.id}
-              onClick={() => router.push(`/league/${league.id}`)}
+              onClick={() => { localStorage.setItem('activeLeagueId', league.id); router.push(`/league/${league.id}`) }}
               style={{
                 background: 'var(--surface)',
                 border: '1px solid var(--border)',

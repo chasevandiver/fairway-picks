@@ -33,9 +33,10 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
         return
       }
 
-      // Member confirmed — redirect to main app
-      // The main app will auto-detect the user's leagues.
-      // Since most users are in one league, this works seamlessly.
+      // Member confirmed — persist the chosen league and redirect to main app.
+      // Storing in localStorage ensures the main app opens this specific league
+      // rather than always defaulting to the user's oldest (founding) league.
+      localStorage.setItem('activeLeagueId', params.id)
       router.push('/')
     }
     verify()
