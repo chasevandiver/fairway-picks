@@ -3400,14 +3400,31 @@ export default function App() {
   const [leagueName, setLeagueName] = useState<string>('Fore Picks')
   const [leagueRules, setLeagueRules] = useState<LeagueRules>(DEFAULT_RULES)
   const [inviteCode, setInviteCode] = useState<string>('')
+  const [commissionerId, setCommissionerId] = useState<string | null>(null)
 
-  const isAdmin = userProfile?.is_admin ?? ['Eric', 'Chase'].includes(currentPlayer ?? '')
+  const isAdmin = (userProfile?.is_admin ?? ['Eric', 'Chase'].includes(currentPlayer ?? '')) ||
+    (commissionerId !== null && commissionerId === user?.id)
   const isMasters = !!(tournament?.name?.toLowerCase().includes('masters'))
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [showClaimModal, setShowClaimModal] = useState(false)
   // Tracks whether we've completed the initial profile load for the current user.
   // Used to prevent TOKEN_REFRESHED events from clearing already-loaded state.
   const profileLoadedRef = useRef(false)
+  // Holds league id+name passed via URL when navigating from /create.
+  // Set synchronously before the auth effect's async callbacks run, so
+  // whichever auth path fires first can consume it exactly once.
+  const pendingNewLeagueRef = useRef<{ id: string; name: string } | null>(null)
+
+  // ── Read new-league URL params from /create navigation (runs before auth callbacks) ──
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const id = params.get('newLeague')
+    const name = params.get('newLeagueName')
+    if (id) {
+      pendingNewLeagueRef.current = { id, name: name ? decodeURIComponent(name) : 'My League' }
+      window.history.replaceState(null, '', window.location.pathname)
+    }
+  }, [])
 
   // Apply Masters theme to body when Masters tournament is active
   useEffect(() => {
@@ -3447,10 +3464,21 @@ export default function App() {
           profileLoadedRef.current = true
           setUserProfile(profile)
           setCurrentPlayer(profile.display_name)
-          if (membership) {
+          // If the user just came from /create, use that league directly
+          const pl = pendingNewLeagueRef.current
+          if (pl) {
+            pendingNewLeagueRef.current = null
+            setLeagueId(pl.id)
+            setLeagueName(pl.name)
+            setCommissionerId(u.id)
+          } else if (membership) {
             setLeagueId(membership.league_id)
             const l = membership.leagues as any
-            if (l) { setLeagueName(l.name); setLeagueRules(mergeRules(l.rules ?? {})) }
+            if (l) {
+              setLeagueName(l.name)
+              setLeagueRules(mergeRules(l.rules ?? {}))
+              setCommissionerId(l.commissioner_id ?? null)
+            }
           }
           // If no membership, still show the app with the default founding league
           // (rather than routing to /create, which breaks for existing users)
@@ -3478,10 +3506,20 @@ export default function App() {
           profileLoadedRef.current = true
           setUserProfile(profile)
           setCurrentPlayer(profile.display_name)
-          if (membership) {
+          const pl2 = pendingNewLeagueRef.current
+          if (pl2) {
+            pendingNewLeagueRef.current = null
+            setLeagueId(pl2.id)
+            setLeagueName(pl2.name)
+            setCommissionerId(u.id)
+          } else if (membership) {
             setLeagueId(membership.league_id)
             const l = membership.leagues as any
-            if (l) { setLeagueName(l.name); setLeagueRules(mergeRules(l.rules ?? {})) }
+            if (l) {
+              setLeagueName(l.name)
+              setLeagueRules(mergeRules(l.rules ?? {}))
+              setCommissionerId(l.commissioner_id ?? null)
+            }
           }
           setBootstrapped(true)
         } else if (!profileLoadedRef.current) {
@@ -3821,23 +3859,30 @@ export default function App() {
         profileLoadedRef.current = true
         setUserProfile({ display_name: displayName, is_admin: isAdmin })
         setCurrentPlayer(displayName)
-        // League defaults to founding league (00000000-...) which is correct
-        // for existing members. Load the actual name/rules in background.
-        void (async () => {
-          try {
-            const { data: membership } = await supabase
-              .from('league_members')
-              .select('league_id, leagues(name, rules)')
-              .eq('user_id', user.id)
-              .limit(1)
-              .maybeSingle()
-            if (membership) {
-              setLeagueId(membership.league_id)
-              const l = membership.leagues as any
-              if (l) { setLeagueName(l.name); setLeagueRules(mergeRules(l.rules ?? {})) }
-            }
-          } catch { /* silently fail — default leagueId is correct */ }
-        })()
+        // Check for a just-created league passed via URL params from /create
+        const pl = pendingNewLeagueRef.current
+        if (pl) {
+          pendingNewLeagueRef.current = null
+          setLeagueId(pl.id)
+          setLeagueName(pl.name)
+          setCommissionerId(user.id)
+        } else {
+          // Use service-role init-user to bypass RLS and find the correct league
+          fetch(`/api/init-user?user_id=${user.id}`)
+            .then(r => r.json())
+            .then(({ membership }) => {
+              if (membership) {
+                setLeagueId(membership.league_id)
+                const l = membership.leagues as any
+                if (l) {
+                  setLeagueName(l.name)
+                  setLeagueRules(mergeRules(l.rules ?? {}))
+                  setCommissionerId(l.commissioner_id ?? null)
+                }
+              }
+            })
+            .catch(() => {})
+        }
       }}
     />
   )

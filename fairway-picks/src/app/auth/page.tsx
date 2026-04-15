@@ -45,11 +45,13 @@ export default function AuthPage() {
     setOtpLoading(true)
     setOtpError(null)
 
-    const { error } = await supabase.auth.verifyOtp({
-      email,
-      token: otp.trim(),
-      type: 'email',
-    })
+    // Try email OTP type first (6-digit codes sent by signInWithOtp).
+    // Fall back to magiclink for projects that send tokens in magic link format.
+    let result = await supabase.auth.verifyOtp({ email, token: otp.trim(), type: 'email' })
+    if (result.error) {
+      result = await supabase.auth.verifyOtp({ email, token: otp.trim(), type: 'magiclink' })
+    }
+    const { error } = result
 
     if (error) {
       setOtpError(error.message)

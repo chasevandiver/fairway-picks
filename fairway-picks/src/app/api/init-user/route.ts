@@ -19,8 +19,9 @@ export async function GET(request: NextRequest) {
   const [{ data: profile }, { data: membership }] = await Promise.all([
     db.from('profiles').select('display_name, is_admin').eq('id', userId).maybeSingle(),
     db.from('league_members')
-      .select('league_id, leagues(name, rules)')
+      .select('league_id, leagues(name, rules, commissioner_id)')
       .eq('user_id', userId)
+      .order('created_at', { ascending: true })
       .limit(1)
       .maybeSingle(),
   ])
