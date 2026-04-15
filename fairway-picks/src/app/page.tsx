@@ -3410,6 +3410,21 @@ export default function App() {
   // Tracks whether we've completed the initial profile load for the current user.
   // Used to prevent TOKEN_REFRESHED events from clearing already-loaded state.
   const profileLoadedRef = useRef(false)
+  // Holds league id+name passed via URL when navigating from /create.
+  // Set synchronously before the auth effect's async callbacks run, so
+  // whichever auth path fires first can consume it exactly once.
+  const pendingNewLeagueRef = useRef<{ id: string; name: string } | null>(null)
+
+  // ── Read new-league URL params from /create navigation (runs before auth callbacks) ──
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const id = params.get('newLeague')
+    const name = params.get('newLeagueName')
+    if (id) {
+      pendingNewLeagueRef.current = { id, name: name ? decodeURIComponent(name) : 'My League' }
+      window.history.replaceState(null, '', window.location.pathname)
+    }
+  }, [])
 
   // Apply Masters theme to body when Masters tournament is active
   useEffect(() => {
@@ -3449,16 +3464,13 @@ export default function App() {
           profileLoadedRef.current = true
           setUserProfile(profile)
           setCurrentPlayer(profile.display_name)
-          // If the user just created a new league, use that over whatever init-user returned
-          const pendingLeagueRaw = localStorage.getItem('pending_league')
-          if (pendingLeagueRaw) {
-            try {
-              const pl = JSON.parse(pendingLeagueRaw)
-              localStorage.removeItem('pending_league')
-              setLeagueId(pl.id)
-              if (pl.name) setLeagueName(pl.name)
-              setCommissionerId(u.id)
-            } catch { localStorage.removeItem('pending_league') }
+          // If the user just came from /create, use that league directly
+          const pl = pendingNewLeagueRef.current
+          if (pl) {
+            pendingNewLeagueRef.current = null
+            setLeagueId(pl.id)
+            setLeagueName(pl.name)
+            setCommissionerId(u.id)
           } else if (membership) {
             setLeagueId(membership.league_id)
             const l = membership.leagues as any
@@ -3494,15 +3506,12 @@ export default function App() {
           profileLoadedRef.current = true
           setUserProfile(profile)
           setCurrentPlayer(profile.display_name)
-          const pendingLeagueRaw2 = localStorage.getItem('pending_league')
-          if (pendingLeagueRaw2) {
-            try {
-              const pl = JSON.parse(pendingLeagueRaw2)
-              localStorage.removeItem('pending_league')
-              setLeagueId(pl.id)
-              if (pl.name) setLeagueName(pl.name)
-              setCommissionerId(u.id)
-            } catch { localStorage.removeItem('pending_league') }
+          const pl2 = pendingNewLeagueRef.current
+          if (pl2) {
+            pendingNewLeagueRef.current = null
+            setLeagueId(pl2.id)
+            setLeagueName(pl2.name)
+            setCommissionerId(u.id)
           } else if (membership) {
             setLeagueId(membership.league_id)
             const l = membership.leagues as any
@@ -3850,16 +3859,13 @@ export default function App() {
         profileLoadedRef.current = true
         setUserProfile({ display_name: displayName, is_admin: isAdmin })
         setCurrentPlayer(displayName)
-        // Check for a just-created league first (set by /create before navigating here)
-        const pendingLeagueRaw = localStorage.getItem('pending_league')
-        if (pendingLeagueRaw) {
-          try {
-            const pl = JSON.parse(pendingLeagueRaw)
-            localStorage.removeItem('pending_league')
-            setLeagueId(pl.id)
-            if (pl.name) setLeagueName(pl.name)
-            setCommissionerId(user.id)
-          } catch { localStorage.removeItem('pending_league') }
+        // Check for a just-created league passed via URL params from /create
+        const pl = pendingNewLeagueRef.current
+        if (pl) {
+          pendingNewLeagueRef.current = null
+          setLeagueId(pl.id)
+          setLeagueName(pl.name)
+          setCommissionerId(user.id)
         } else {
           // Use service-role init-user to bypass RLS and find the correct league
           fetch(`/api/init-user?user_id=${user.id}`)

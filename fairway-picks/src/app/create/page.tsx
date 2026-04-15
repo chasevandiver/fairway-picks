@@ -27,6 +27,7 @@ export default function CreateLeague() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [createdInviteCode, setCreatedInviteCode] = useState('')
+  const [createdLeagueId, setCreatedLeagueId] = useState('')
   const [copied, setCopied] = useState(false)
 
   async function createLeague(customRules = false) {
@@ -62,9 +63,7 @@ export default function CreateLeague() {
     // Add creator as a member
     await supabase.from('league_members').insert({ league_id: league.id, user_id: user.id })
 
-    // Signal the main page to load this specific league when we navigate there
-    localStorage.setItem('pending_league', JSON.stringify({ id: league.id, name: leagueName.trim() || 'My League' }))
-
+    setCreatedLeagueId(league.id)
     setCreatedInviteCode(inviteCode)
     setMode('done')
     setLoading(false)
@@ -104,7 +103,7 @@ export default function CreateLeague() {
           <button className="btn btn-primary" style={{ width: '100%', marginBottom: 10 }} onClick={copyInviteLink}>
             {copied ? '✓ Copied!' : 'Copy Invite Link'}
           </button>
-          <button className="btn btn-outline" style={{ width: '100%' }} onClick={() => router.push('/')}>
+          <button className="btn btn-outline" style={{ width: '100%' }} onClick={() => router.push(`/?newLeague=${createdLeagueId}&newLeagueName=${encodeURIComponent(leagueName.trim() || 'My League')}`)}>
             Go to My League
           </button>
         </div>
