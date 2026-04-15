@@ -3400,8 +3400,10 @@ export default function App() {
   const [leagueName, setLeagueName] = useState<string>('Fore Picks')
   const [leagueRules, setLeagueRules] = useState<LeagueRules>(DEFAULT_RULES)
   const [inviteCode, setInviteCode] = useState<string>('')
+  const [commissionerId, setCommissionerId] = useState<string | null>(null)
 
-  const isAdmin = userProfile?.is_admin ?? ['Eric', 'Chase'].includes(currentPlayer ?? '')
+  const isAdmin = (userProfile?.is_admin ?? ['Eric', 'Chase'].includes(currentPlayer ?? '')) ||
+    (commissionerId !== null && commissionerId === user?.id)
   const isMasters = !!(tournament?.name?.toLowerCase().includes('masters'))
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [showClaimModal, setShowClaimModal] = useState(false)
@@ -3447,10 +3449,24 @@ export default function App() {
           profileLoadedRef.current = true
           setUserProfile(profile)
           setCurrentPlayer(profile.display_name)
-          if (membership) {
+          // If the user just created a new league, use that over whatever init-user returned
+          const pendingLeagueRaw = localStorage.getItem('pending_league')
+          if (pendingLeagueRaw) {
+            try {
+              const pl = JSON.parse(pendingLeagueRaw)
+              localStorage.removeItem('pending_league')
+              setLeagueId(pl.id)
+              if (pl.name) setLeagueName(pl.name)
+              setCommissionerId(u.id)
+            } catch { localStorage.removeItem('pending_league') }
+          } else if (membership) {
             setLeagueId(membership.league_id)
             const l = membership.leagues as any
-            if (l) { setLeagueName(l.name); setLeagueRules(mergeRules(l.rules ?? {})) }
+            if (l) {
+              setLeagueName(l.name)
+              setLeagueRules(mergeRules(l.rules ?? {}))
+              setCommissionerId(l.commissioner_id ?? null)
+            }
           }
           // If no membership, still show the app with the default founding league
           // (rather than routing to /create, which breaks for existing users)
@@ -3478,10 +3494,23 @@ export default function App() {
           profileLoadedRef.current = true
           setUserProfile(profile)
           setCurrentPlayer(profile.display_name)
-          if (membership) {
+          const pendingLeagueRaw2 = localStorage.getItem('pending_league')
+          if (pendingLeagueRaw2) {
+            try {
+              const pl = JSON.parse(pendingLeagueRaw2)
+              localStorage.removeItem('pending_league')
+              setLeagueId(pl.id)
+              if (pl.name) setLeagueName(pl.name)
+              setCommissionerId(u.id)
+            } catch { localStorage.removeItem('pending_league') }
+          } else if (membership) {
             setLeagueId(membership.league_id)
             const l = membership.leagues as any
-            if (l) { setLeagueName(l.name); setLeagueRules(mergeRules(l.rules ?? {})) }
+            if (l) {
+              setLeagueName(l.name)
+              setLeagueRules(mergeRules(l.rules ?? {}))
+              setCommissionerId(l.commissioner_id ?? null)
+            }
           }
           setBootstrapped(true)
         } else if (!profileLoadedRef.current) {
@@ -3821,23 +3850,33 @@ export default function App() {
         profileLoadedRef.current = true
         setUserProfile({ display_name: displayName, is_admin: isAdmin })
         setCurrentPlayer(displayName)
-        // League defaults to founding league (00000000-...) which is correct
-        // for existing members. Load the actual name/rules in background.
-        void (async () => {
+        // Check for a just-created league first (set by /create before navigating here)
+        const pendingLeagueRaw = localStorage.getItem('pending_league')
+        if (pendingLeagueRaw) {
           try {
-            const { data: membership } = await supabase
-              .from('league_members')
-              .select('league_id, leagues(name, rules)')
-              .eq('user_id', user.id)
-              .limit(1)
-              .maybeSingle()
-            if (membership) {
-              setLeagueId(membership.league_id)
-              const l = membership.leagues as any
-              if (l) { setLeagueName(l.name); setLeagueRules(mergeRules(l.rules ?? {})) }
-            }
-          } catch { /* silently fail — default leagueId is correct */ }
-        })()
+            const pl = JSON.parse(pendingLeagueRaw)
+            localStorage.removeItem('pending_league')
+            setLeagueId(pl.id)
+            if (pl.name) setLeagueName(pl.name)
+            setCommissionerId(user.id)
+          } catch { localStorage.removeItem('pending_league') }
+        } else {
+          // Use service-role init-user to bypass RLS and find the correct league
+          fetch(`/api/init-user?user_id=${user.id}`)
+            .then(r => r.json())
+            .then(({ membership }) => {
+              if (membership) {
+                setLeagueId(membership.league_id)
+                const l = membership.leagues as any
+                if (l) {
+                  setLeagueName(l.name)
+                  setLeagueRules(mergeRules(l.rules ?? {}))
+                  setCommissionerId(l.commissioner_id ?? null)
+                }
+              }
+            })
+            .catch(() => {})
+        }
       }}
     />
   )

@@ -62,6 +62,9 @@ export default function CreateLeague() {
     // Add creator as a member
     await supabase.from('league_members').insert({ league_id: league.id, user_id: user.id })
 
+    // Signal the main page to load this specific league when we navigate there
+    localStorage.setItem('pending_league', JSON.stringify({ id: league.id, name: leagueName.trim() || 'My League' }))
+
     setCreatedInviteCode(inviteCode)
     setMode('done')
     setLoading(false)
