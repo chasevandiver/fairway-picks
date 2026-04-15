@@ -237,18 +237,28 @@ function SetupProfileScreen({
   const [displayName, setDisplayName] = useState(userEmail.split('@')[0])
   const [claimedName, setClaimedName] = useState<string | null>(null)
   const [unclaimedNames, setUnclaimedNames] = useState<string[]>([])
+  const [isFoundingMember, setIsFoundingMember] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    supabase.from('player_aliases').select('player_name, user_id').then(({ data }) => {
+    const FOUNDING_LEAGUE = '00000000-0000-0000-0000-000000000001'
+    Promise.all([
+      supabase.from('player_aliases').select('player_name, user_id'),
+      supabase.from('league_members')
+        .select('league_id')
+        .eq('league_id', FOUNDING_LEAGUE)
+        .eq('user_id', userId)
+        .maybeSingle(),
+    ]).then(([{ data: aliasData }, { data: membership }]) => {
+      setIsFoundingMember(!!membership)
       // Only hide names claimed by OTHER users — current user's alias stays selectable
-      const claimedByOthers = (data ?? [])
+      const claimedByOthers = (aliasData ?? [])
         .filter((a: any) => a.user_id !== userId)
         .map((a: any) => a.player_name)
       setUnclaimedNames(PLAYERS.filter((p) => !claimedByOthers.includes(p)))
       // Pre-select if this user already has an alias (handles missing-profile edge case)
-      const mine = (data ?? []).find((a: any) => a.user_id === userId)
+      const mine = (aliasData ?? []).find((a: any) => a.user_id === userId)
       if (mine) setClaimedName(mine.player_name)
     })
   }, [])
@@ -302,7 +312,7 @@ function SetupProfileScreen({
           Welcome! Let's set up your profile.
         </p>
 
-        {unclaimedNames.length > 0 && (
+        {isFoundingMember && unclaimedNames.length > 0 && (
           <div style={{ marginBottom: 20 }}>
             <div style={{ color: 'var(--text-dim)', fontSize: 12, fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 8 }}>
               Are you one of these players?

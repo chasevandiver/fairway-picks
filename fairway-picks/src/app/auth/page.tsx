@@ -48,13 +48,23 @@ export default function AuthPage() {
     const { error } = await supabase.auth.verifyOtp({
       email,
       token: otp.trim(),
-      type: 'magiclink',
+      type: 'email',
     })
 
     if (error) {
       setOtpError(error.message)
     } else {
-      window.location.href = '/'
+      const pendingInvite = sessionStorage.getItem('pending_invite')
+      const pendingRedirect = sessionStorage.getItem('pending_redirect')
+      if (pendingInvite) {
+        sessionStorage.removeItem('pending_invite')
+        window.location.href = `/join/${pendingInvite}`
+      } else if (pendingRedirect) {
+        sessionStorage.removeItem('pending_redirect')
+        window.location.href = pendingRedirect
+      } else {
+        window.location.href = '/'
+      }
     }
     setOtpLoading(false)
   }
