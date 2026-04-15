@@ -82,7 +82,8 @@ export default function JoinPage({ params }: { params: { code: string } }) {
 
     if (error) { setStatus('error'); setErrorMsg(error.message); return }
 
-    // Go to the main app — it will detect the new league
+    // Persist the chosen league so the main app opens it (not the oldest/default).
+    localStorage.setItem('activeLeagueId', league.id)
     router.push('/')
   }
 
@@ -128,7 +129,7 @@ export default function JoinPage({ params }: { params: { code: string } }) {
             <p style={{ color: 'var(--text-dim)', fontSize: 13, marginBottom: 24 }}>
               {league?.memberCount} member{league?.memberCount !== 1 ? 's' : ''}
             </p>
-            <button className="btn btn-primary" onClick={() => router.push('/')}>
+            <button className="btn btn-primary" onClick={() => { if (league) localStorage.setItem('activeLeagueId', league.id); router.push('/') }}>
               Go to My League
             </button>
           </div>

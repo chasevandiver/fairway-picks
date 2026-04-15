@@ -3422,6 +3422,8 @@ export default function App() {
     const name = params.get('newLeagueName')
     if (id) {
       pendingNewLeagueRef.current = { id, name: name ? decodeURIComponent(name) : 'My League' }
+      // Persist so subsequent page loads (refreshes) still open this league.
+      localStorage.setItem('activeLeagueId', id)
       window.history.replaceState(null, '', window.location.pathname)
     }
   }, [])
@@ -3457,8 +3459,14 @@ export default function App() {
       if (session?.user) {
         const u = { id: session.user.id, email: session.user.email ?? '' }
         setUser(u)
-        // Use server-side init route — bypasses RLS, no auth round-trip
-        const res = await fetch(`/api/init-user?user_id=${u.id}`).then(r => r.json()).catch(() => null)
+        // Use server-side init route — bypasses RLS, no auth round-trip.
+        // Pass the stored league preference so returning users land on the
+        // league they were last using rather than always falling back to EAGLE1.
+        const storedLeague = localStorage.getItem('activeLeagueId')
+        const initUrl = storedLeague
+          ? `/api/init-user?user_id=${u.id}&preferred_league_id=${storedLeague}`
+          : `/api/init-user?user_id=${u.id}`
+        const res = await fetch(initUrl).then(r => r.json()).catch(() => null)
         const { profile, membership } = res ?? {}
         if (profile) {
           profileLoadedRef.current = true
@@ -3473,6 +3481,7 @@ export default function App() {
             setCommissionerId(u.id)
           } else if (membership) {
             setLeagueId(membership.league_id)
+            localStorage.setItem('activeLeagueId', membership.league_id)
             const l = membership.leagues as any
             if (l) {
               setLeagueName(l.name)
@@ -3499,8 +3508,13 @@ export default function App() {
       if (session?.user) {
         const u = { id: session.user.id, email: session.user.email ?? '' }
         setUser(u)
-        // Use server-side init route — bypasses RLS
-        const res = await fetch(`/api/init-user?user_id=${u.id}`).then(r => r.json()).catch(() => null)
+        // Use server-side init route — bypasses RLS.
+        // Pass stored league preference so the user stays on the right league.
+        const storedLeague2 = localStorage.getItem('activeLeagueId')
+        const initUrl2 = storedLeague2
+          ? `/api/init-user?user_id=${u.id}&preferred_league_id=${storedLeague2}`
+          : `/api/init-user?user_id=${u.id}`
+        const res = await fetch(initUrl2).then(r => r.json()).catch(() => null)
         const { profile, membership } = res ?? {}
         if (profile) {
           profileLoadedRef.current = true
@@ -3514,6 +3528,7 @@ export default function App() {
             setCommissionerId(u.id)
           } else if (membership) {
             setLeagueId(membership.league_id)
+            localStorage.setItem('activeLeagueId', membership.league_id)
             const l = membership.leagues as any
             if (l) {
               setLeagueName(l.name)
@@ -3867,12 +3882,18 @@ export default function App() {
           setLeagueName(pl.name)
           setCommissionerId(user.id)
         } else {
-          // Use service-role init-user to bypass RLS and find the correct league
-          fetch(`/api/init-user?user_id=${user.id}`)
+          // Use service-role init-user to bypass RLS and find the correct league.
+          // Pass stored preference so a new user who just joined a league lands there.
+          const storedLeague3 = localStorage.getItem('activeLeagueId')
+          const initUrl3 = storedLeague3
+            ? `/api/init-user?user_id=${user.id}&preferred_league_id=${storedLeague3}`
+            : `/api/init-user?user_id=${user.id}`
+          fetch(initUrl3)
             .then(r => r.json())
             .then(({ membership }) => {
               if (membership) {
                 setLeagueId(membership.league_id)
+                localStorage.setItem('activeLeagueId', membership.league_id)
                 const l = membership.leagues as any
                 if (l) {
                   setLeagueName(l.name)
