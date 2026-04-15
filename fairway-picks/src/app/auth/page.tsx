@@ -48,7 +48,7 @@ export default function AuthPage() {
     const { error } = await supabase.auth.verifyOtp({
       email,
       token: otp.trim(),
-      type: 'magiclink',
+      type: 'email',
     })
 
     if (error) {
