@@ -107,7 +107,7 @@ export default function CreateLeague() {
           <button className="btn btn-primary" style={{ width: '100%', marginBottom: 10 }} onClick={copyInviteLink}>
             {copied ? '✓ Copied!' : 'Copy Invite Link'}
           </button>
-          <button className="btn btn-outline" style={{ width: '100%' }} onClick={() => router.push(`/?newLeague=${createdLeagueId}&newLeagueName=${encodeURIComponent(leagueName.trim() || 'My League')}`)}>
+          <button className="btn btn-outline" style={{ width: '100%' }} onClick={() => router.push(`/league/${createdLeagueId}`)}>
             Go to My League
           </button>
         </div>
