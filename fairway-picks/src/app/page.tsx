@@ -3412,7 +3412,9 @@ function SeasonRecapTab({ history, golferHistory, seasonMoney }: {
     </div>
   )
 }
-export default function App({ guestLeagueId: propGuestLeagueId }: { guestLeagueId?: string } = {}) {
+// Named export so /league/[id]/page.tsx can import it with a guestLeagueId prop
+// without conflicting with Next.js's PageProps constraint on default exports.
+export function App({ guestLeagueId: propGuestLeagueId }: { guestLeagueId?: string } = {}) {
   const supabase = createClient()
   const router = useRouter()
 
@@ -4061,3 +4063,7 @@ export default function App({ guestLeagueId: propGuestLeagueId }: { guestLeagueI
   )
 }
 
+// Thin default page export satisfying Next.js PageProps constraint.
+export default function Page() {
+  return <App />
+}

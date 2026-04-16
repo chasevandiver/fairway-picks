@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
-import App from '@/app/page'
+import { App } from '@/app/page'
 
 // Public/shareable league URL. Behaviour:
 //   • Unauthenticated → render the full app in guest (read-only) mode right here,
