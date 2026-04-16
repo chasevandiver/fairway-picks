@@ -1,25 +1,33 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
+import App from '@/app/page'
 
-// The main league app experience lives at the home route (/) and is
-// league-aware via the user's league_members record.
-// This route provides a bookmarkable URL for a specific league.
-// On load, it verifies membership and redirects to the main app,
-// setting the league context via the URL or session.
+// Public/shareable league URL. Behaviour:
+//   • Unauthenticated → render the full app in guest (read-only) mode right here,
+//     so the URL stays at /league/<id> and the page can be bookmarked / added to
+//     the iPhone home screen without losing context on refresh.
+//   • Authenticated member → store league preference and go to the main app.
+//   • Authenticated non-member → send to the join flow.
 
 export default function LeaguePage({ params }: { params: { id: string } }) {
   const router = useRouter()
   const supabase = createClient()
+  const [status, setStatus] = useState<'loading' | 'guest'>('loading')
 
   useEffect(() => {
-    async function verify() {
+    async function check() {
       const { data: { user } } = await supabase.auth.getUser()
-      if (!user) { router.push(`/?viewLeague=${params.id}`); return }
 
-      // Verify the user is a member of this league
+      if (!user) {
+        // No session — show the public guest view at this URL
+        setStatus('guest')
+        return
+      }
+
+      // Verify league membership
       const { data: member } = await supabase
         .from('league_members')
         .select('league_id')
@@ -28,24 +36,26 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
         .maybeSingle()
 
       if (!member) {
-        // Not a member — send to join flow
         router.push(`/join/${params.id}`)
         return
       }
 
-      // Member confirmed — persist the chosen league and redirect to main app.
-      // Storing in localStorage ensures the main app opens this specific league
-      // rather than always defaulting to the user's oldest (founding) league.
+      // Member confirmed — open the main app scoped to this league
       localStorage.setItem('activeLeagueId', params.id)
       router.push('/')
     }
-    verify()
+    check()
   }, [params.id])
 
-  return (
-    <div className="loading-screen">
-      <div className="spin" style={{ fontSize: 32 }}>⛳</div>
-      Loading league…
-    </div>
-  )
+  if (status === 'loading') {
+    return (
+      <div className="loading-screen">
+        <div className="spin" style={{ fontSize: 32 }}>⛳</div>
+        Loading league…
+      </div>
+    )
+  }
+
+  // Render the full app in guest mode — URL stays at /league/<id>
+  return <App guestLeagueId={params.id} />
 }

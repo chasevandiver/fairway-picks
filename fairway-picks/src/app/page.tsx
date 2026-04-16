@@ -3412,7 +3412,7 @@ function SeasonRecapTab({ history, golferHistory, seasonMoney }: {
     </div>
   )
 }
-export default function App() {
+export default function App({ guestLeagueId: propGuestLeagueId }: { guestLeagueId?: string } = {}) {
   const supabase = createClient()
   const router = useRouter()
 
@@ -3449,12 +3449,12 @@ export default function App() {
   const [tabKey, setTabKey] = useState(0)
   const [user, setUser] = useState<{ id: string; email: string } | null>(null)
   const [userProfile, setUserProfile] = useState<{ display_name: string; is_admin: boolean } | null>(null)
-  const [leagueId, setLeagueId] = useState<string>('00000000-0000-0000-0000-000000000001')
+  const [leagueId, setLeagueId] = useState<string>(propGuestLeagueId ?? '00000000-0000-0000-0000-000000000001')
   const [leagueName, setLeagueName] = useState<string>('Fore Picks')
   const [leagueRules, setLeagueRules] = useState<LeagueRules>(DEFAULT_RULES)
   const [inviteCode, setInviteCode] = useState<string>('')
   const [commissionerId, setCommissionerId] = useState<string | null>(null)
-  const [guestLeagueId, setGuestLeagueId] = useState<string | null>(null)
+  const [guestLeagueId, setGuestLeagueId] = useState<string | null>(propGuestLeagueId ?? null)
 
   const isAdmin = (userProfile?.is_admin ?? ['Eric', 'Chase'].includes(currentPlayer ?? '')) ||
     (commissionerId !== null && commissionerId === user?.id)
@@ -3478,13 +3478,6 @@ export default function App() {
       pendingNewLeagueRef.current = { id, name: name ? decodeURIComponent(name) : 'My League' }
       // Persist so subsequent page loads (refreshes) still open this league.
       localStorage.setItem('activeLeagueId', id)
-      window.history.replaceState(null, '', window.location.pathname)
-    }
-    // Public/guest view: ?viewLeague=<id> is set by /league/[id] when the user is not signed in.
-    const viewLeague = params.get('viewLeague')
-    if (viewLeague) {
-      setGuestLeagueId(viewLeague)
-      setLeagueId(viewLeague)
       window.history.replaceState(null, '', window.location.pathname)
     }
   }, [])
