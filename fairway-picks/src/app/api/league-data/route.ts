@@ -5,15 +5,32 @@ import type { NextRequest } from 'next/server'
 // Returns all league data needed by the app (history, season money, active tournament).
 // No auth check on reads — data is non-sensitive (6-person golf league).
 // Uses service role key so RLS is bypassed entirely.
+// Accepts either league_id (UUID) or invite_code (e.g. "EAGLE1") for public/guest access.
 export async function GET(request: NextRequest) {
-  const leagueId = request.nextUrl.searchParams.get('league_id') ?? '00000000-0000-0000-0000-000000000001'
-
   const db = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   )
 
-  // Fetch everything in parallel — including invite_code so the client makes only one API call
+  let leagueId = request.nextUrl.searchParams.get('league_id') ?? ''
+  const inviteCodeParam = request.nextUrl.searchParams.get('invite_code')
+
+  // If invite_code provided, resolve to league_id first
+  if (inviteCodeParam && !leagueId) {
+    const { data: league } = await db
+      .from('leagues')
+      .select('id')
+      .eq('invite_code', inviteCodeParam.toUpperCase())
+      .maybeSingle()
+    if (!league) {
+      return NextResponse.json({ error: 'League not found' }, { status: 404 })
+    }
+    leagueId = league.id
+  }
+
+  if (!leagueId) leagueId = '00000000-0000-0000-0000-000000000001'
+
+  // Fetch everything in parallel — including invite_code + name so the client makes only one API call
   const [
     { data: tournaments },
     { data: seasonMoney },
@@ -23,7 +40,7 @@ export async function GET(request: NextRequest) {
     db.from('tournaments').select('id').eq('league_id', leagueId).in('status', ['completed', 'finalized']),
     db.from('season_money').select('*'),
     db.from('tournaments').select('*').eq('league_id', leagueId).eq('status', 'active').maybeSingle(),
-    db.from('leagues').select('invite_code').eq('id', leagueId).maybeSingle(),
+    db.from('leagues').select('invite_code, name').eq('id', leagueId).maybeSingle(),
   ])
 
   const tournamentIds = (tournaments ?? []).map((t: any) => t.id)
@@ -64,5 +81,7 @@ export async function GET(request: NextRequest) {
     picks,
     tournamentIds,
     inviteCode: leagueRow?.invite_code ?? '',
+    leagueName: leagueRow?.name ?? '',
+    leagueId,
   })
 }
