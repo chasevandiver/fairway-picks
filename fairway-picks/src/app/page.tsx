@@ -3930,7 +3930,7 @@ export default function App() {
           pendingNewLeagueRef.current = null
           setLeagueId(pl.id)
           setLeagueName(pl.name)
-          setCommissionerId(user.id)
+          setCommissionerId(user!.id)
         } else {
           // Use service-role init-user to bypass RLS and find the correct league.
           // Pass stored preference so a new user who just joined a league lands there.
