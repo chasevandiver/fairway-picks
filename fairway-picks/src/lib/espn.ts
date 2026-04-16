@@ -18,7 +18,7 @@ export async function fetchLiveScores(): Promise<GolferScore[]> {
   try {
     const res = await fetch(
       'https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard',
-      { cache: 'no-store' }
+      { next: { revalidate: 120 } }
     )
     if (!res.ok) throw new Error('ESPN fetch failed')
     const data = await res.json()
