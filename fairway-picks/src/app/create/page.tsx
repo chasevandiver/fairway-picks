@@ -60,8 +60,12 @@ export default function CreateLeague() {
 
     if (leagueErr || !league) { setError(leagueErr?.message ?? 'Failed to create league'); setLoading(false); return }
 
-    // Add creator as a member
-    await supabase.from('league_members').insert({ league_id: league.id, user_id: user.id })
+    // Add creator as a member — use upsert so a retry never hits a unique-constraint error
+    const { error: memberErr } = await supabase
+      .from('league_members')
+      .upsert({ league_id: league.id, user_id: user.id }, { onConflict: 'league_id,user_id' })
+
+    if (memberErr) { setError('League created but failed to add you as a member: ' + memberErr.message); setLoading(false); return }
 
     setCreatedLeagueId(league.id)
     setCreatedInviteCode(inviteCode)

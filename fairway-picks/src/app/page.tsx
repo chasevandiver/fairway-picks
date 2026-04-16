@@ -587,6 +587,21 @@ function Sidebar({
         )}
       </nav>
 
+      <div style={{ padding: '0 12px 12px' }}>
+        <a
+          href="/dashboard"
+          style={{
+            display: 'block', width: '100%', textAlign: 'center',
+            background: 'var(--surface2)', border: '1px solid var(--border)',
+            borderRadius: 8, padding: '8px 0', color: 'var(--text-dim)',
+            fontSize: 12, fontFamily: 'var(--font-mono)', textDecoration: 'none',
+            letterSpacing: '0.05em',
+          }}
+        >
+          ⇄ Switch League
+        </a>
+      </div>
+
       <div className="sidebar-footer">
         <div className="user-chip">
           <div className="user-avatar">{currentPlayer[0]}</div>
