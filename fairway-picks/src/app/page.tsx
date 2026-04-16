@@ -2061,31 +2061,28 @@ function AdminTab({
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                 <div style={{ fontFamily: 'DM Mono', fontSize: 12, color: 'var(--text-mid)', wordBreak: 'break-all', flex: 1 }}>
-                  {`/view/${inviteCode}`}
+                  {`/league/${leagueId}`}
                 </div>
                 <button
                   className="btn btn-outline btn-sm"
                   onClick={() => {
-                    const url = `${window.location.origin}/view/${inviteCode}`
+                    const url = `${window.location.origin}/league/${leagueId}`
                     navigator.clipboard.writeText(url)
                     setCopiedField('publicLink')
                     setTimeout(() => setCopiedField(null), 2000)
                   }}
-                  disabled={!inviteCode}
                 >
                   {copiedField === 'publicLink' ? '✓ Copied!' : '🔗 Copy Link'}
                 </button>
-                {inviteCode && (
-                  <a
-                    href={`/view/${inviteCode}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                <a
+                  href={`/league/${leagueId}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
                     className="btn btn-outline btn-sm"
                     style={{ textDecoration: 'none' }}
                   >
                     ↗ Preview
                   </a>
-                )}
               </div>
               <div style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 6 }}>
                 Anyone with this link can view live scores and standings — <strong style={{ color: 'var(--text)' }}>no sign-in required</strong>.
