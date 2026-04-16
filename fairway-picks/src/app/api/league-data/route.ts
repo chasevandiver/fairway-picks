@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
     { data: activeTournament },
     { data: leagueRow },
   ] = await Promise.all([
-    db.from('tournaments').select('id').eq('league_id', leagueId).eq('status', 'completed'),
+    db.from('tournaments').select('id').eq('league_id', leagueId).in('status', ['completed', 'finalized']),
     db.from('season_money').select('*'),
     db.from('tournaments').select('*').eq('league_id', leagueId).eq('status', 'active').maybeSingle(),
     db.from('leagues').select('invite_code').eq('id', leagueId).maybeSingle(),
