@@ -1617,7 +1617,7 @@ function AdminTab({
   const [saving, setSaving] = useState(false)
   const [finalizing, setFinalizing] = useState(false)
   const [msg, setMsg] = useState('')
-  const [copiedField, setCopiedField] = useState<'invite' | 'id' | null>(null)
+  const [copiedField, setCopiedField] = useState<'invite' | 'id' | 'publink' | null>(null)
   // Rules editor state — initialized from leagueRules
   const [rWeeklyWinner, setRWeeklyWinner] = useState(leagueRules.scoring.weekly_winner)
   const [rOutrightWinner, setROutrightWinner] = useState(leagueRules.scoring.outright_winner)
@@ -1638,7 +1638,7 @@ function AdminTab({
     setTimeout(() => setMsg(''), 3000)
   }
 
-  const copyToClipboard = (text: string, field: 'invite' | 'id') => {
+  const copyToClipboard = (text: string, field: 'invite' | 'id' | 'publink') => {
     navigator.clipboard.writeText(text).then(() => {
       setCopiedField(field)
       setTimeout(() => setCopiedField(null), 2000)
