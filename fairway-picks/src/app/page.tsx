@@ -1875,7 +1875,7 @@ function AdminTab({
   const [saving, setSaving] = useState(false)
   const [finalizing, setFinalizing] = useState(false)
   const [msg, setMsg] = useState('')
-  const [copiedField, setCopiedField] = useState<'invite' | 'id' | null>(null)
+  const [copiedField, setCopiedField] = useState<'invite' | 'id' | 'publicLink' | null>(null)
   // Rules editor state — initialized from leagueRules
   const [rWeeklyWinner, setRWeeklyWinner] = useState(leagueRules.scoring.weekly_winner)
   const [rOutrightWinner, setROutrightWinner] = useState(leagueRules.scoring.outright_winner)
@@ -2052,6 +2052,44 @@ function AdminTab({
             </div>
             <div style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 4 }}>
               Share the <strong style={{ color: 'var(--text)' }}>Invite Code</strong> with players. They can enter it at the Join page to join your league.
+            </div>
+            <div className="divider" />
+            {/* Public guest view link — no sign-in required */}
+            <div>
+              <div style={{ fontFamily: 'DM Mono', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-dim)', marginBottom: 6 }}>
+                Public View Link
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                <div style={{ fontFamily: 'DM Mono', fontSize: 12, color: 'var(--text-mid)', wordBreak: 'break-all', flex: 1 }}>
+                  {`/view/${inviteCode}`}
+                </div>
+                <button
+                  className="btn btn-outline btn-sm"
+                  onClick={() => {
+                    const url = `${window.location.origin}/view/${inviteCode}`
+                    navigator.clipboard.writeText(url)
+                    setCopiedField('publicLink')
+                    setTimeout(() => setCopiedField(null), 2000)
+                  }}
+                  disabled={!inviteCode}
+                >
+                  {copiedField === 'publicLink' ? '✓ Copied!' : '🔗 Copy Link'}
+                </button>
+                {inviteCode && (
+                  <a
+                    href={`/view/${inviteCode}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="btn btn-outline btn-sm"
+                    style={{ textDecoration: 'none' }}
+                  >
+                    ↗ Preview
+                  </a>
+                )}
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 6 }}>
+                Anyone with this link can view live scores and standings — <strong style={{ color: 'var(--text)' }}>no sign-in required</strong>.
+              </div>
             </div>
           </div>
         </div>
