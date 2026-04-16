@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
     db.from('tournaments').select('id').eq('league_id', leagueId).in('status', ['completed', 'finalized']),
     db.from('season_money').select('*'),
     db.from('tournaments').select('*').eq('league_id', leagueId).eq('status', 'active').maybeSingle(),
-    db.from('leagues').select('invite_code').eq('id', leagueId).maybeSingle(),
+    db.from('leagues').select('invite_code, name, rules').eq('id', leagueId).maybeSingle(),
   ])
 
   const tournamentIds = (tournaments ?? []).map((t: any) => t.id)
@@ -64,5 +64,7 @@ export async function GET(request: NextRequest) {
     picks,
     tournamentIds,
     inviteCode: leagueRow?.invite_code ?? '',
+    leagueName: leagueRow?.name ?? '',
+    leagueRules: leagueRow?.rules ?? null,
   })
 }

@@ -511,7 +511,7 @@ const NAV_ITEMS = [
 ]
 
 function Sidebar({
-  currentPlayer, tab, setTab, isAdmin, onLogout, tournament, isOpen, onClose, isMasters, leagueName, onClaimPlayer
+  currentPlayer, tab, setTab, isAdmin, onLogout, tournament, isOpen, onClose, isMasters, leagueName, onClaimPlayer, guestMode
 }: {
   currentPlayer: string
   tab: string
@@ -524,6 +524,7 @@ function Sidebar({
   isMasters: boolean
   leagueName: string
   onClaimPlayer?: () => void
+  guestMode?: boolean
 }) {
   return (
     <>
@@ -587,46 +588,65 @@ function Sidebar({
         )}
       </nav>
 
-      <div style={{ padding: '0 12px 12px' }}>
-        <a
-          href="/dashboard"
-          style={{
-            display: 'block', width: '100%', textAlign: 'center',
-            background: 'var(--surface2)', border: '1px solid var(--border)',
-            borderRadius: 8, padding: '8px 0', color: 'var(--text-dim)',
-            fontSize: 12, fontFamily: 'var(--font-mono)', textDecoration: 'none',
-            letterSpacing: '0.05em',
-          }}
-        >
-          ⇄ Switch League
-        </a>
-      </div>
-
-      <div className="sidebar-footer">
-        <div className="user-chip">
-          <div className="user-avatar">{currentPlayer[0]}</div>
-          <div className="user-info">
-            <div className="user-name">{currentPlayer}</div>
-            <div className="user-role">{isAdmin ? 'Admin' : 'Player'}</div>
-          </div>
-          <button
-            onClick={onLogout}
-            style={{ marginLeft: 'auto', background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 16 }}
-            title="Switch player"
-          >↩</button>
-        </div>
-        {!(PLAYERS as string[]).includes(currentPlayer) && onClaimPlayer && (
-          <button
-            type="button"
-            onClick={onClaimPlayer}
+      {!guestMode && (
+        <div style={{ padding: '0 12px 12px' }}>
+          <a
+            href="/dashboard"
             style={{
-              marginTop: 8, width: '100%', background: 'none', border: '1px solid var(--border)',
-              borderRadius: 8, padding: '7px 10px', color: 'var(--green)', fontSize: 12,
-              cursor: 'pointer', fontFamily: 'var(--font-mono)', textAlign: 'center',
+              display: 'block', width: '100%', textAlign: 'center',
+              background: 'var(--surface2)', border: '1px solid var(--border)',
+              borderRadius: 8, padding: '8px 0', color: 'var(--text-dim)',
+              fontSize: 12, fontFamily: 'var(--font-mono)', textDecoration: 'none',
+              letterSpacing: '0.05em',
             }}
           >
-            Claim your player name →
-          </button>
+            ⇄ Switch League
+          </a>
+        </div>
+      )}
+
+      <div className="sidebar-footer">
+        {guestMode ? (
+          <a
+            href="/auth"
+            style={{
+              display: 'block', width: '100%', textAlign: 'center',
+              background: 'var(--green)', border: 'none',
+              borderRadius: 8, padding: '11px 0', color: '#000',
+              fontSize: 13, fontWeight: 700, textDecoration: 'none',
+              letterSpacing: '0.03em',
+            }}
+          >
+            Sign In to Participate
+          </a>
+        ) : (
+          <>
+            <div className="user-chip">
+              <div className="user-avatar">{currentPlayer[0]}</div>
+              <div className="user-info">
+                <div className="user-name">{currentPlayer}</div>
+                <div className="user-role">{isAdmin ? 'Admin' : 'Player'}</div>
+              </div>
+              <button
+                onClick={onLogout}
+                style={{ marginLeft: 'auto', background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 16 }}
+                title="Switch player"
+              >↩</button>
+            </div>
+            {!(PLAYERS as string[]).includes(currentPlayer) && onClaimPlayer && (
+              <button
+                type="button"
+                onClick={onClaimPlayer}
+                style={{
+                  marginTop: 8, width: '100%', background: 'none', border: '1px solid var(--border)',
+                  borderRadius: 8, padding: '7px 10px', color: 'var(--green)', fontSize: 12,
+                  cursor: 'pointer', fontFamily: 'var(--font-mono)', textAlign: 'center',
+                }}
+              >
+                Claim your player name →
+              </button>
+            )}
+          </>
         )}
       </div>
     </div>
@@ -3416,6 +3436,7 @@ export default function App() {
   const [leagueRules, setLeagueRules] = useState<LeagueRules>(DEFAULT_RULES)
   const [inviteCode, setInviteCode] = useState<string>('')
   const [commissionerId, setCommissionerId] = useState<string | null>(null)
+  const [guestLeagueId, setGuestLeagueId] = useState<string | null>(null)
 
   const isAdmin = (userProfile?.is_admin ?? ['Eric', 'Chase'].includes(currentPlayer ?? '')) ||
     (commissionerId !== null && commissionerId === user?.id)
@@ -3439,6 +3460,13 @@ export default function App() {
       pendingNewLeagueRef.current = { id, name: name ? decodeURIComponent(name) : 'My League' }
       // Persist so subsequent page loads (refreshes) still open this league.
       localStorage.setItem('activeLeagueId', id)
+      window.history.replaceState(null, '', window.location.pathname)
+    }
+    // Public/guest view: ?viewLeague=<id> is set by /league/[id] when the user is not signed in.
+    const viewLeague = params.get('viewLeague')
+    if (viewLeague) {
+      setGuestLeagueId(viewLeague)
+      setLeagueId(viewLeague)
       window.history.replaceState(null, '', window.location.pathname)
     }
   }, [])
@@ -3579,8 +3607,10 @@ export default function App() {
       .then(r => r.json()).catch(() => null)
 
     if (leagueDataRes) {
-      const { activeTournament, seasonMoney: sm, results, golferResults, picks: p, inviteCode: ic } = leagueDataRes
+      const { activeTournament, seasonMoney: sm, results, golferResults, picks: p, inviteCode: ic, leagueName: ln, leagueRules: lr } = leagueDataRes
       if (ic != null) setInviteCode(ic)
+      if (ln) setLeagueName(ln)
+      if (lr) setLeagueRules(mergeRules(lr))
 
       if (sm) setSeasonMoney(sm)
 
@@ -3633,6 +3663,11 @@ export default function App() {
   useEffect(() => {
     if (currentPlayer) loadData()
   }, [currentPlayer, loadData])
+
+  // ── Guest mode: load data without a logged-in user ──
+  useEffect(() => {
+    if (guestLeagueId && !user && bootstrapped) loadData()
+  }, [guestLeagueId, user, bootstrapped, loadData])
 
   // ── Live score polling ──
   const fetchScores = useCallback(async () => {
@@ -3879,12 +3914,12 @@ export default function App() {
   }
 
   if (!bootstrapped) return <div className="loading-screen"><div className="spin" style={{ fontSize: 32 }}>⛳</div>Loading…</div>
-  if (!user) return <LandingPage />
-  if (!userProfile) return (
+  if (!user && !guestLeagueId) return <LandingPage />
+  if (!userProfile && !guestLeagueId) return (
     <SetupProfileScreen
       supabase={supabase}
-      userId={user.id}
-      userEmail={user.email}
+      userId={user!.id}
+      userEmail={user!.email}
       onComplete={(displayName, isAdmin) => {
         profileLoadedRef.current = true
         setUserProfile({ display_name: displayName, is_admin: isAdmin })
@@ -3942,7 +3977,8 @@ export default function App() {
         onClose={() => setSidebarOpen(false)}
         isMasters={isMasters}
         leagueName={leagueName}
-        onClaimPlayer={() => setShowClaimModal(true)}
+        onClaimPlayer={guestLeagueId ? undefined : () => setShowClaimModal(true)}
+        guestMode={!user && !!guestLeagueId}
       />
       {showClaimModal && user && (
         <ClaimPlayerModal
@@ -3958,6 +3994,20 @@ export default function App() {
         />
       )}
       <main className="main-content">
+        {guestLeagueId && !user && (
+          <div style={{
+            background: 'var(--surface2)', borderBottom: '1px solid var(--border)',
+            padding: '10px 24px', display: 'flex', alignItems: 'center',
+            justifyContent: 'space-between', gap: 12, flexWrap: 'wrap',
+          }}>
+            <span style={{ color: 'var(--text-dim)', fontSize: 13 }}>
+              Viewing as guest · picks and draft are read-only
+            </span>
+            <a href="/auth" style={{ color: 'var(--green)', fontSize: 13, fontWeight: 600, textDecoration: 'none' }}>
+              Sign in to participate →
+            </a>
+          </div>
+        )}
         {!dataLoaded ? (
           <SkeletonScreen />
         ) : (

@@ -17,7 +17,7 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
   useEffect(() => {
     async function verify() {
       const { data: { user } } = await supabase.auth.getUser()
-      if (!user) { router.push('/auth'); return }
+      if (!user) { router.push(`/?viewLeague=${params.id}`); return }
 
       // Verify the user is a member of this league
       const { data: member } = await supabase
