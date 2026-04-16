@@ -139,7 +139,7 @@ function LandingPage() {
           Live PGA Tour scoring, snake draft, customizable rules.
         </p>
         <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
-          <a href="/auth" className="btn btn-primary" style={{ textDecoration: 'none', padding: '14px 32px', fontSize: 16, fontWeight: 700 }}>
+          <a href="/create" className="btn btn-primary" style={{ textDecoration: 'none', padding: '14px 32px', fontSize: 16, fontWeight: 700 }}>
             Create Your League — Free
           </a>
           <a href="/join" className="btn btn-outline" style={{ textDecoration: 'none', padding: '14px 32px', fontSize: 16 }}>
@@ -204,7 +204,7 @@ function LandingPage() {
         <p style={{ color: 'var(--text-dim)', fontSize: 16, marginBottom: 32 }}>
           Free forever. No credit card. Works on any device.
         </p>
-        <a href="/auth" className="btn btn-primary" style={{ textDecoration: 'none', padding: '14px 40px', fontSize: 16, fontWeight: 700 }}>
+        <a href="/create" className="btn btn-primary" style={{ textDecoration: 'none', padding: '14px 40px', fontSize: 16, fontWeight: 700 }}>
           Create Your League — Free
         </a>
       </section>
@@ -1264,6 +1264,10 @@ function MoneyTab({ seasonMoney, weekMoney, tournament, history }: {
   history: any[]
 }) {
   const sorted = [...seasonMoney].sort((a, b) => b.total - a.total)
+  // Derive the player list from seasonMoney (league-scoped) or tournament draft order
+  const moneyPlayers: string[] = sorted.length > 0
+    ? sorted.map(sm => sm.player_name)
+    : (tournament?.draft_order ?? Object.keys(weekMoney))
   // Total dollars that changed hands (sum of positive balances = what winners collected)
   const totalPot = seasonMoney.reduce((s, sm) => s + Math.max(0, sm.total), 0)
   const tournamentsPlayed = history.length
@@ -1334,7 +1338,7 @@ function MoneyTab({ seasonMoney, weekMoney, tournament, history }: {
           </div>
           <div className="card-body">
             <div className="money-grid mb-24">
-              {PLAYERS.map((p) => {
+              {(tournament?.draft_order ?? moneyPlayers).map((p) => {
                 const v = weekMoney[p] || 0
                 return (
                   <div key={p} className="money-card" style={{ background: 'var(--surface2)' }}>
@@ -1347,9 +1351,9 @@ function MoneyTab({ seasonMoney, weekMoney, tournament, history }: {
             </div>
             <div className="divider" />
             <div style={{ fontSize: 12, color: 'var(--text-dim)', fontFamily: 'DM Mono', lineHeight: 2 }}>
-              🏆 Low Strokes → ${PAYOUT_RULES.lowestStrokes} × {PLAYERS.length - 1} = ${PAYOUT_RULES.lowestStrokes * (PLAYERS.length - 1)} max
-              &nbsp;·&nbsp; 🎯 Tour Win → ${PAYOUT_RULES.outrightWinner} × {PLAYERS.length - 1}
-              &nbsp;·&nbsp; 🔝 Top 3 → ${PAYOUT_RULES.top3} × {PLAYERS.length - 1}
+              🏆 Low Strokes → ${PAYOUT_RULES.lowestStrokes} × {moneyPlayers.length - 1} = ${PAYOUT_RULES.lowestStrokes * (moneyPlayers.length - 1)} max
+              &nbsp;·&nbsp; 🎯 Tour Win → ${PAYOUT_RULES.outrightWinner} × {moneyPlayers.length - 1}
+              &nbsp;·&nbsp; 🔝 Top 3 → ${PAYOUT_RULES.top3} × {moneyPlayers.length - 1}
             </div>
           </div>
         </div>
@@ -1363,7 +1367,7 @@ function MoneyTab({ seasonMoney, weekMoney, tournament, history }: {
               <thead>
                 <tr>
                   <th>Tournament</th>
-                  {PLAYERS.map((p) => <th key={p}>{p}</th>)}
+                  {moneyPlayers.map((p) => <th key={p}>{p}</th>)}
                 </tr>
               </thead>
               <tbody>
@@ -1373,7 +1377,7 @@ function MoneyTab({ seasonMoney, weekMoney, tournament, history }: {
                       <div style={{ fontWeight: 500 }}>{h.tournament_name}</div>
                       <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: 'var(--text-dim)' }}>{h.date}</div>
                     </td>
-                    {PLAYERS.map((p) => {
+                    {moneyPlayers.map((p) => {
                       const v = h.money?.[p] || 0
                       return (
                         <td key={p}>
@@ -2694,13 +2698,21 @@ const ALL_STATS = [
   { player: 'Eric',    first: 0,  second: 0,  third: 0,  majors: 0,   winners: 0,  top3: 0,  cut: 0  },
 ]
 
-function StatsTab({ history }: { history: any[] }) {
-  const [activeYear, setActiveYear] = useState<number | 'all'>('all')
+const FOUNDING_LEAGUE_ID = '00000000-0000-0000-0000-000000000001'
 
-  // ── Merge hardcoded baseline + live Supabase results ──
-  // Live results come from finalized tournaments stored in DB (2026+)
+function StatsTab({ history, leagueId }: { history: any[], leagueId: string }) {
+  const [activeYear, setActiveYear] = useState<number | 'all'>('all')
+  const isFoundingLeague = leagueId === FOUNDING_LEAGUE_ID
+
+  // For non-founding leagues derive the player list from history;
+  // for the founding league use the hardcoded PLAYERS constant.
+  const statPlayers: string[] = isFoundingLeague
+    ? PLAYERS
+    : Array.from(new Set(history.flatMap(h => (h.standings || []).map((s: any) => s.player as string)))).sort()
+
+  // ── Live stats from DB results ──
   const liveStatsByPlayer: Record<string, { first: number; second: number; third: number; winners: number; top3: number; cut: number; majors: number }> = {}
-  PLAYERS.forEach(p => liveStatsByPlayer[p] = { first: 0, second: 0, third: 0, winners: 0, top3: 0, cut: 0, majors: 0 })
+  statPlayers.forEach(p => liveStatsByPlayer[p] = { first: 0, second: 0, third: 0, winners: 0, top3: 0, cut: 0, majors: 0 })
 
   const liveMajors: typeof MAJORS_HISTORY = []
 
@@ -2708,14 +2720,14 @@ function StatsTab({ history }: { history: any[] }) {
     const isMajor = h.is_major === true
     for (const s of (h.standings || [])) {
       const p = s.player
-      if (!liveStatsByPlayer[p]) continue
+      if (!liveStatsByPlayer[p]) liveStatsByPlayer[p] = { first: 0, second: 0, third: 0, winners: 0, top3: 0, cut: 0, majors: 0 }
       if (s.rank === 1) liveStatsByPlayer[p].first++
       if (s.rank === 2) liveStatsByPlayer[p].second++
       if (s.rank === 3) liveStatsByPlayer[p].third++
       liveStatsByPlayer[p].cut += s.golfers_cut || 0
     }
     if (h.money) {
-      for (const p of PLAYERS) {
+      for (const p of statPlayers) {
         if (!liveStatsByPlayer[p]) continue
         const r = (h.standings || []).find((s: any) => s.player === p)
         if (r?.has_winner) liveStatsByPlayer[p].winners++
@@ -2732,35 +2744,57 @@ function StatsTab({ history }: { history: any[] }) {
         winner: h.winner_player,
         logo: logos[majorType],
       })
-      liveStatsByPlayer[h.winner_player].majors++
+      if (liveStatsByPlayer[h.winner_player]) liveStatsByPlayer[h.winner_player].majors++
     }
   }
 
-  // Merge: baseline hardcoded + live
-  const mergedStats = ALL_STATS.map(base => {
-    const live = liveStatsByPlayer[base.player] || {}
-    return {
-      player: base.player,
-      first:   base.first   + (live.first   || 0),
-      second:  base.second  + (live.second  || 0),
-      third:   base.third   + (live.third   || 0),
-      majors:  base.majors  + (live.majors  || 0),
-      winners: base.winners + (live.winners || 0),
-      top3:    base.top3    + (live.top3    || 0),
-      cut:     base.cut     + (live.cut     || 0),
-    }
-  })
+  // Founding league: merge hardcoded all-time baseline with live DB data.
+  // Other leagues: use only live DB data (no hardcoded history).
+  const mergedStats = isFoundingLeague
+    ? ALL_STATS.map(base => {
+        const live = liveStatsByPlayer[base.player] || {}
+        return {
+          player: base.player,
+          first:   base.first   + (live.first   || 0),
+          second:  base.second  + (live.second  || 0),
+          third:   base.third   + (live.third   || 0),
+          majors:  base.majors  + (live.majors  || 0),
+          winners: base.winners + (live.winners || 0),
+          top3:    base.top3    + (live.top3    || 0),
+          cut:     base.cut     + (live.cut     || 0),
+        }
+      })
+    : statPlayers.map(p => {
+        const live = liveStatsByPlayer[p] || {}
+        return { player: p, first: live.first||0, second: live.second||0, third: live.third||0, majors: live.majors||0, winners: live.winners||0, top3: live.top3||0, cut: live.cut||0 }
+      })
 
-  const allMajors = [...MAJORS_HISTORY, ...liveMajors]
-  const years = Array.from(new Set([2020, 2021, 2022, 2023, 2024, 2025, ...liveMajors.map(m => m.year)])).sort()
+  // Founding league includes hardcoded major history; others only show DB-tracked majors.
+  const allMajors = isFoundingLeague ? [...MAJORS_HISTORY, ...liveMajors] : liveMajors
+  const years = isFoundingLeague
+    ? Array.from(new Set([2020, 2021, 2022, 2023, 2024, 2025, ...liveMajors.map(m => m.year)])).sort()
+    : Array.from(new Set([
+        ...history.map(h => new Date(h.date || '').getFullYear()).filter(y => !isNaN(y) && y > 1900),
+        ...liveMajors.map(m => m.year),
+      ])).sort()
 
-  const maxCut = Math.max(...mergedStats.map(s => s.cut))
+  // Empty state for non-founding leagues with no tournament history yet
+  if (!isFoundingLeague && mergedStats.length === 0) {
+    return (
+      <div className="empty-state card">
+        <div className="empty-icon">🏅</div>
+        <p>No tournament stats yet. Stats will appear after your first tournament is finalized.</p>
+      </div>
+    )
+  }
 
-  // Major wins per player (merged)
+  const maxCut = Math.max(...mergedStats.map(s => s.cut), 1)
+
+  // Major wins per player
   const majorsByPlayer: Record<string, number> = {}
-  PLAYERS.forEach(p => majorsByPlayer[p] = 0)
+  statPlayers.forEach(p => majorsByPlayer[p] = 0)
   allMajors.forEach(m => {
-    for (const p of PLAYERS) {
+    for (const p of statPlayers) {
       if (m.winner.includes(p)) majorsByPlayer[p] += m.winner.includes('Tie') ? 0.5 : 1
     }
   })
@@ -2770,15 +2804,17 @@ function StatsTab({ history }: { history: any[] }) {
       <div className="page-header">
         <div>
           <div className="page-title">League Stats</div>
-          <div className="page-sub">All-time records since 2020</div>
+          <div className="page-sub">
+            {isFoundingLeague ? 'All-time records since 2020' : history.length === 0 ? 'No history yet' : `All-time records · ${years[0] ?? new Date().getFullYear()}–${years[years.length - 1] ?? new Date().getFullYear()}`}
+          </div>
         </div>
       </div>
 
       {/* ── Summary Stat Cards ── */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 12, marginBottom: 28 }}>
         {[
-          { label: 'Seasons Played', val: 6, color: 'var(--green)' },
-          { label: 'Tournaments', val: mergedStats[0].first + mergedStats[0].second + mergedStats[0].third, color: 'var(--gold)' },
+          { label: 'Seasons Played', val: years.length || history.length, color: 'var(--green)' },
+          { label: 'Tournaments', val: history.length, color: 'var(--gold)' },
           { label: 'Majors Tracked', val: allMajors.length, color: '#c084fc' },
           { label: 'Total Cuts', val: mergedStats.reduce((s,p)=>s+p.cut,0), color: 'var(--red)' },
         ].map(s => (
@@ -2793,7 +2829,9 @@ function StatsTab({ history }: { history: any[] }) {
       <div className="card mb-24">
         <div className="card-header">
           <div className="card-title">All-Time Player Stats</div>
-          <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: 'var(--text-dim)' }}>2020 – 2026 · All events</span>
+          <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: 'var(--text-dim)' }}>
+            {isFoundingLeague ? '2020 – 2026 · All events' : years.length > 0 ? `${years[0]} – ${years[years.length-1]} · All events` : 'All events'}
+          </span>
         </div>
         <div className="stats-table-wrap">
           <table className="stats-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -3017,16 +3055,16 @@ function StatsTab({ history }: { history: any[] }) {
       {history.length > 0 && (() => {
         // Build H2H: for each pair, count who finished with lower score
         const h2h: Record<string, Record<string, { wins: number; losses: number }>> = {}
-        PLAYERS.forEach(a => {
+        statPlayers.forEach(a => {
           h2h[a] = {}
-          PLAYERS.forEach(b => { if (a !== b) h2h[a][b] = { wins: 0, losses: 0 } })
+          statPlayers.forEach(b => { if (a !== b) h2h[a][b] = { wins: 0, losses: 0 } })
         })
 
         for (const tournament of history) {
           const standings = tournament.standings || []
-          for (let i = 0; i < PLAYERS.length; i++) {
-            for (let j = i + 1; j < PLAYERS.length; j++) {
-              const a = PLAYERS[i], b = PLAYERS[j]
+          for (let i = 0; i < statPlayers.length; i++) {
+            for (let j = i + 1; j < statPlayers.length; j++) {
+              const a = statPlayers[i], b = statPlayers[j]
               const sa = standings.find((s: any) => s.player === a)
               const sb = standings.find((s: any) => s.player === b)
               if (!sa || !sb) continue
@@ -3044,20 +3082,20 @@ function StatsTab({ history }: { history: any[] }) {
                 <thead>
                   <tr style={{ borderBottom: '2px solid var(--border)' }}>
                     <th style={{ padding: '10px 16px', textAlign: 'left', fontFamily: 'DM Mono', fontSize: 10, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Player</th>
-                    {PLAYERS.map(p => (
+                    {statPlayers.map(p => (
                       <th key={p} style={{ padding: '10px 12px', textAlign: 'center', fontFamily: 'DM Mono', fontSize: 10, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{p}</th>
                     ))}
                     <th style={{ padding: '10px 12px', textAlign: 'center', fontFamily: 'DM Mono', fontSize: 10, color: 'var(--green)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Overall</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {PLAYERS.map((a, ai) => {
-                    const totalWins = PLAYERS.filter(b => b !== a).reduce((s, b) => s + h2h[a][b].wins, 0)
-                    const totalGames = PLAYERS.filter(b => b !== a).reduce((s, b) => s + h2h[a][b].wins + h2h[a][b].losses, 0)
+                  {statPlayers.map((a, ai) => {
+                    const totalWins = statPlayers.filter(b => b !== a).reduce((s, b) => s + h2h[a][b].wins, 0)
+                    const totalGames = statPlayers.filter(b => b !== a).reduce((s, b) => s + h2h[a][b].wins + h2h[a][b].losses, 0)
                     return (
                       <tr key={a} style={{ borderTop: '1px solid var(--border)', background: ai % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.015)' }}>
                         <td style={{ padding: '12px 16px', fontWeight: 700 }}>{a}</td>
-                        {PLAYERS.map(b => {
+                        {statPlayers.map(b => {
                           if (a === b) return <td key={b} style={{ padding: '12px 12px', textAlign: 'center', background: 'var(--surface2)', color: 'var(--text-dim)' }}>—</td>
                           const rec = h2h[a][b]
                           const winPct = rec.wins + rec.losses > 0 ? rec.wins / (rec.wins + rec.losses) : 0.5
@@ -3094,12 +3132,12 @@ function StatsTab({ history }: { history: any[] }) {
 
         // Running totals per tournament
         const runningTotals: Record<string, number[]> = {}
-        PLAYERS.forEach(p => runningTotals[p] = [])
+        statPlayers.forEach(p => runningTotals[p] = [])
         const sortedByDate = [...moneyByTournament].sort((a, b) => a.date?.localeCompare(b.date))
         let cumulative: Record<string, number> = {}
-        PLAYERS.forEach(p => cumulative[p] = 0)
+        statPlayers.forEach(p => cumulative[p] = 0)
         for (const t of sortedByDate) {
-          PLAYERS.forEach(p => {
+          statPlayers.forEach(p => {
             cumulative[p] = (cumulative[p] || 0) + (t.money[p] || 0)
             runningTotals[p].push(cumulative[p])
           })
@@ -3107,9 +3145,9 @@ function StatsTab({ history }: { history: any[] }) {
 
         // Find closest pairs: smallest average gap in running totals
         const rivals: { a: string; b: string; avgGap: number; currentGap: number }[] = []
-        for (let i = 0; i < PLAYERS.length; i++) {
-          for (let j = i + 1; j < PLAYERS.length; j++) {
-            const a = PLAYERS[i], b = PLAYERS[j]
+        for (let i = 0; i < statPlayers.length; i++) {
+          for (let j = i + 1; j < statPlayers.length; j++) {
+            const a = statPlayers[i], b = statPlayers[j]
             const gaps = runningTotals[a].map((v, k) => Math.abs(v - runningTotals[b][k]))
             const avgGap = gaps.reduce((s, v) => s + v, 0) / gaps.length
             const currentGap = Math.abs((cumulative[a] || 0) - (cumulative[b] || 0))
@@ -3175,18 +3213,22 @@ function SeasonRecapTab({ history, golferHistory, seasonMoney }: {
   )
 
   const sorted = [...seasonMoney].sort((a, b) => b.total - a.total)
+  // Derive league players from seasonMoney (league-scoped) or fall back to history
+  const leaguePlayers: string[] = sorted.length > 0
+    ? sorted.map(sm => sm.player_name)
+    : Array.from(new Set(history.flatMap(h => (h.standings || []).map((s: any) => s.player as string)))).sort()
   const leader = sorted[0]
   const mostTournaments = history.length
 
   // Best single week per player
   const bestWeek: Record<string, { amount: number; tournament: string }> = {}
   const worstWeek: Record<string, { amount: number; tournament: string }> = {}
-  PLAYERS.forEach(p => {
+  leaguePlayers.forEach(p => {
     bestWeek[p] = { amount: -Infinity, tournament: '—' }
     worstWeek[p] = { amount: Infinity, tournament: '—' }
   })
   for (const h of history) {
-    PLAYERS.forEach(p => {
+    leaguePlayers.forEach(p => {
       const v = h.money?.[p] ?? 0
       if (v > bestWeek[p].amount) bestWeek[p] = { amount: v, tournament: h.tournament_name }
       if (v < worstWeek[p].amount) worstWeek[p] = { amount: v, tournament: h.tournament_name }
@@ -3195,7 +3237,7 @@ function SeasonRecapTab({ history, golferHistory, seasonMoney }: {
 
   // Pick grades: grade each golfer based on finish vs draft position
   const gradeMap: Record<string, { A: number; B: number; C: number; D: number; F: number }> = {}
-  PLAYERS.forEach(p => gradeMap[p] = { A: 0, B: 0, C: 0, D: 0, F: 0 })
+  leaguePlayers.forEach(p => gradeMap[p] = { A: 0, B: 0, C: 0, D: 0, F: 0 })
 
   const gradePick = (draftPos: number, finishPos: number | null, status: string): 'A' | 'B' | 'C' | 'D' | 'F' => {
     if (status === 'cut' || status === 'wd') return finishPos === null || draftPos <= 2 ? 'F' : 'D'
@@ -3331,7 +3373,7 @@ function SeasonRecapTab({ history, golferHistory, seasonMoney }: {
             <thead>
               <tr>
                 <th>Tournament</th>
-                {PLAYERS.map(p => <th key={p}>{p}</th>)}
+                {leaguePlayers.map(p => <th key={p}>{p}</th>)}
               </tr>
             </thead>
             <tbody>
@@ -3341,7 +3383,7 @@ function SeasonRecapTab({ history, golferHistory, seasonMoney }: {
                     <div style={{ fontWeight: 500, fontSize: 13 }}>{h.tournament_name}</div>
                     <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: 'var(--text-dim)' }}>{h.date}</div>
                   </td>
-                  {PLAYERS.map(p => {
+                  {leaguePlayers.map(p => {
                     const v = h.money?.[p] ?? 0
                     return (
                       <td key={p}>
@@ -3356,7 +3398,7 @@ function SeasonRecapTab({ history, golferHistory, seasonMoney }: {
               {/* Season totals row */}
               <tr style={{ borderTop: '2px solid var(--border-bright)', background: 'var(--surface2)' }}>
                 <td style={{ fontFamily: 'DM Mono', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-dim)', fontWeight: 700 }}>Season Total</td>
-                {PLAYERS.map(p => {
+                {leaguePlayers.map(p => {
                   const v = seasonMoney.find(sm => sm.player_name === p)?.total ?? 0
                   return (
                     <td key={p}>
@@ -3967,7 +4009,7 @@ export default function App() {
             {tab === 'money'   && <MoneyTab seasonMoney={seasonMoney} weekMoney={weekMoney} tournament={tournament} history={history} />}
             {tab === 'draft'   && <DraftTab tournament={tournament} picks={picks} liveData={liveData} currentPlayer={currentPlayer ?? ''} isAdmin={isAdmin} onPickMade={handlePickMade} />}
             {tab === 'history' && <HistoryTab history={history} golferHistory={golferHistory} isAdmin={isAdmin} onDeleteTournament={handleDeleteTournament} onEditResult={handleEditResult} onDeleteResult={handleDeleteResult} />}
-            {tab === 'stats'   && <StatsTab history={history} />}
+            {tab === 'stats'   && <StatsTab history={history} leagueId={leagueId} />}
             {tab === 'recap'   && <SeasonRecapTab history={history} golferHistory={golferHistory} seasonMoney={seasonMoney} />}
             {tab === 'admin'   && isAdmin && <AdminTab tournament={tournament} standings={standings} weekMoney={weekMoney} picks={picks} liveData={liveData} leagueId={leagueId} inviteCode={inviteCode} leagueRules={leagueRules} onSetupTournament={handleSetupTournament} onFinalize={handleFinalize} onClearTournament={handleClearTournament} onClearPicks={handleClearPicks} onSwapGolfer={handleSwapGolfer} onSaveRules={handleSaveRules} onSaveInviteCode={handleSaveInviteCode} />}
           </div>
