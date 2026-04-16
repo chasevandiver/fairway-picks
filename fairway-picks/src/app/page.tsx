@@ -3936,8 +3936,8 @@ export default function App() {
           // Pass stored preference so a new user who just joined a league lands there.
           const storedLeague3 = localStorage.getItem('activeLeagueId')
           const initUrl3 = storedLeague3
-            ? `/api/init-user?user_id=${user.id}&preferred_league_id=${storedLeague3}`
-            : `/api/init-user?user_id=${user.id}`
+            ? `/api/init-user?user_id=${user!.id}&preferred_league_id=${storedLeague3}`
+            : `/api/init-user?user_id=${user!.id}`
           fetch(initUrl3)
             .then(r => r.json())
             .then(({ membership }) => {
