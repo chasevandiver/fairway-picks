@@ -2,7 +2,6 @@
   "name": "Fore Picks",
   "short_name": "Fore Picks",
   "description": "PGA Tour Pick'em League — snake draft, live scoring, custom rules",
-  "start_url": "/",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#0a0c0f",
