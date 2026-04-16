@@ -68,24 +68,37 @@ export async function fetchLiveScores(): Promise<GolferScore[]> {
     })
 
     // ── Step 2: Derive actual course PAR from completed rounds ──
-    // For any golfer with all 4 rounds complete:
-    //   par = (total_strokes - total_to_par) / 4
-    // ESPN's c.score = total to-par for the tournament
+    // For any golfer with N completed rounds and no in-progress round:
+    //   par = (total_strokes - ESPN_total_to_par) / N
+    // We skip golfers with an in-progress round because ESPN's c.score then includes
+    // the partial round's contribution, which would corrupt the implied-par math.
+    // Prefer golfers with more completed rounds (checked in descending order) for accuracy.
     let PAR = DEFAULT_PAR
-    for (const c of raw) {
-      const rounds = parsedRoundsOnly[raw.indexOf(c)]
-      const completedCount = rounds.filter((r: number | null) => r !== null).length
-      if (completedCount === 4) {
-        const totalStrokes = (rounds as number[]).reduce((a, b) => a + b, 0)
+    for (let targetCount = 4; targetCount >= 1; targetCount--) {
+      for (const [idx, c] of raw.entries()) {
+        const rounds = parsedRoundsOnly[idx]
+        const completedRounds = (rounds as (number | null)[]).filter((r): r is number => r !== null)
+        if (completedRounds.length !== targetCount) continue
+
+        // Skip if any round is in-progress — c.score would include partial contributions
+        const lines: any[] = c.linescores || []
+        const hasInProgress = lines.some((l: any) => {
+          const holeCount = (l.linescores || []).length
+          return holeCount > 0 && holeCount < 18
+        })
+        if (hasInProgress) continue
+
+        const totalStrokes = completedRounds.reduce((a, b) => a + b, 0)
         const totalScore = parseFloat(c.score ?? 'x')
         if (!isNaN(totalScore)) {
-          const impliedPar = Math.round((totalStrokes - totalScore) / 4)
+          const impliedPar = Math.round((totalStrokes - totalScore) / targetCount)
           if (impliedPar >= 69 && impliedPar <= 74) {
             PAR = impliedPar
             break
           }
         }
       }
+      if (PAR !== DEFAULT_PAR) break
     }
 
     // ── Step 3: Full parse with correct PAR ──
