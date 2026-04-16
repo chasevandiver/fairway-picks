@@ -1,7 +1,6 @@
 'use client'
 
 import React, { useState, useEffect, useCallback } from 'react'
-import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import {
   toRelScore, scoreClass, formatMoney, moneyClass,
@@ -9,7 +8,6 @@ import {
 } from '@/lib/scoring'
 import type { GolferScore, PlayerStanding } from '@/lib/types'
 
-// ─── Types ────────────────────────────────────────────────────────────────────
 interface LeagueData {
   leagueName: string
   leagueId: string
@@ -63,7 +61,6 @@ function PlayerCard({
 
   const todayScores = pickedGolfers.map((g: any) => g?.today).filter((t: any) => t != null)
   const todayTotal = todayScores.length > 0 ? todayScores.reduce((s: number, t: number) => s + t, 0) : null
-
   const rank = standing.rank
   const rankIcon = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : `${rank}`
   const rankStyle = rank === 1
@@ -173,14 +170,20 @@ function PlayerCard({
   )
 }
 
-// ─── Guest View (unauthenticated) ─────────────────────────────────────────────
-function GuestView({ leagueId }: { leagueId: string }) {
+// ─── Page ─────────────────────────────────────────────────────────────────────
+// This page NEVER redirects — the URL must stay stable so iPhone "Add to Home
+// Screen" bookmarks keep working. Signed-in members get an "Open Full App"
+// button; everyone else sees live scores and can join from here.
+export default function LeaguePage({ params }: { params: { id: string } }) {
+  const supabase = createClient()
+
   const [data, setData] = useState<LeagueData | null>(null)
   const [liveData, setLiveData] = useState<GolferScore[]>([])
   const [loading, setLoading] = useState(true)
   const [scoresLoading, setScoresLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
+  // After auth check: is this a signed-in member who can open the full app?
+  const [isMember, setIsMember] = useState(false)
 
   const fetchScores = useCallback(async (hasTournament: boolean) => {
     if (!hasTournament) return
@@ -193,17 +196,28 @@ function GuestView({ leagueId }: { leagueId: string }) {
     setScoresLoading(false)
   }, [])
 
+  // Load league data and check membership in parallel
   useEffect(() => {
-    fetch(`/api/league-data?league_id=${leagueId}`)
-      .then(r => r.json())
-      .then(d => {
-        setData(d)
-        return fetchScores(!!d.activeTournament)
-      })
-      .catch(e => setError(e.message))
-      .finally(() => setLoading(false))
-  }, [leagueId, fetchScores])
+    const leagueReq = fetch(`/api/league-data?league_id=${params.id}`).then(r => r.json())
+    const authReq = supabase.auth.getUser().then(async ({ data: { user } }) => {
+      if (!user) return false
+      const { data: member } = await supabase
+        .from('league_members')
+        .select('league_id')
+        .eq('league_id', params.id)
+        .eq('user_id', user.id)
+        .maybeSingle()
+      return !!member
+    })
 
+    Promise.all([leagueReq, authReq]).then(([d, member]) => {
+      setData(d)
+      setIsMember(member)
+      fetchScores(!!d.activeTournament)
+    }).finally(() => setLoading(false))
+  }, [params.id])
+
+  // Auto-refresh scores every 2 minutes when a tournament is active
   useEffect(() => {
     if (!data?.activeTournament) return
     const iv = setInterval(() => fetchScores(true), 120_000)
@@ -216,6 +230,8 @@ function GuestView({ leagueId }: { leagueId: string }) {
   const seasonSorted = [...(data?.seasonMoney ?? [])].sort((a, b) => b.total - a.total)
   const leagueName = data?.leagueName ?? 'League'
   const inviteCode = data?.inviteCode ?? ''
+  const par = liveData[0]?.par ?? 72
+  const tournament = data?.activeTournament ?? null
 
   const history: any[] = []
   if (data?.results?.length) {
@@ -238,22 +254,10 @@ function GuestView({ leagueId }: { leagueId: string }) {
     )
   }
 
-  if (error || !data) {
-    return (
-      <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, background: 'var(--bg)', padding: 24 }}>
-        <div style={{ fontSize: 48 }}>⛳</div>
-        <div style={{ fontFamily: 'DM Serif Display', fontSize: 24 }}>League not found</div>
-        <a href="/" style={{ color: 'var(--green)', fontSize: 13, textDecoration: 'underline' }}>← Back to Fore Picks</a>
-      </div>
-    )
-  }
-
-  const tournament = data.activeTournament
-  const par = liveData[0]?.par ?? 72
-
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bg)', color: 'var(--text)' }}>
-      {/* Header */}
+
+      {/* ── Header ── */}
       <div style={{
         background: 'var(--surface)', borderBottom: '1px solid var(--border)',
         padding: '12px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12,
@@ -267,26 +271,39 @@ function GuestView({ leagueId }: { leagueId: string }) {
           <span style={{ color: 'var(--border)', fontSize: 16 }}>|</span>
           <span style={{ fontWeight: 600, fontSize: 15 }}>{leagueName}</span>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>Guest View</span>
-          {inviteCode && (
-            <a
-              href={`/join/${inviteCode}`}
-              style={{
-                background: 'var(--green)', color: '#000', fontWeight: 700, fontSize: 12,
-                padding: '7px 14px', borderRadius: 8, textDecoration: 'none',
-                fontFamily: 'DM Mono', letterSpacing: '0.05em',
-              }}
-            >
-              Join League →
-            </a>
-          )}
-        </div>
+
+        {/* Member: show "Open Full App" — Guest: show "Join League" */}
+        {isMember ? (
+          <a
+            href="/"
+            onClick={() => {
+              try { localStorage.setItem('activeLeagueId', params.id) } catch {}
+            }}
+            style={{
+              background: 'var(--green)', color: '#000', fontWeight: 700, fontSize: 12,
+              padding: '7px 14px', borderRadius: 8, textDecoration: 'none',
+              fontFamily: 'DM Mono', letterSpacing: '0.05em',
+            }}
+          >
+            Open Full App →
+          </a>
+        ) : inviteCode ? (
+          <a
+            href={`/join/${inviteCode}`}
+            style={{
+              background: 'var(--green)', color: '#000', fontWeight: 700, fontSize: 12,
+              padding: '7px 14px', borderRadius: 8, textDecoration: 'none',
+              fontFamily: 'DM Mono', letterSpacing: '0.05em',
+            }}
+          >
+            Join League →
+          </a>
+        ) : null}
       </div>
 
       <div style={{ maxWidth: 780, margin: '0 auto', padding: '24px 16px' }}>
 
-        {/* No active tournament */}
+        {/* ── No active tournament ── */}
         {!tournament && (
           <div className="card" style={{ textAlign: 'center', padding: 40 }}>
             <div style={{ fontSize: 48, marginBottom: 16 }}>⛳</div>
@@ -295,7 +312,7 @@ function GuestView({ leagueId }: { leagueId: string }) {
           </div>
         )}
 
-        {/* Live leaderboard */}
+        {/* ── Live leaderboard ── */}
         {tournament && (
           <div style={{ marginBottom: 32 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
@@ -330,7 +347,7 @@ function GuestView({ leagueId }: { leagueId: string }) {
           </div>
         )}
 
-        {/* Season standings */}
+        {/* ── Season standings ── */}
         {seasonSorted.length > 0 && (
           <div className="card" style={{ marginBottom: 24 }}>
             <div className="card-header"><div className="card-title">Season Standings</div></div>
@@ -350,7 +367,7 @@ function GuestView({ leagueId }: { leagueId: string }) {
           </div>
         )}
 
-        {/* History */}
+        {/* ── History ── */}
         {history.length > 0 && (
           <div className="card" style={{ marginBottom: 24 }}>
             <div className="card-header"><div className="card-title">Tournament History</div></div>
@@ -386,72 +403,26 @@ function GuestView({ leagueId }: { leagueId: string }) {
           </div>
         )}
 
-        {/* Footer CTA */}
-        <div style={{ textAlign: 'center', padding: '24px 0', borderTop: '1px solid var(--border)' }}>
-          <div style={{ fontFamily: 'DM Serif Display', fontSize: 18, marginBottom: 8 }}>Want to play?</div>
-          <div style={{ color: 'var(--text-dim)', fontSize: 13, marginBottom: 16 }}>
-            Join <strong style={{ color: 'var(--text)' }}>{leagueName}</strong> or start your own league.
-          </div>
-          <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
-            {inviteCode && (
-              <a href={`/join/${inviteCode}`} className="btn btn-primary" style={{ textDecoration: 'none', fontSize: 14 }}>
-                Join this League
+        {/* ── Footer CTA (guests only) ── */}
+        {!isMember && (
+          <div style={{ textAlign: 'center', padding: '24px 0', borderTop: '1px solid var(--border)' }}>
+            <div style={{ fontFamily: 'DM Serif Display', fontSize: 18, marginBottom: 8 }}>Want to play?</div>
+            <div style={{ color: 'var(--text-dim)', fontSize: 13, marginBottom: 16 }}>
+              Join <strong style={{ color: 'var(--text)' }}>{leagueName}</strong> or start your own league.
+            </div>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
+              {inviteCode && (
+                <a href={`/join/${inviteCode}`} className="btn btn-primary" style={{ textDecoration: 'none', fontSize: 14 }}>
+                  Join this League
+                </a>
+              )}
+              <a href="/" className="btn btn-outline" style={{ textDecoration: 'none', fontSize: 14 }}>
+                Create a League
               </a>
-            )}
-            <a href="/" className="btn btn-outline" style={{ textDecoration: 'none', fontSize: 14 }}>
-              Create a League
-            </a>
+            </div>
           </div>
-        </div>
+        )}
       </div>
-    </div>
-  )
-}
-
-// ─── Page ─────────────────────────────────────────────────────────────────────
-// Authenticated members get redirected to the main app with this league active.
-// Unauthenticated visitors see the guest/public view — no sign-in required.
-export default function LeaguePage({ params }: { params: { id: string } }) {
-  const router = useRouter()
-  const supabase = createClient()
-  const [authChecked, setAuthChecked] = useState(false)
-  const [showGuest, setShowGuest] = useState(false)
-
-  useEffect(() => {
-    async function check() {
-      const { data: { user } } = await supabase.auth.getUser()
-
-      if (!user) {
-        // Not signed in — show guest view instead of redirecting to /auth
-        setShowGuest(true)
-        setAuthChecked(true)
-        return
-      }
-
-      const { data: member } = await supabase
-        .from('league_members')
-        .select('league_id')
-        .eq('league_id', params.id)
-        .eq('user_id', user.id)
-        .maybeSingle()
-
-      if (!member) {
-        router.push(`/join/${params.id}`)
-        return
-      }
-
-      localStorage.setItem('activeLeagueId', params.id)
-      router.push('/')
-    }
-    check()
-  }, [params.id])
-
-  if (showGuest) return <GuestView leagueId={params.id} />
-
-  return (
-    <div className="loading-screen">
-      <div className="spin" style={{ fontSize: 32 }}>⛳</div>
-      Loading league…
     </div>
   )
 }
