@@ -1792,8 +1792,26 @@ function AdminTab({
                 {copiedField === 'id' ? '✓ Copied!' : '📋 Copy ID'}
               </button>
             </div>
+            <div className="divider" />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontFamily: 'DM Mono', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-dim)', marginBottom: 4 }}>Public View Link</div>
+                <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: 'var(--green)', wordBreak: 'break-all' }}>
+                  {typeof window !== 'undefined' ? `${window.location.origin}/league/${leagueId}` : `/league/${leagueId}`}
+                </div>
+              </div>
+              <button
+                className="btn btn-outline btn-sm"
+                onClick={() => copyToClipboard(
+                  typeof window !== 'undefined' ? `${window.location.origin}/league/${leagueId}` : `/league/${leagueId}`,
+                  'publink'
+                )}
+              >
+                {copiedField === 'publink' ? '✓ Copied!' : '🔗 Copy Link'}
+              </button>
+            </div>
             <div style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 4 }}>
-              Share the <strong style={{ color: 'var(--text)' }}>Invite Code</strong> with players. They can enter it at the Join page to join your league.
+              Share the <strong style={{ color: 'var(--text)' }}>Public View Link</strong> so anyone can view the league without signing in. Share the <strong style={{ color: 'var(--text)' }}>Invite Code</strong> with players who want to join.
             </div>
           </div>
         </div>
