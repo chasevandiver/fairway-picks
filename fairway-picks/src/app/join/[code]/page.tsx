@@ -22,19 +22,20 @@ export default function JoinPage({ params }: { params: { code: string } }) {
   const [errorMsg, setErrorMsg] = useState('')
 
   useEffect(() => {
+    const ac = new AbortController()
+
     async function load() {
-      const authResult = await Promise.race([
-        supabase.auth.getSession(),
-        new Promise<{ data: { session: null } }>(resolve =>
-          setTimeout(() => resolve({ data: { session: null } }), 5000)
-        ),
-      ])
+      // Every step races against a timeout — any hanging network call exits cleanly.
+      const timed = <T,>(ms: number, fallback: T, p: Promise<T>): Promise<T> =>
+        Promise.race([p, new Promise<T>(r => setTimeout(() => r(fallback), ms))])
+
+      const authResult = await timed(5000, { data: { session: null } } as any, supabase.auth.getSession())
       let user = authResult.data.session?.user ?? null
 
       const url = user
         ? `/api/join-preview?invite_code=${encodeURIComponent(code)}&user_id=${user.id}`
         : `/api/join-preview?invite_code=${encodeURIComponent(code)}`
-      const res = await fetch(url).then(r => r.json()).catch(() => null)
+      const res = await timed(8000, null, fetch(url, { signal: ac.signal }).then(r => r.json()).catch(() => null))
 
       if (!res || !res.league) { setStatus('not_found'); return }
 
@@ -45,15 +46,15 @@ export default function JoinPage({ params }: { params: { code: string } }) {
         return
       }
 
-      // No session yet — sign in anonymously and auto-join (no email needed)
+      // No session — sign in anonymously (no email needed) and auto-join
       if (!user) {
-        const { data: anonData, error: anonError } = await supabase.auth.signInAnonymously()
-        if (anonError || !anonData.user) {
+        const anonResult = await timed(8000, { data: { user: null }, error: new Error('timeout') } as any, supabase.auth.signInAnonymously())
+        if (anonResult.error || !anonResult.data.user) {
           setStatus('error')
           setErrorMsg('Could not start session. Please refresh.')
           return
         }
-        user = anonData.user
+        user = anonResult.data.user
         await supabase.from('league_members').insert({ league_id: res.league.id, user_id: user.id })
         localStorage.setItem('activeLeagueId', res.league.id)
         router.push('/')
@@ -65,6 +66,7 @@ export default function JoinPage({ params }: { params: { code: string } }) {
       setStatus('preview')
     }
     load().catch(() => { setStatus('error'); setErrorMsg('Failed to load league. Please refresh.') })
+    return () => ac.abort()
   }, [code])
 
   async function handleJoin() {
