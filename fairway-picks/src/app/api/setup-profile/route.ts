@@ -3,7 +3,6 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
 const FOUNDING_LEAGUE_ID = '00000000-0000-0000-0000-000000000001'
-const ADMIN_NAMES = ['Eric', 'Chase']
 
 export async function POST(request: NextRequest) {
   const { display_name, claimed_name } = await request.json()
@@ -40,7 +39,7 @@ export async function POST(request: NextRequest) {
     id: user.id,
     display_name,
     email: user.email ?? '',
-    is_admin: ADMIN_NAMES.includes(display_name),
+    is_admin: true,
   }, { onConflict: 'id' })
 
   if (profileErr) {

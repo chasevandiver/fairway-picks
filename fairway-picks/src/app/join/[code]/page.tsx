@@ -23,16 +23,13 @@ export default function JoinPage({ params }: { params: { code: string } }) {
 
   useEffect(() => {
     async function load() {
-      // Auth check — race against timeout since getSession() can hang on
-      // token refresh. The DB lookups go through a server-side API route
-      // (service role) to avoid browser→Supabase REST call hangs.
       const authResult = await Promise.race([
         supabase.auth.getSession(),
         new Promise<{ data: { session: null } }>(resolve =>
           setTimeout(() => resolve({ data: { session: null } }), 5000)
         ),
       ])
-      const user = authResult.data.session?.user ?? null
+      let user = authResult.data.session?.user ?? null
 
       const url = user
         ? `/api/join-preview?invite_code=${encodeURIComponent(code)}&user_id=${user.id}`
@@ -41,16 +38,31 @@ export default function JoinPage({ params }: { params: { code: string } }) {
 
       if (!res || !res.league) { setStatus('not_found'); return }
 
-      setLeague(res.league)
+      // Already a member — go straight to the app
       if (res.alreadyMember) {
-        setStatus('already_member')
-      } else if (!user) {
-        // Not logged in — redirect to auth, then back here
-        sessionStorage.setItem('pending_invite', code)
-        router.push('/auth')
-      } else {
-        setStatus('preview')
+        localStorage.setItem('activeLeagueId', res.league.id)
+        router.push('/')
+        return
       }
+
+      // No session yet — sign in anonymously and auto-join (no email needed)
+      if (!user) {
+        const { data: anonData, error: anonError } = await supabase.auth.signInAnonymously()
+        if (anonError || !anonData.user) {
+          setStatus('error')
+          setErrorMsg('Could not start session. Please refresh.')
+          return
+        }
+        user = anonData.user
+        await supabase.from('league_members').insert({ league_id: res.league.id, user_id: user.id })
+        localStorage.setItem('activeLeagueId', res.league.id)
+        router.push('/')
+        return
+      }
+
+      // Authenticated but not yet a member — show the join button
+      setLeague(res.league)
+      setStatus('preview')
     }
     load().catch(() => { setStatus('error'); setErrorMsg('Failed to load league. Please refresh.') })
   }, [code])
@@ -64,12 +76,12 @@ export default function JoinPage({ params }: { params: { code: string } }) {
         setTimeout(() => resolve({ data: { session: null } }), 5000)
       ),
     ])
-    const user = authResult.data.session?.user ?? null
+    let user = authResult.data.session?.user ?? null
     if (!user) {
-      sessionStorage.setItem('pending_invite', code)
-      router.push('/auth')
-      return
+      const { data: anonData } = await supabase.auth.signInAnonymously()
+      user = anonData.user ?? null
     }
+    if (!user) { setStatus('error'); setErrorMsg('Could not start session. Please refresh.'); return }
 
     const { error } = await supabase.from('league_members').insert({
       league_id: league.id,
