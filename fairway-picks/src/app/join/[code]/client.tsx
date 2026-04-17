@@ -37,6 +37,7 @@ export default function JoinClient({ code, league }: { code: string; league: Lea
   }
 
   async function handleJoin() {
+    if (!league) return
     setStatus('joining')
 
     // Get existing session or create anonymous one — each step races a timeout
