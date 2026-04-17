@@ -23,62 +23,53 @@ export default function JoinPage({ params }: { params: { code: string } }) {
 
   useEffect(() => {
     async function load() {
-      // getSession() reads from local storage and is fast; getUser() always
-      // hits the network and can hang. Use getSession() here — the db queries
-      // below will fail on their own if the token is actually invalid.
-      const { data: { session } } = await supabase.auth.getSession()
-      const user = session?.user ?? null
+      // Auth check — race against timeout since getSession() can hang on
+      // token refresh. The DB lookups go through a server-side API route
+      // (service role) to avoid browser→Supabase REST call hangs.
+      const authResult = await Promise.race([
+        supabase.auth.getSession(),
+        new Promise<{ data: { session: null } }>(resolve =>
+          setTimeout(() => resolve({ data: { session: null } }), 5000)
+        ),
+      ])
+      const user = authResult.data.session?.user ?? null
 
-      if (!user) {
-        // Save the invite code and redirect to auth
+      const url = user
+        ? `/api/join-preview?invite_code=${encodeURIComponent(code)}&user_id=${user.id}`
+        : `/api/join-preview?invite_code=${encodeURIComponent(code)}`
+      const res = await fetch(url).then(r => r.json()).catch(() => null)
+
+      if (!res || !res.league) { setStatus('not_found'); return }
+
+      setLeague(res.league)
+      if (res.alreadyMember) {
+        setStatus('already_member')
+      } else if (!user) {
+        // Not logged in — redirect to auth, then back here
         sessionStorage.setItem('pending_invite', code)
         router.push('/auth')
-        return
+      } else {
+        setStatus('preview')
       }
-
-      // Look up the league by invite code
-      const { data: leagueData } = await supabase
-        .from('leagues')
-        .select('id, name, invite_code, rules')
-        .eq('invite_code', code)
-        .maybeSingle()
-
-      if (!leagueData) {
-        setStatus('not_found')
-        return
-      }
-
-      // Count members
-      const { count } = await supabase
-        .from('league_members')
-        .select('*', { count: 'exact', head: true })
-        .eq('league_id', leagueData.id)
-
-      // Check if already a member
-      const { data: existing } = await supabase
-        .from('league_members')
-        .select('league_id')
-        .eq('league_id', leagueData.id)
-        .eq('user_id', user.id)
-        .maybeSingle()
-
-      if (existing) {
-        setLeague({ ...leagueData, memberCount: count ?? 0 })
-        setStatus('already_member')
-        return
-      }
-
-      setLeague({ ...leagueData, memberCount: count ?? 0 })
-      setStatus('preview')
     }
-    load()
+    load().catch(() => { setStatus('error'); setErrorMsg('Failed to load league. Please refresh.') })
   }, [code])
 
   async function handleJoin() {
+    if (!league) return
     setStatus('joining')
-    const { data: { session } } = await supabase.auth.getSession()
-    const user = session?.user ?? null
-    if (!user || !league) { setStatus('error'); setErrorMsg('Session expired. Please refresh.'); return }
+    const authResult = await Promise.race([
+      supabase.auth.getSession(),
+      new Promise<{ data: { session: null } }>(resolve =>
+        setTimeout(() => resolve({ data: { session: null } }), 5000)
+      ),
+    ])
+    const user = authResult.data.session?.user ?? null
+    if (!user) {
+      sessionStorage.setItem('pending_invite', code)
+      router.push('/auth')
+      return
+    }
 
     const { error } = await supabase.from('league_members').insert({
       league_id: league.id,
