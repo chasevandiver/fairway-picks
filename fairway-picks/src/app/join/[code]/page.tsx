@@ -23,8 +23,12 @@ export default function JoinPage({ params }: { params: { code: string } }) {
 
   useEffect(() => {
     async function load() {
-      // Ensure user is authenticated
-      const { data: { user } } = await supabase.auth.getUser()
+      // getSession() reads from local storage and is fast; getUser() always
+      // hits the network and can hang. Use getSession() here — the db queries
+      // below will fail on their own if the token is actually invalid.
+      const { data: { session } } = await supabase.auth.getSession()
+      const user = session?.user ?? null
+
       if (!user) {
         // Save the invite code and redirect to auth
         sessionStorage.setItem('pending_invite', code)
@@ -72,7 +76,8 @@ export default function JoinPage({ params }: { params: { code: string } }) {
 
   async function handleJoin() {
     setStatus('joining')
-    const { data: { user } } = await supabase.auth.getUser()
+    const { data: { session } } = await supabase.auth.getSession()
+    const user = session?.user ?? null
     if (!user || !league) { setStatus('error'); setErrorMsg('Session expired. Please refresh.'); return }
 
     const { error } = await supabase.from('league_members').insert({
