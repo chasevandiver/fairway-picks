@@ -23,21 +23,11 @@ export default function JoinPage({ params }: { params: { code: string } }) {
 
   useEffect(() => {
     async function load() {
-      // supabase-js v2 getUser() always hits the network and can hang
-      // indefinitely — race it against a 5s timeout so the page never
-      // stays stuck on the loading screen.
-      let user: any = null
-      try {
-        const result = await Promise.race([
-          supabase.auth.getUser(),
-          new Promise<never>((_, reject) => setTimeout(() => reject(new Error('auth_timeout')), 5000)),
-        ])
-        user = result.data.user
-      } catch {
-        setStatus('error')
-        setErrorMsg('Authentication timed out. Please refresh and try again.')
-        return
-      }
+      // getSession() reads from local storage and is fast; getUser() always
+      // hits the network and can hang. Use getSession() here — the db queries
+      // below will fail on their own if the token is actually invalid.
+      const { data: { session } } = await supabase.auth.getSession()
+      const user = session?.user ?? null
 
       if (!user) {
         // Save the invite code and redirect to auth
@@ -86,16 +76,8 @@ export default function JoinPage({ params }: { params: { code: string } }) {
 
   async function handleJoin() {
     setStatus('joining')
-    let user: any = null
-    try {
-      const result = await Promise.race([
-        supabase.auth.getUser(),
-        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('auth_timeout')), 5000)),
-      ])
-      user = result.data.user
-    } catch {
-      setStatus('error'); setErrorMsg('Session expired. Please refresh.'); return
-    }
+    const { data: { session } } = await supabase.auth.getSession()
+    const user = session?.user ?? null
     if (!user || !league) { setStatus('error'); setErrorMsg('Session expired. Please refresh.'); return }
 
     const { error } = await supabase.from('league_members').insert({
