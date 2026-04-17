@@ -4210,7 +4210,7 @@ export default function App() {
 
   if (!bootstrapped) return <div className="loading-screen"><div className="spin" style={{ fontSize: 32 }}>⛳</div>Loading…</div>
   if (!user && !guestMode) return <LandingPage />
-  if (!userProfile && !guestMode) return (
+  if (user && !userProfile && !guestMode) return (
     <SetupProfileScreen
       supabase={supabase}
       userId={user.id}
