@@ -3779,6 +3779,24 @@ export default function App() {
 
   // ── Auth state management ──
   useEffect(() => {
+    // Read saved league synchronously so guest mode can be set without an
+    // extra async fetch, eliminating the race against onAuthStateChange.
+    const savedLeagueId = localStorage.getItem('activeLeagueId')
+    if (savedLeagueId) {
+      setLeagueId(savedLeagueId)
+      // Fetch league metadata in the background (non-blocking) to populate
+      // leagueName/rules before the skeleton screen appears.
+      fetch(`/api/league-data?league_id=${savedLeagueId}`)
+        .then(r => r.json())
+        .then(res => {
+          if (res && !res.error) {
+            if (res.leagueName) setLeagueName(res.leagueName)
+            if (res.leagueRules) setLeagueRules(mergeRules(res.leagueRules))
+            if (res.inviteCode) setInviteCode(res.inviteCode)
+          }
+        }).catch(() => {})
+    }
+
     // Race getSession() against a 4s timeout — supabase-js v2 sometimes does a
     // server-side token validation network request inside getSession(), which can
     // hang indefinitely if the server is slow or the token is invalid.
@@ -3794,9 +3812,8 @@ export default function App() {
         // Use server-side init route — bypasses RLS, no auth round-trip.
         // Pass the stored league preference so returning users land on the
         // league they were last using rather than always falling back to EAGLE1.
-        const storedLeague = localStorage.getItem('activeLeagueId')
-        const initUrl = storedLeague
-          ? `/api/init-user?user_id=${u.id}&preferred_league_id=${storedLeague}`
+        const initUrl = savedLeagueId
+          ? `/api/init-user?user_id=${u.id}&preferred_league_id=${savedLeagueId}`
           : `/api/init-user?user_id=${u.id}`
         const res = await fetch(initUrl).then(r => r.json()).catch(() => null)
         const { profile, membership } = res ?? {}
@@ -3826,22 +3843,13 @@ export default function App() {
         }
         // If no profile: bootstrapped fires below and SetupProfileScreen is shown
       } else {
-        // No session — check localStorage for a saved league and load it for guest viewing
-        const savedLeagueId = localStorage.getItem('activeLeagueId')
-        if (savedLeagueId) {
-          const res = await fetch(`/api/league-data?league_id=${savedLeagueId}`).then(r => r.json()).catch(() => null)
-          if (res && !res.error) {
-            setLeagueId(savedLeagueId)
-            if (res.leagueName) setLeagueName(res.leagueName)
-            if (res.leagueRules) setLeagueRules(mergeRules(res.leagueRules))
-            if (res.inviteCode) setInviteCode(res.inviteCode)
-            setGuestMode(true)
-          }
-        }
+        // No session — enable guest mode if there's a saved league (already set above)
+        if (savedLeagueId) setGuestMode(true)
       }
       setBootstrapped(true)
     }).catch(() => {
       // Timeout or error — show whatever state we have rather than spinning forever
+      if (savedLeagueId) setGuestMode(true)
       setBootstrapped(true)
     })
 
@@ -3853,6 +3861,7 @@ export default function App() {
       if (session?.user) {
         const u = { id: session.user.id, email: session.user.email ?? '' }
         setUser(u)
+        setGuestMode(false)
         // Use server-side init route — bypasses RLS.
         // Pass stored league preference so the user stays on the right league.
         const storedLeague2 = localStorage.getItem('activeLeagueId')
@@ -3895,6 +3904,8 @@ export default function App() {
         setUser(null)
         setUserProfile(null)
         setCurrentPlayer(null)
+        // Enable guest mode immediately so bootstrapped=true doesn't briefly show landing page
+        if (savedLeagueId) setGuestMode(true)
         setBootstrapped(true)
       }
     })
