@@ -6,12 +6,28 @@ import { useRouter } from 'next/navigation'
 export default function JoinLanding() {
   const router = useRouter()
   const [code, setCode] = useState('')
+  const [status, setStatus] = useState<'idle' | 'loading' | 'error'>('idle')
+  const [errorMsg, setErrorMsg] = useState('')
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     const trimmed = code.trim().toUpperCase()
-    if (trimmed.length >= 4) {
-      router.push(`/join/${trimmed}`)
+    if (trimmed.length < 4) return
+
+    setStatus('loading')
+    try {
+      const res = await fetch(`/api/league-data?invite_code=${trimmed}`)
+      const data = await res.json()
+      if (!res.ok || data.error || !data.leagueId) {
+        setStatus('error')
+        setErrorMsg(`"${trimmed}" doesn't match any league. Check with your commissioner.`)
+        return
+      }
+      localStorage.setItem('activeLeagueId', data.leagueId)
+      router.push('/')
+    } catch {
+      setStatus('error')
+      setErrorMsg('Something went wrong. Please try again.')
     }
   }
 
@@ -25,12 +41,17 @@ export default function JoinLanding() {
         <p style={{ textAlign: 'center', color: 'var(--text-dim)', fontSize: 13, marginBottom: 24 }}>
           Enter the invite code from your league commissioner.
         </p>
+        {status === 'error' && (
+          <p style={{ color: 'var(--red)', textAlign: 'center', fontSize: 13, marginBottom: 12 }}>
+            {errorMsg}
+          </p>
+        )}
         <form onSubmit={handleSubmit}>
           <div style={{ marginBottom: 16 }}>
             <input
               type="text"
               value={code}
-              onChange={(e) => setCode(e.target.value.toUpperCase())}
+              onChange={(e) => { setCode(e.target.value.toUpperCase()); if (status === 'error') setStatus('idle') }}
               placeholder="EAGLE7"
               maxLength={8}
               style={{
@@ -51,8 +72,13 @@ export default function JoinLanding() {
               autoFocus
             />
           </div>
-          <button type="submit" className="btn btn-primary" style={{ width: '100%' }} disabled={code.trim().length < 4}>
-            Find My League
+          <button
+            type="submit"
+            className="btn btn-primary"
+            style={{ width: '100%' }}
+            disabled={code.trim().length < 4 || status === 'loading'}
+          >
+            {status === 'loading' ? 'Finding league…' : 'View My League'}
           </button>
         </form>
         <p style={{ textAlign: 'center', marginTop: 20 }}>

@@ -3732,6 +3732,7 @@ export default function App() {
   const [leagueRules, setLeagueRules] = useState<LeagueRules>(DEFAULT_RULES)
   const [inviteCode, setInviteCode] = useState<string>('')
   const [commissionerId, setCommissionerId] = useState<string | null>(null)
+  const [guestMode, setGuestMode] = useState(false)
 
   const isAdmin = (userProfile?.is_admin ?? ['Eric', 'Chase'].includes(currentPlayer ?? '')) ||
     (commissionerId !== null && commissionerId === user?.id)
@@ -3824,6 +3825,19 @@ export default function App() {
           // (rather than routing to /create, which breaks for existing users)
         }
         // If no profile: bootstrapped fires below and SetupProfileScreen is shown
+      } else {
+        // No session — check localStorage for a saved league and load it for guest viewing
+        const savedLeagueId = localStorage.getItem('activeLeagueId')
+        if (savedLeagueId) {
+          const res = await fetch(`/api/league-data?league_id=${savedLeagueId}`).then(r => r.json()).catch(() => null)
+          if (res && !res.error) {
+            setLeagueId(savedLeagueId)
+            if (res.leagueName) setLeagueName(res.leagueName)
+            if (res.leagueRules) setLeagueRules(mergeRules(res.leagueRules))
+            if (res.inviteCode) setInviteCode(res.inviteCode)
+            setGuestMode(true)
+          }
+        }
       }
       setBootstrapped(true)
     }).catch(() => {
@@ -3947,8 +3961,8 @@ export default function App() {
   }, [leagueId])
 
   useEffect(() => {
-    if (currentPlayer) loadData()
-  }, [currentPlayer, loadData])
+    if (currentPlayer || guestMode) loadData()
+  }, [currentPlayer, guestMode, loadData])
 
   // ── Live score polling ──
   const fetchScores = useCallback(async () => {
@@ -4195,8 +4209,8 @@ export default function App() {
   }
 
   if (!bootstrapped) return <div className="loading-screen"><div className="spin" style={{ fontSize: 32 }}>⛳</div>Loading…</div>
-  if (!user) return <LandingPage />
-  if (!userProfile) return (
+  if (!user && !guestMode) return <LandingPage />
+  if (user && !userProfile && !guestMode) return (
     <SetupProfileScreen
       supabase={supabase}
       userId={user.id}
