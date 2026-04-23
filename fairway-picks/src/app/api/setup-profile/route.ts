@@ -34,12 +34,17 @@ export async function POST(request: NextRequest) {
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   )
 
+  // is_admin is a super-admin flag, not a per-league commissioner flag.
+  // Only the legacy founding-league admins (Eric, Chase) get it on signup;
+  // commissioner rights for custom leagues are tracked via leagues.commissioner_id.
+  const isLegacyAdmin = !!claimed_name && ['Eric', 'Chase'].includes(claimed_name)
+
   // Upsert profile — works whether or not the row already exists
   const { error: profileErr } = await db.from('profiles').upsert({
     id: user.id,
     display_name,
     email: user.email ?? '',
-    is_admin: true,
+    is_admin: isLegacyAdmin,
   }, { onConflict: 'id' })
 
   if (profileErr) {

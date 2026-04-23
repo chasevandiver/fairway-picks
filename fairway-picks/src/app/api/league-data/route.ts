@@ -28,9 +28,22 @@ export async function GET(request: NextRequest) {
     leagueId = league.id
   }
 
-  if (!leagueId) leagueId = '00000000-0000-0000-0000-000000000001'
+  // No silent fallback to the founding league. Callers must specify either a
+  // league_id or an invite_code; otherwise this would leak the original
+  // league's data to any unscoped request.
+  if (!leagueId) {
+    return NextResponse.json(
+      { error: 'league_id or invite_code required' },
+      { status: 400 }
+    )
+  }
 
-  // Fetch everything in parallel — including invite_code + name so the client makes only one API call
+  // Fetch everything in parallel — including invite_code + name so the client makes only one API call.
+  // season_money is a legacy table that only has rows for the original league;
+  // custom leagues derive their standings from `results` on the client and
+  // must never see another league's season totals.
+  const FOUNDING_LEAGUE_ID = '00000000-0000-0000-0000-000000000001'
+  const isFounding = leagueId === FOUNDING_LEAGUE_ID
   const [
     { data: tournaments },
     { data: seasonMoney },
@@ -38,7 +51,9 @@ export async function GET(request: NextRequest) {
     { data: leagueRow },
   ] = await Promise.all([
     db.from('tournaments').select('id').eq('league_id', leagueId).in('status', ['completed', 'finalized']),
-    db.from('season_money').select('*'),
+    isFounding
+      ? db.from('season_money').select('*')
+      : Promise.resolve({ data: [] as any[] }),
     db.from('tournaments').select('*').eq('league_id', leagueId).eq('status', 'active').maybeSingle(),
     db.from('leagues').select('invite_code, name, rules').eq('id', leagueId).maybeSingle(),
   ])
