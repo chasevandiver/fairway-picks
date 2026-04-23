@@ -3367,6 +3367,10 @@ export default function App() {
   // Set synchronously before the auth effect's async callbacks run, so
   // whichever auth path fires first can consume it exactly once.
   const pendingNewLeagueRef = useRef<{ id: string; name: string } | null>(null)
+  // Dedupes /api/init-user across duplicate auth events. supabase-js refires
+  // SIGNED_IN on tab focus, INITIAL_SESSION at mount, etc. — without this
+  // guard init-user was being hit several times per second per session.
+  const initedUserIdRef = useRef<string | null>(null)
 
   // ── Read new-league URL params from /create navigation (runs before auth callbacks) ──
   useEffect(() => {
@@ -3412,6 +3416,14 @@ export default function App() {
       if (session?.user) {
         const u = { id: session.user.id, email: session.user.email ?? '' }
         setUser(u)
+        // Skip init-user if we've already loaded this user in this session —
+        // prevents duplicate fetches when getSession() + INITIAL_SESSION /
+        // SIGNED_IN / tab-focus events all fire for the same user.
+        if (initedUserIdRef.current === u.id) {
+          setBootstrapped(true)
+          return
+        }
+        initedUserIdRef.current = u.id
         // Use server-side init route — bypasses RLS, no auth round-trip.
         // Pass the stored league preference so returning users land on the
         // league they were last using rather than always falling back to EAGLE1.
@@ -3474,10 +3486,22 @@ export default function App() {
       // TOKEN_REFRESHED fires on tab focus, scroll, and every token expiry.
       // The user and profile haven't changed — skip to avoid flashing SetupProfileScreen.
       if (event === 'TOKEN_REFRESHED') return
+      // INITIAL_SESSION fires right after subscribe with the same session the
+      // getSession() branch already handled. Skipping it prevents a duplicate
+      // init-user round trip for every page load.
+      if (event === 'INITIAL_SESSION') return
 
       if (session?.user) {
         const u = { id: session.user.id, email: session.user.email ?? '' }
         setUser(u)
+        // Dedupe: if this user was already inited in this tab, skip the fetch.
+        // Without this, SIGNED_IN fires again on tab focus / window visibility
+        // and we'd re-hit /api/init-user every time.
+        if (initedUserIdRef.current === u.id) {
+          setBootstrapped(true)
+          return
+        }
+        initedUserIdRef.current = u.id
         // Use server-side init route — bypasses RLS.
         // Pass stored league preference so the user stays on the right league.
         const storedLeague2 = localStorage.getItem('activeLeagueId')
@@ -3522,6 +3546,7 @@ export default function App() {
         // keep existing state — don't flash SetupProfileScreen
       } else {
         profileLoadedRef.current = false
+        initedUserIdRef.current = null
         setUser(null)
         setUserProfile(null)
         setCurrentPlayer(null)
