@@ -44,13 +44,10 @@ export default function Dashboard() {
         .filter(Boolean)
 
       setLeagues(leagueList)
-
-      // If user has exactly one league, redirect directly to it
-      if (leagueList.length === 1) {
-        router.push(`/league/${leagueList[0].id}`)
-        return
-      }
-
+      // Always show the dashboard so users can manage memberships, create
+      // additional leagues, or switch between them. The previous auto-redirect
+      // for single-league users hid the empty state and made it impossible
+      // to leave the original league once joined.
       setLoading(false)
     }
     load()
