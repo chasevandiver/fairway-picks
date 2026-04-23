@@ -88,11 +88,24 @@ SELECT
   name,
   date,
   status,
-  is_major,
-  golfers_cut
+  is_major
 FROM tournaments
 WHERE league_id = '00000000-0000-0000-0000-000000000001'
 ORDER BY date ASC;
+
+SELECT
+  t.name          AS tournament,
+  r.player_name,
+  r.total_score,
+  r.rank,
+  r.has_winner,
+  r.has_top3,
+  r.money_won,
+  r.golfers_cut
+FROM results r
+JOIN tournaments t ON t.id = r.tournament_id
+WHERE t.league_id = '00000000-0000-0000-0000-000000000001'
+ORDER BY t.date ASC, r.rank ASC;
 
 SELECT
   player_name,
