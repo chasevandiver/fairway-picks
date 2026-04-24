@@ -14,6 +14,7 @@ import type { LeagueRules } from '@/lib/rules'
 import type { Tournament, Pick, GolferScore, PlayerStanding, SeasonMoney } from '@/lib/types'
 import { FOUNDING_LEAGUE_ID } from '@/lib/founding'
 import LandingPage from '@/components/Landing'
+import RosterManager, { type RosterEntry } from '@/components/RosterManager'
 
 const PICKS_PER_PLAYER = 4
 
@@ -1465,7 +1466,7 @@ function DraftTab({
 // ─── Admin Tab ────────────────────────────────────────────────────────────────
 function AdminTab({
   tournament, standings, weekMoney, picks, liveData,
-  leagueId, inviteCode, leagueRules, leaguePlayers,
+  leagueId, inviteCode, leagueRules, leaguePlayers, roster, onRosterChanged,
   onSetupTournament, onFinalize, onClearTournament, onClearPicks, onSwapGolfer, onSaveRules, onSaveInviteCode
 }: {
   tournament: Tournament | null
@@ -1477,6 +1478,8 @@ function AdminTab({
   inviteCode: string
   leagueRules: LeagueRules
   leaguePlayers: string[]
+  roster: RosterEntry[]
+  onRosterChanged: () => void
   onSetupTournament: (data: { name: string; course: string; date: string; draft_order: string[]; is_major: boolean }) => Promise<void>
   onFinalize: () => Promise<void>
   onClearTournament: () => Promise<void>
@@ -1487,6 +1490,10 @@ function AdminTab({
 }) {
   const [selectedEvent, setSelectedEvent] = useState('')
   const [participants, setParticipants] = useState<string[]>(leaguePlayers)
+  // Resync the participants list whenever the roster changes. Without this,
+  // a commissioner who adds or removes a name in the Roster panel wouldn't
+  // see it reflected in the tournament-setup checkboxes.
+  useEffect(() => { setParticipants(leaguePlayers) }, [leaguePlayers])
   const [isMajor, setIsMajor] = useState(false)
   const [saving, setSaving] = useState(false)
   const [finalizing, setFinalizing] = useState(false)
@@ -1599,6 +1606,13 @@ function AdminTab({
       </div>
 
       {msg && <div className="alert alert-green mb-24">{msg}</div>}
+
+      {/* ── Roster Manager ── */}
+      {/* Hidden for the founding league — its 6 legacy names are managed via
+          the player-claim flow and the roster is backfilled from player_aliases. */}
+      {leagueId !== FOUNDING_LEAGUE_ID && (
+        <RosterManager leagueId={leagueId} roster={roster} onChanged={onRosterChanged} />
+      )}
 
       {/* ── League Info ── */}
       <div className="card mb-24">
@@ -3495,7 +3509,7 @@ export default function App() {
   const [seasonMoney, setSeasonMoney] = useState<SeasonMoney[]>([])
   // Per-league roster. For the founding league this is the 6 legacy names.
   // For custom leagues it's the members plus any commissioner-added placeholders.
-  const [roster, setRoster] = useState<Array<{ id: string; player_name: string; user_id: string | null }>>([])
+  const [roster, setRoster] = useState<RosterEntry[]>([])
   const [history, setHistory] = useState<any[]>([])
   const [golferHistory, setGolferHistory] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
@@ -4144,7 +4158,7 @@ export default function App() {
             {tab === 'history' && <HistoryTab history={history} golferHistory={golferHistory} isAdmin={isAdmin} onDeleteTournament={handleDeleteTournament} onEditResult={handleEditResult} onDeleteResult={handleDeleteResult} leaguePlayers={leaguePlayers} />}
             {tab === 'stats'   && <StatsTab history={history} leagueId={leagueId} />}
             {tab === 'recap'   && <SeasonRecapTab history={history} golferHistory={golferHistory} seasonMoney={seasonMoney} leagueId={leagueId} />}
-            {tab === 'admin'   && isAdmin && <AdminTab tournament={tournament} standings={standings} weekMoney={weekMoney} picks={picks} liveData={liveData} leagueId={leagueId} inviteCode={inviteCode} leagueRules={leagueRules} onSetupTournament={handleSetupTournament} onFinalize={handleFinalize} onClearTournament={handleClearTournament} onClearPicks={handleClearPicks} onSwapGolfer={handleSwapGolfer} onSaveRules={handleSaveRules} onSaveInviteCode={handleSaveInviteCode} leaguePlayers={leaguePlayers} />}
+            {tab === 'admin'   && isAdmin && <AdminTab tournament={tournament} standings={standings} weekMoney={weekMoney} picks={picks} liveData={liveData} leagueId={leagueId} inviteCode={inviteCode} leagueRules={leagueRules} onSetupTournament={handleSetupTournament} onFinalize={handleFinalize} onClearTournament={handleClearTournament} onClearPicks={handleClearPicks} onSwapGolfer={handleSwapGolfer} onSaveRules={handleSaveRules} onSaveInviteCode={handleSaveInviteCode} leaguePlayers={leaguePlayers} roster={roster} onRosterChanged={loadData} />}
           </div>
         )}
       </main>
