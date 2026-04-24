@@ -67,6 +67,33 @@ export default function CreateLeague() {
 
     if (memberErr) { setError('League created but failed to add you as a member: ' + memberErr.message); setLoading(false); return }
 
+    // Seed the league_roster with the creator. This is the name that will
+    // appear on draft, standings, stats, and money for this league until the
+    // commissioner edits it from the roster panel. Pull display_name from the
+    // creator's profile; fall back to their email local part if the profile
+    // row is unexpectedly missing.
+    let creatorName: string | null = null
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('display_name')
+      .eq('id', user.id)
+      .maybeSingle()
+    creatorName = profile?.display_name ?? (user.email ? user.email.split('@')[0] : null)
+
+    if (creatorName) {
+      const { error: rosterErr } = await supabase
+        .from('league_roster')
+        .upsert(
+          { league_id: league.id, player_name: creatorName, user_id: user.id, added_by: user.id },
+          { onConflict: 'league_id,player_name' }
+        )
+      if (rosterErr) {
+        // Non-fatal — the league is usable; the commissioner can fix the
+        // roster from the admin panel. Surface a warning rather than blocking.
+        console.warn('Roster seed failed:', rosterErr.message)
+      }
+    }
+
     setCreatedLeagueId(league.id)
     setCreatedInviteCode(inviteCode)
     setMode('done')

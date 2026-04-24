@@ -164,26 +164,23 @@ function SetupProfileScreen({
 
     try {
       const isAdminUser = ['Eric', 'Chase'].includes(name)
-      const FOUNDING_LEAGUE = FOUNDING_LEAGUE_ID
 
-      const { error: profileErr } = await supabase.from('profiles').upsert({
-        id: userId,
-        display_name: name,
-        email: userEmail,
-        is_admin: isAdminUser,
-      }, { onConflict: 'id' })
-      if (profileErr) throw new Error(profileErr.message)
+      // Route through /api/setup-profile so the server can adopt the founding-
+      // league roster placeholder atomically with service-role — an anon-client
+      // UPDATE on league_roster would be blocked by RLS.
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.access_token) throw new Error('Session missing — please sign in again.')
 
-      if (claimedName) {
-        await supabase.from('player_aliases').upsert(
-          { user_id: userId, player_name: claimedName },
-          { onConflict: 'user_id' }
-        )
-        await supabase.from('league_members').upsert(
-          { league_id: FOUNDING_LEAGUE, user_id: userId },
-          { onConflict: 'league_id,user_id' }
-        )
-      }
+      const res = await fetch('/api/setup-profile', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ display_name: name, claimed_name: claimedName || null }),
+      })
+      const payload = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(payload.error || 'Could not save profile.')
 
       onComplete(name, isAdminUser)
     } catch (err: any) {
@@ -306,23 +303,23 @@ function ClaimPlayerModal({
     setError(null)
     try {
       const isAdminUser = ['Eric', 'Chase'].includes(claimedName)
-      const FOUNDING_LEAGUE = FOUNDING_LEAGUE_ID
 
-      const { error: profileErr } = await supabase.from('profiles').upsert({
-        id: userId,
-        display_name: claimedName,
-        is_admin: isAdminUser,
-      }, { onConflict: 'id' })
-      if (profileErr) throw new Error(profileErr.message)
+      // Go through /api/setup-profile so the server atomically upserts the
+      // profile, alias, membership, and (critically) adopts the founding-
+      // league roster placeholder for this claimed name.
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.access_token) throw new Error('Session missing — please sign in again.')
 
-      await supabase.from('player_aliases').upsert(
-        { user_id: userId, player_name: claimedName },
-        { onConflict: 'user_id' }
-      )
-      await supabase.from('league_members').upsert(
-        { league_id: FOUNDING_LEAGUE, user_id: userId },
-        { onConflict: 'league_id,user_id' }
-      )
+      const res = await fetch('/api/setup-profile', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ display_name: claimedName, claimed_name: claimedName }),
+      })
+      const payload = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(payload.error || 'Could not claim name.')
 
       onComplete(claimedName, isAdminUser)
     } catch (err: any) {
@@ -3490,6 +3487,9 @@ export default function App() {
   const [prevScores, setPrevScores] = useState<Record<string, number | null>>({})
   const [flashMap, setFlashMap] = useState<Record<string, 'up' | 'down'>>({})
   const [seasonMoney, setSeasonMoney] = useState<SeasonMoney[]>([])
+  // Per-league roster. For the founding league this is the 6 legacy names.
+  // For custom leagues it's the members plus any commissioner-added placeholders.
+  const [roster, setRoster] = useState<Array<{ id: string; player_name: string; user_id: string | null }>>([])
   const [history, setHistory] = useState<any[]>([])
   const [golferHistory, setGolferHistory] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
@@ -3722,10 +3722,11 @@ export default function App() {
       .then(r => r.json()).catch(() => null)
 
     if (leagueDataRes) {
-      const { activeTournament, seasonMoney: sm, results, golferResults, picks: p, inviteCode: ic } = leagueDataRes
+      const { activeTournament, seasonMoney: sm, results, golferResults, picks: p, inviteCode: ic, roster: rst } = leagueDataRes
       if (ic != null) setInviteCode(ic)
 
       if (sm) setSeasonMoney(sm)
+      if (Array.isArray(rst)) setRoster(rst)
 
       if (activeTournament) {
         setTournament(activeTournament)

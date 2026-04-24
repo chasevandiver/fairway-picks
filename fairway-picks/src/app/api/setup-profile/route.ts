@@ -51,7 +51,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: profileErr.message }, { status: 500 })
   }
 
-  // If claiming a legacy player name, record alias and auto-join founding league
+  // If claiming a legacy player name, record alias, auto-join the founding
+  // league, AND link the founding league's roster placeholder to this user.
+  // Without the last step, the person would be a league_member but no pick /
+  // result would resolve to them because the roster entry (e.g. "Max") is
+  // still a placeholder (user_id NULL).
   if (claimed_name) {
     await db.from('player_aliases').upsert({
       user_id: user.id,
@@ -62,6 +66,15 @@ export async function POST(request: NextRequest) {
       league_id: FOUNDING_LEAGUE_ID,
       user_id: user.id,
     }, { onConflict: 'league_id,user_id' })
+
+    // Adopt the placeholder row on the founding roster. We match strictly on
+    // user_id IS NULL so we never reassign a row that already belongs to a
+    // different user.
+    await db.from('league_roster')
+      .update({ user_id: user.id, added_by: user.id })
+      .eq('league_id', FOUNDING_LEAGUE_ID)
+      .eq('player_name', claimed_name)
+      .is('user_id', null)
   }
 
   return NextResponse.json({ success: true })

@@ -49,6 +49,7 @@ export async function GET(request: NextRequest) {
     { data: seasonMoney },
     { data: activeTournament },
     { data: leagueRow },
+    { data: roster },
   ] = await Promise.all([
     db.from('tournaments').select('id').eq('league_id', leagueId).in('status', ['completed', 'finalized']),
     isFounding
@@ -56,6 +57,11 @@ export async function GET(request: NextRequest) {
       : Promise.resolve({ data: [] as any[] }),
     db.from('tournaments').select('*').eq('league_id', leagueId).eq('status', 'active').maybeSingle(),
     db.from('leagues').select('invite_code, name, rules').eq('id', leagueId).maybeSingle(),
+    // Per-league roster: names used for picks/standings/stats/money.
+    db.from('league_roster')
+      .select('id, player_name, user_id')
+      .eq('league_id', leagueId)
+      .order('player_name', { ascending: true }),
   ])
 
   const tournamentIds = (tournaments ?? []).map((t: any) => t.id)
@@ -99,5 +105,6 @@ export async function GET(request: NextRequest) {
     leagueName: leagueRow?.name ?? '',
     leagueRules: leagueRow?.rules ?? null,
     leagueId,
+    roster: roster ?? [],
   })
 }
