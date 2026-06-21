@@ -259,6 +259,29 @@ export async function fetchLiveScores(): Promise<GolferScore[]> {
         if (completedR1R2 && !hasR3Entry) return 'cut'
       }
 
+      // Robust fallback for feeds that strip ALL status metadata (no status.type,
+      // no c.active) AND include zero-hole R3/R4 placeholder entries for cut
+      // players — which defeats every heuristic above (e.g. the 2026 U.S. Open
+      // final-round feed marked every missed-cut golfer as plain "active").
+      // Once the field has reached R4, every golfer who made the cut already has
+      // an R3 score, so any golfer who has only completed R1+R2 and is not
+      // currently on the course has missed the cut. Gated at currentRound >= 3
+      // so it can never mis-flag a made-cut player still waiting to tee off in R3.
+      if (currentRound >= 3) {
+        const rounds = parsedRoundsOnly[idx]
+        const hasInProgress = lines.some((l: any) => {
+          const holeCount = (l.linescores || []).length
+          return holeCount > 0 && holeCount < 18
+        })
+        if (
+          rounds[0] !== null && rounds[1] !== null &&
+          rounds[2] === null && rounds[3] === null &&
+          !hasInProgress
+        ) {
+          return 'cut'
+        }
+      }
+
       return 'active'
     }
 
