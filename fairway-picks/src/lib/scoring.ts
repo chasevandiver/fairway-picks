@@ -71,14 +71,18 @@ export function getCurrentRound(liveData: any[]): number {
 }
 
 /**
- * Build the display rounds for a cut/wd golfer based on which rounds have started.
- * - currentRound 0 or 1: only R1/R2 real data, R3/R4 stay null (cut hasn't happened yet display-wise)
+ * Build the display rounds for a cut/wd golfer.
+ * A cut golfer's penalty is final the moment they miss the cut, so by default
+ * we lock in the full doubled display immediately (R3 = R1, R4 = R2).
+ * An optional `currentRound` may be passed to phase the display in alongside
+ * the field's progress (used for WD golfers where rounds are still meaningful):
+ * - currentRound 0 or 1: only R1/R2 real data, R3/R4 stay null
  * - currentRound 2 (R3 started): show R3 = R1, R4 stays null
- * - currentRound 3 (R4 started): show R3 = R1, R4 = R2
+ * - currentRound 3+ (R4 started): show R3 = R1, R4 = R2
  */
 export function buildCutDisplayRounds(
   rounds: (number | null)[],
-  currentRound: number
+  currentRound: number = 3
 ): (number | null)[] {
   const dr = [...rounds]
   if (currentRound >= 2) {
@@ -101,8 +105,6 @@ function parsePos(p: string): number {
 }
 
 export function computeStandings(liveData: any[], pickMap: Record<string, string[]>, players: string[] = PLAYERS): any[] {
-  const currentRound = getCurrentRound(liveData)
-
   const standings = players.map((player) => {
     const playerPicks = pickMap[player] || []
     let totalScore = 0
@@ -116,25 +118,15 @@ export function computeStandings(liveData: any[], pickMap: Record<string, string
       let displayRounds: (number | null)[]
 
       if (g.status === 'cut') {
-        // Incrementally add cut penalty rounds as the weekend progresses:
-        // R1/R2 only: use actual 2-round score (no penalty yet)
-        // R3 started: add R3 penalty (= R1 repeated), so score * 1.5 effectively
-        //   but cleaner: score + R1_to_par
-        // R4 started: full double, score * 2
-        const r = g.rounds || [null, null, null, null]
+        // A cut golfer's tournament is over, so their missed-cut penalty is
+        // final the moment they're cut: their R1+R2 score counts double
+        // (R3 repeats R1, R4 repeats R2). Lock in the full doubled score
+        // immediately rather than phasing it in as the rest of the field plays
+        // the weekend — the penalty must not depend on whether other (active)
+        // golfers have teed off in R3/R4.
         const twoRoundScore = g.score ?? 0  // actual to-par after 2 rounds
-        const r1Par = r[0] !== null ? r[0] - (g.par ?? 72) : 0
-        if (currentRound >= 3) {
-          // R4 started: full doubled score
-          adjScore = twoRoundScore * 2
-        } else if (currentRound >= 2) {
-          // R3 started: 2-round score + R1 repeated as R3
-          adjScore = twoRoundScore + r1Par
-        } else {
-          // R1/R2: just their real score
-          adjScore = twoRoundScore
-        }
-        displayRounds = buildCutDisplayRounds(g.rounds || [null, null, null, null], currentRound)
+        adjScore = twoRoundScore * 2
+        displayRounds = buildCutDisplayRounds(g.rounds || [null, null, null, null])
       } else if (g.status === 'wd') {
         // WD golfers: ESPN already has the correct score from rounds played, no penalty.
         adjScore = g.score ?? 0
