@@ -1005,14 +1005,21 @@ function PicksTab({ standings, pickMap, liveData, tournament }: {
         const golferRows = (s?.golfers ?? playerPicks.map((name) => {
           const g = liveData.find((d) => d.name.toLowerCase() === name.toLowerCase())
             ?? { name, score: null, today: null, thru: '—', position: '—', status: 'active' as const, rounds: [null,null,null,null], par }
-          const isCut = g.status === 'cut' || g.status === 'wd'
-          const displayRounds = isCut
-            ? buildCutDisplayRounds(g.rounds ?? [null, null, null, null], currentRound)
-            : [...(g.rounds ?? [null, null, null, null])]
+          // Cut golfers lock in the full doubled display immediately (penalty is
+          // final at cut time); WD golfers still phase in with the field.
+          const displayRounds =
+            g.status === 'cut'
+              ? buildCutDisplayRounds(g.rounds ?? [null, null, null, null])
+              : g.status === 'wd'
+                ? buildCutDisplayRounds(g.rounds ?? [null, null, null, null], currentRound)
+                : [...(g.rounds ?? [null, null, null, null])]
           return { ...g, adjScore: g.score ?? 0, displayRounds }
         })).map((g: any) => {
           // Re-apply round-aware cut logic for golfers sourced from standings
-          if (g.status === 'cut' || g.status === 'wd') {
+          if (g.status === 'cut') {
+            return { ...g, displayRounds: buildCutDisplayRounds(g.rounds ?? [null, null, null, null]) }
+          }
+          if (g.status === 'wd') {
             return { ...g, displayRounds: buildCutDisplayRounds(g.rounds ?? [null, null, null, null], currentRound) }
           }
           return g
