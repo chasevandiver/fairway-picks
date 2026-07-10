@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 
-export const runtime = 'edge'
+// Node.js runtime (not 'edge') — ISR/revalidate is not supported on the Edge
+// Runtime for route handlers, so `revalidate` would be silently ignored.
 export const revalidate = 60
 
 export async function GET() {
