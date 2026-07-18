@@ -11,14 +11,24 @@ export async function GET() {
       { cache: 'no-store' }
     )
     const data = await res.json()
-    const raw = data?.events?.[0]?.competitions?.[0]?.competitors || []
+    const competition = data?.events?.[0]?.competitions?.[0] || {}
+    const raw = competition?.competitors || []
 
+    // Compact per-round summary instead of full hole-by-hole linescores so a
+    // wide sample of competitors fits in one readable response.
     const toSample = (c: any) => ({
       name: c.athlete?.displayName,
       score: c.score,
+      order: c.order,
+      active: c.active,
       status: c.status,
-      linescores: c.linescores,
-      statistics: c.statistics,
+      periods: (c.linescores || []).map((l: any) => ({
+        period: l.period,
+        value: l.value,
+        displayValue: l.displayValue,
+        holes: (l.linescores || []).length,
+        teeTime: l.teeTime,
+      })),
     })
 
     // First 3 competitors (likely active/leading)
@@ -37,10 +47,27 @@ export async function GET() {
       return false
     }).slice(0, 3).map(toSample)
 
-    // Also grab a raw sample of competitors 50-55 (near cut line) regardless of detection
-    const nearCut = raw.slice(50, 55).map(toSample)
+    // Golfers with completed R1+R2 but no R3 strokes yet — the population that
+    // cut detection has to classify (cut vs. hasn't-teed-off-yet).
+    const noR3 = raw.filter((c: any) => {
+      const lines: any[] = c.linescores || []
+      const done = (p: number) => lines.some((l: any) => l.period === p && (l.linescores || []).length === 18)
+      const r3Holes = lines.some((l: any) => l.period === 3 && (l.linescores || []).length > 0)
+      return done(1) && done(2) && !r3Holes
+    }).slice(0, 6).map(toSample)
 
-    return NextResponse.json({ active, cutPlayers, nearCut })
+    // Tail of the field — after the cut this is where missed-cut golfers live.
+    const tail = raw.slice(-6).map(toSample)
+
+    return NextResponse.json({
+      eventName: data?.events?.[0]?.name,
+      competitionStatus: competition?.status,
+      competitorCount: raw.length,
+      active,
+      cutPlayers,
+      noR3,
+      tail,
+    })
   } catch (e: any) {
     return NextResponse.json({ error: e.message })
   }
