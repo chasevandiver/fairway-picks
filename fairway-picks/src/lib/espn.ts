@@ -195,6 +195,20 @@ export async function fetchLiveScores(): Promise<GolferScore[]> {
       return isNaN(s) ? 999 : s
     })
 
+    // 36-hole totals (R1+R2 strokes) of golfers who have already started R3 —
+    // either holes recorded in a period-3 linescore or a completed R3. Used by
+    // the tee-order cut fallback below.
+    const startedR3Totals: number[] = raw.flatMap((c: any, idx: number) => {
+      const rounds = parsedRoundsOnly[idx]
+      if (rounds[0] === null || rounds[1] === null) return []
+      const started =
+        rounds[2] !== null ||
+        (c.linescores || []).some(
+          (l: any) => l.period === 3 && (l.linescores || []).length > 0
+        )
+      return started ? [rounds[0] + rounds[1]] : []
+    })
+
     // Determine cut/wd status purely from ESPN's own fields.
     // If ESPN says "CUT" in any of its position/status fields, the golfer is cut.
     // If ESPN gives them a real position (number, T5, etc.) they are NOT cut.
@@ -259,6 +273,31 @@ export async function fetchLiveScores(): Promise<GolferScore[]> {
         if (completedR1R2 && !hasR3Entry) return 'cut'
       }
 
+      // Tee-order fallback for R3 when the feed strips ALL status metadata AND
+      // gives cut players a zero-hole period-3 placeholder (2026 Open R3 feed),
+      // defeating every heuristic above. After a cut, R3 tees off in reverse
+      // score order — worst 36-hole scores first — so every golfer who made the
+      // cut starts before anyone with a strictly better total. The cut line
+      // strictly separates the field by score, so if several strictly-better
+      // golfers are already on the course while this golfer (R1+R2 done) shows
+      // no R3 holes, they missed the cut. Requiring 5 such golfers keeps brief
+      // split-tee ordering inversions from mis-flagging a made-cut player, and
+      // before R3 begins nothing fires because nobody has started.
+      if (currentRound >= 2) {
+        const rounds = parsedRoundsOnly[idx]
+        if (rounds[0] !== null && rounds[1] !== null && rounds[2] === null) {
+          const hasInProgress = lines.some((l: any) => {
+            const holeCount = (l.linescores || []).length
+            return holeCount > 0 && holeCount < 18
+          })
+          if (!hasInProgress) {
+            const myTotal = rounds[0] + rounds[1]
+            const betterStarted = startedR3Totals.filter((t) => t < myTotal).length
+            if (betterStarted >= 5) return 'cut'
+          }
+        }
+      }
+
       // Robust fallback for feeds that strip ALL status metadata (no status.type,
       // no c.active) AND include zero-hole R3/R4 placeholder entries for cut
       // players — which defeats every heuristic above (e.g. the 2026 U.S. Open
@@ -307,9 +346,11 @@ export async function fetchLiveScores(): Promise<GolferScore[]> {
       const position = getPosition(idx, status)
 
       // ── Total score — use ESPN's value directly (already correct to-par) ──
+      // ESPN returns "E" for even par; parseFloat("E") is NaN so handle it.
       let score: number | null = null
       if (c.score !== undefined && c.score !== null) {
-        const v = parseFloat(c.score)
+        const rawScore = c.score.toString().trim()
+        const v = rawScore === 'E' ? 0 : parseFloat(rawScore)
         if (!isNaN(v)) score = v
       }
 
