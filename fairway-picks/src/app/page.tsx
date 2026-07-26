@@ -24,6 +24,7 @@ import { HistoryTab } from '@/components/tabs/HistoryTab'
 import { StatsTab } from '@/components/tabs/StatsTab'
 import { SeasonRecapTab } from '@/components/tabs/SeasonRecapTab'
 import { Toast, type ToastState } from '@/components/app/Toast'
+import { useConfirm } from '@/components/app/ConfirmDialog'
 
 export default function App() {
   const supabase = createClient()
@@ -92,6 +93,7 @@ export default function App() {
   // guard init-user was being hit several times per second per session.
   const initedUserIdRef = useRef<string | null>(null)
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const { confirm, dialog: confirmDialog } = useConfirm()
 
   const notify = useCallback((message: string, type: ToastState['type'] = 'error') => {
     setToast({ message, type })
@@ -407,6 +409,29 @@ export default function App() {
     window.location.reload()
   }
 
+  const handleLeaveLeague = () => {
+    if (!user) return
+    confirm({
+      title: 'Leave League',
+      message: `Leave ${leagueName}? You can rejoin with an invite code.`,
+      confirmLabel: 'Leave',
+      danger: true,
+      onConfirm: async () => {
+        const { error } = await supabase
+          .from('league_members')
+          .delete()
+          .eq('league_id', leagueId)
+          .eq('user_id', user.id)
+        if (error) {
+          notify('Could not leave the league. Try again.')
+          return
+        }
+        localStorage.removeItem('activeLeagueId')
+        router.replace('/dashboard')
+      },
+    })
+  }
+
   const handleSetupTournament = async (data: { name: string; course: string; date: string; draft_order: string[]; is_major: boolean }) => {
     // Get THIS league's active tournament so we can clear its picks. The
     // league_id filter is critical — without it this used to find (and
@@ -631,6 +656,7 @@ export default function App() {
   return (
     <div className="app-shell">
       <Toast toast={toast} onDismiss={() => setToast(null)} />
+      {confirmDialog}
       {/* Hamburger button — mobile only, hide when sidebar open */}
       {!sidebarOpen && (
         <button className="hamburger-btn" onClick={() => setSidebarOpen(true)}>
@@ -650,6 +676,8 @@ export default function App() {
         leagueName={leagueName}
         onClaimPlayer={() => setShowClaimModal(true)}
         showClaim={!!user && leagueId === FOUNDING_LEAGUE_ID && !LEGACY_PLAYERS.includes(currentPlayer ?? '')}
+        isGuest={guestMode}
+        onLeaveLeague={user && !guestMode && commissionerId !== user.id ? handleLeaveLeague : undefined}
       />
       {showClaimModal && user && (
         <ClaimPlayerModal

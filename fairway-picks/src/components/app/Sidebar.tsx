@@ -5,7 +5,7 @@ import { NAV_ITEMS } from '@/lib/constants'
 
 // ─── Sidebar ──────────────────────────────────────────────────────────────────
 export function Sidebar({
-  currentPlayer, tab, setTab, isAdmin, onLogout, tournament, isOpen, onClose, isMasters, leagueName, onClaimPlayer, showClaim
+  currentPlayer, tab, setTab, isAdmin, onLogout, tournament, isOpen, onClose, isMasters, leagueName, onClaimPlayer, showClaim, isGuest, onLeaveLeague
 }: {
   currentPlayer: string
   tab: string
@@ -19,6 +19,8 @@ export function Sidebar({
   leagueName: string
   onClaimPlayer?: () => void
   showClaim?: boolean
+  isGuest?: boolean
+  onLeaveLeague?: () => void
 }) {
   return (
     <>
@@ -95,9 +97,37 @@ export function Sidebar({
         >
           ⇄ Switch League
         </a>
+        {!isGuest && onLeaveLeague && (
+          <button
+            type="button"
+            onClick={onLeaveLeague}
+            style={{
+              display: 'block', width: '100%', textAlign: 'center', marginTop: 8,
+              background: 'none', border: '1px solid var(--border)',
+              borderRadius: 8, padding: '8px 0', color: 'var(--red)',
+              fontSize: 12, fontFamily: 'var(--font-mono)', cursor: 'pointer',
+              letterSpacing: '0.05em',
+            }}
+          >
+            ← Leave league
+          </button>
+        )}
       </div>
 
       <div className="sidebar-footer">
+        {isGuest ? (
+          <a
+            href="/auth"
+            style={{
+              display: 'block', width: '100%', background: 'none', border: '1px solid var(--border)',
+              borderRadius: 8, padding: '7px 10px', color: 'var(--green)', fontSize: 12,
+              cursor: 'pointer', fontFamily: 'var(--font-mono)', textAlign: 'center',
+              textDecoration: 'none',
+            }}
+          >
+            Sign in →
+          </a>
+        ) : (
         <div className="user-chip">
           <div className="user-avatar">{currentPlayer[0]}</div>
           <div className="user-info">
@@ -110,6 +140,7 @@ export function Sidebar({
             title="Switch player"
           >↩</button>
         </div>
+        )}
         {showClaim && onClaimPlayer && (
           <button
             type="button"
