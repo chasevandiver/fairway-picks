@@ -8,6 +8,12 @@
 --
 -- NO USER DATA IS TOUCHED — this is RLS + one column only. Run only if
 -- post-flight verification showed a problem and you need to revert.
+--
+-- ⚠️  ORDERING: migrations 007–009 build on 006. Roll back in reverse order
+-- (009_rollback → 008_rollback → 007_rollback → this file). Running this file
+-- while 007's league_members policy is still in place would leave BOTH the
+-- permissive public-read policy re-created below AND 007's policy active —
+-- policies OR together, so league membership would become fully public.
 -- ─────────────────────────────────────────────────────────────────────────────
 
 BEGIN;

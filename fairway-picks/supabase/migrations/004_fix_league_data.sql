@@ -15,6 +15,19 @@
 --   are still available, OR manually insert golfer_results rows.
 -- ─────────────────────────────────────────────────────────────────────────────
 
+-- ⛔ GUARD (added by migration 008 hardening): this was a one-time repair for
+-- the single-league era. Re-running it now that custom leagues exist would
+-- reassign every league's tournaments to the founding league and DELETE all
+-- custom-league memberships and leagues. The guard below aborts execution.
+-- If you are certain you need one of the steps, run that step by hand.
+-- (BEGIN + the exception ensures every later statement fails with "current
+-- transaction is aborted" even under psql autocommit.)
+BEGIN;
+DO $$
+BEGIN
+  RAISE EXCEPTION 'Migration 004 is a one-time repair, already applied. Running it again would destroy custom-league data. See the guard comment in this file.';
+END $$;
+
 -- Step 1: Reassociate ALL tournaments to the founding league.
 -- This covers tournaments that were either NULL or accidentally set to a
 -- different league_id when multi-league support was added.

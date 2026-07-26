@@ -11,15 +11,19 @@ export const metadata: Metadata = {
     title: 'Fore Picks',
   },
   icons: {
+    icon: [
+      { url: '/favicon.ico', sizes: 'any' },
+      { url: '/icon-192.png', type: 'image/png', sizes: '192x192' },
+    ],
     apple: '/apple-touch-icon.png',
   },
 }
 
+// Note: no maximumScale/userScalable — blocking pinch-zoom fails WCAG 1.4.4.
+// (iOS input auto-zoom is prevented in CSS via 16px input font-size instead.)
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
   viewportFit: 'cover',
 }
 

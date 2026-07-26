@@ -28,8 +28,9 @@ export default function LeaguePage({ params }: { params: { id: string } }) {
         .maybeSingle()
 
       if (!member) {
-        // Not a member — send to join flow
-        router.push(`/join/${params.id}`)
+        // Not a member of this league — back to their league list. (A league
+        // UUID is not an invite code, so the join route can't help here.)
+        router.push('/dashboard')
         return
       }
 

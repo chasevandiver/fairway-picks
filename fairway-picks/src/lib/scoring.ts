@@ -1,5 +1,4 @@
 import type { Pick } from './types'
-import { PLAYERS } from './types'
 import { type LeagueRules, DEFAULT_RULES } from './rules'
 
 export function toRelScore(s: number | null | undefined): string {
@@ -104,7 +103,29 @@ function parsePos(p: string): number {
   return n
 }
 
-export function computeStandings(liveData: any[], pickMap: Record<string, string[]>, players: string[] = PLAYERS): any[] {
+/**
+ * Adjusted score for a cut golfer under the league's cut_handling rule.
+ *
+ * 'double'  — the 36-hole to-par counts twice (R3 repeats R1, R4 repeats R2).
+ * 'average' — R3/R4 are filled with the average of the golfer's own R1/R2.
+ *             Mathematically identical to 'double' (R1+R2+2·avg = 2·(R1+R2)),
+ *             kept as an accepted spelling because the founding league's
+ *             stored rules — and the UI copy — have always said "average".
+ * 'none'    — no penalty; the 36-hole score stands.
+ */
+function cutAdjScore(twoRoundScore: number, cutHandling: LeagueRules['penalties']['cut_handling']): number {
+  return cutHandling === 'none' ? twoRoundScore : twoRoundScore * 2
+}
+
+export function computeStandings(
+  liveData: any[],
+  pickMap: Record<string, string[]>,
+  players: string[],
+  rules: LeagueRules = DEFAULT_RULES
+): any[] {
+  const cutHandling = rules.penalties?.cut_handling ?? 'double'
+  const wdHandling = rules.penalties?.wd_handling ?? 'use_actual'
+
   const standings = players.map((player) => {
     const playerPicks = pickMap[player] || []
     let totalScore = 0
@@ -118,19 +139,26 @@ export function computeStandings(liveData: any[], pickMap: Record<string, string
       let displayRounds: (number | null)[]
 
       if (g.status === 'cut') {
-        // A cut golfer's tournament is over, so their missed-cut penalty is
-        // final the moment they're cut: their R1+R2 score counts double
-        // (R3 repeats R1, R4 repeats R2). Lock in the full doubled score
-        // immediately rather than phasing it in as the rest of the field plays
-        // the weekend — the penalty must not depend on whether other (active)
-        // golfers have teed off in R3/R4.
+        // The missed-cut penalty is final the moment they're cut — locked in
+        // immediately rather than phased in as the field plays the weekend.
         const twoRoundScore = g.score ?? 0  // actual to-par after 2 rounds
-        adjScore = twoRoundScore * 2
-        displayRounds = buildCutDisplayRounds(g.rounds || [null, null, null, null])
+        adjScore = cutAdjScore(twoRoundScore, cutHandling)
+        displayRounds = cutHandling === 'none'
+          ? [...(g.rounds || [null, null, null, null])]
+          : buildCutDisplayRounds(g.rounds || [null, null, null, null])
       } else if (g.status === 'wd') {
-        // WD golfers: ESPN already has the correct score from rounds played, no penalty.
-        adjScore = g.score ?? 0
-        displayRounds = [...(g.rounds || [null, null, null, null])]
+        if (wdHandling === 'none') {
+          // 'none' = no special WD treatment beyond the cut rule: a withdrawal
+          // is penalized exactly like a missed cut.
+          adjScore = cutAdjScore(g.score ?? 0, cutHandling)
+          displayRounds = cutHandling === 'none'
+            ? [...(g.rounds || [null, null, null, null])]
+            : buildCutDisplayRounds(g.rounds || [null, null, null, null])
+        } else {
+          // 'use_actual': ESPN already has the correct score from rounds played.
+          adjScore = g.score ?? 0
+          displayRounds = [...(g.rounds || [null, null, null, null])]
+        }
       } else {
         displayRounds = [...(g.rounds || [null, null, null, null])]
       }
@@ -154,36 +182,68 @@ export function computeStandings(liveData: any[], pickMap: Record<string, string
     return { player, totalScore, golfers, hasWinner, top3Count, bestPosition, rank: 0, moneyThisWeek: 0 }
   })
 
-  // Primary sort: lowest totalScore wins. Tiebreaker: best (lowest) finishing position among picks.
+  // Tiebreak comparator. bestPosition can be Infinity for both sides —
+  // subtraction would yield NaN and destabilize the sort, so compare, don't
+  // subtract.
+  const cmpTie = (a: any, b: any): number => {
+    if (rules.tiebreaker === 'most_winners') {
+      const winnersA = a.hasWinner ? 1 : 0
+      const winnersB = b.hasWinner ? 1 : 0
+      if (winnersA !== winnersB) return winnersB - winnersA // more winners first
+    }
+    if (a.bestPosition === b.bestPosition) return 0
+    return a.bestPosition < b.bestPosition ? -1 : 1
+  }
+
+  // Primary sort: lowest totalScore wins, then the league tiebreaker.
   standings.sort((a, b) => {
     if (a.totalScore !== b.totalScore) return a.totalScore - b.totalScore
-    return a.bestPosition - b.bestPosition
+    return cmpTie(a, b)
   })
 
-  // Assign ranks: players tied on both totalScore and bestPosition share the same rank
-  return standings.map((s, i, arr) => {
-    if (i === 0) return { ...s, rank: 1 }
-    const prev = arr[i - 1]
-    const sameRank = s.totalScore === prev.totalScore && s.bestPosition === prev.bestPosition
-    return { ...s, rank: sameRank ? prev.rank : i + 1 }
+  // Assign ranks: players who remain tied after the tiebreaker share a rank.
+  // (Note ranks are assigned onto the sorted array sequentially so a tied run
+  // shares the FIRST member's rank — the old implementation read ranks from
+  // the pre-assignment array and gave tied players rank 0.)
+  const ranked: any[] = []
+  standings.forEach((s, i) => {
+    if (i === 0) {
+      ranked.push({ ...s, rank: 1 })
+      return
+    }
+    const prev = ranked[i - 1]
+    const tied = s.totalScore === prev.totalScore && cmpTie(s, prev) === 0
+    ranked.push({ ...s, rank: tied ? prev.rank : i + 1 })
   })
+  return ranked
 }
 
 export function computeMoney(
   standings: any[],
-  players: string[] = PLAYERS,
-  rules: LeagueRules = DEFAULT_RULES
+  players: string[],
+  rules: LeagueRules = DEFAULT_RULES,
+  isMajor: boolean = false
 ): Record<string, number> {
   const money: Record<string, number> = {}
   players.forEach((p) => (money[p] = 0))
   if (!standings.length) return money
 
-  const { weekly_winner, outright_winner, top3_bonus } = rules.scoring
+  const mult = isMajor ? (rules.multipliers?.major ?? 1) : 1
+  const weekly_winner = rules.scoring.weekly_winner * mult
+  const outright_winner = rules.scoring.outright_winner * mult
+  const top3_bonus = rules.scoring.top3_bonus * mult
 
-  const winner = standings[0]
-  const others = players.filter((p) => p !== winner.player)
-  money[winner.player] += weekly_winner * others.length
-  others.forEach((p) => (money[p] -= weekly_winner))
+  // Weekly winner(s): every rank-1 player splits the pot. With W winners and
+  // N players, each non-winner pays weekly_winner (their normal stake) split
+  // across the winners — total collected per winner stays fair on ties
+  // instead of the first tied player taking everything.
+  const winners = standings.filter((s) => s.rank === 1).map((s) => s.player)
+  if (winners.length > 0) {
+    const losers = players.filter((p) => !winners.includes(p))
+    losers.forEach((p) => (money[p] -= weekly_winner))
+    const pot = weekly_winner * losers.length
+    winners.forEach((w) => (money[w] += pot / winners.length))
+  }
 
   standings.forEach((s) => {
     if (s.hasWinner) {

@@ -9,26 +9,14 @@ export default function JoinLanding() {
   const [status, setStatus] = useState<'idle' | 'loading' | 'error'>('idle')
   const [errorMsg, setErrorMsg] = useState('')
 
-  async function handleSubmit(e: React.FormEvent) {
+  function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     const trimmed = code.trim().toUpperCase()
     if (trimmed.length < 4) return
-
+    // /join/<code> owns the whole join flow (code validation, auth hand-off,
+    // and the actual membership insert via the join_league_by_code RPC).
     setStatus('loading')
-    try {
-      const res = await fetch(`/api/league-data?invite_code=${trimmed}`)
-      const data = await res.json()
-      if (!res.ok || data.error || !data.leagueId) {
-        setStatus('error')
-        setErrorMsg(`"${trimmed}" doesn't match any league. Check with your commissioner.`)
-        return
-      }
-      localStorage.setItem('activeLeagueId', data.leagueId)
-      router.push('/')
-    } catch {
-      setStatus('error')
-      setErrorMsg('Something went wrong. Please try again.')
-    }
+    router.push(`/join/${trimmed}`)
   }
 
   return (

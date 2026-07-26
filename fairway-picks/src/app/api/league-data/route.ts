@@ -1,21 +1,25 @@
-import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
+import { getUserFromRequest, serviceClient } from '@/lib/apiAuth'
 
-// Returns all league data needed by the app (history, season money, active tournament).
-// No auth check on reads — data is non-sensitive (6-person golf league).
-// Uses service role key so RLS is bypassed entirely.
-// Accepts either league_id (UUID) or invite_code (e.g. "EAGLE1") for public/guest access.
+// Always per-request: reads query params and hits the database.
+export const dynamic = 'force-dynamic'
+
+// Returns all league data needed by the app (history, season money, active
+// tournament). Accepts league_id (UUID) or invite_code.
+//
+// Authorization model:
+//   * Authenticated members get the full payload, including the invite code.
+//   * Everyone else gets the payload only when leagues.is_public_view = true,
+//     with the invite code redacted (guest/spectator mode).
+//   * Private leagues return 404 to non-members — indistinguishable from a
+//     league that doesn't exist, so league ids/codes can't be probed.
 export async function GET(request: NextRequest) {
-  const db = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  )
+  const db = serviceClient()
 
   let leagueId = request.nextUrl.searchParams.get('league_id') ?? ''
   const inviteCodeParam = request.nextUrl.searchParams.get('invite_code')
 
-  // If invite_code provided, resolve to league_id first
   if (inviteCodeParam && !leagueId) {
     const { data: league } = await db
       .from('leagues')
@@ -28,9 +32,7 @@ export async function GET(request: NextRequest) {
     leagueId = league.id
   }
 
-  // No silent fallback to the founding league. Callers must specify either a
-  // league_id or an invite_code; otherwise this would leak the original
-  // league's data to any unscoped request.
+  // No silent fallback to the founding league — callers must scope the request.
   if (!leagueId) {
     return NextResponse.json(
       { error: 'league_id or invite_code required' },
@@ -38,24 +40,44 @@ export async function GET(request: NextRequest) {
     )
   }
 
-  // Fetch everything in parallel — including invite_code + name so the client makes only one API call.
-  // season_money is a legacy table that only has rows for the original league;
-  // custom leagues derive their standings from `results` on the client and
-  // must never see another league's season totals.
-  const FOUNDING_LEAGUE_ID = '00000000-0000-0000-0000-000000000001'
-  const isFounding = leagueId === FOUNDING_LEAGUE_ID
+  const { data: leagueRow } = await db
+    .from('leagues')
+    .select('invite_code, name, rules, is_public_view, commissioner_id')
+    .eq('id', leagueId)
+    .maybeSingle()
+  if (!leagueRow) {
+    return NextResponse.json({ error: 'League not found' }, { status: 404 })
+  }
+
+  // ── Authorization ──────────────────────────────────────────────────────────
+  const user = await getUserFromRequest(request)
+  let isMember = false
+  if (user) {
+    const { data: membership } = await db
+      .from('league_members')
+      .select('id')
+      .eq('league_id', leagueId)
+      .eq('user_id', user.id)
+      .maybeSingle()
+    isMember = !!membership
+  }
+
+  if (!isMember && !leagueRow.is_public_view) {
+    // Same status as an unknown league so private leagues can't be enumerated.
+    return NextResponse.json({ error: 'League not found' }, { status: 404 })
+  }
+
+  // ── Data ───────────────────────────────────────────────────────────────────
   const [
     { data: tournaments },
-    { data: seasonMoney },
     { data: activeTournament },
-    { data: leagueRow },
+    { data: memberRows },
   ] = await Promise.all([
     db.from('tournaments').select('id').eq('league_id', leagueId).in('status', ['completed', 'finalized']),
-    isFounding
-      ? db.from('season_money').select('*')
-      : Promise.resolve({ data: [] as any[] }),
     db.from('tournaments').select('*').eq('league_id', leagueId).eq('status', 'active').maybeSingle(),
-    db.from('leagues').select('invite_code, name, rules').eq('id', leagueId).maybeSingle(),
+    db.from('league_members')
+      .select('user_id, joined_at, profiles(display_name, player_aliases(player_name))')
+      .eq('league_id', leagueId),
   ])
 
   const tournamentIds = (tournaments ?? []).map((t: any) => t.id)
@@ -88,16 +110,39 @@ export async function GET(request: NextRequest) {
     picks = p ?? []
   }
 
+  // Season money is DERIVED from results (single source of truth) rather than
+  // read from the legacy season_money running-total table — the running total
+  // could drift and, pre-fix, was even overwritten across leagues.
+  const moneyTotals: Record<string, number> = {}
+  for (const r of results) {
+    moneyTotals[r.player_name] = (moneyTotals[r.player_name] || 0) + (r.money_won || 0)
+  }
+  const seasonMoney = Object.entries(moneyTotals)
+    .map(([player_name, total]) => ({ player_name, total }))
+    .sort((a, b) => b.total - a.total)
+
+  const members = (memberRows ?? []).map((m: any) => ({
+    user_id: m.user_id,
+    joined_at: m.joined_at,
+    display_name: m.profiles?.display_name ?? '',
+    player_name: m.profiles?.player_aliases?.[0]?.player_name ?? null,
+  }))
+
   return NextResponse.json({
     activeTournament,
-    seasonMoney: seasonMoney ?? [],
+    seasonMoney,
     results,
     golferResults,
     picks,
     tournamentIds,
-    inviteCode: leagueRow?.invite_code ?? '',
-    leagueName: leagueRow?.name ?? '',
-    leagueRules: leagueRow?.rules ?? null,
+    members,
+    // Invite codes are for members only — a public-view guest must never see one.
+    inviteCode: isMember ? leagueRow.invite_code : null,
+    leagueName: leagueRow.name ?? '',
+    leagueRules: leagueRow.rules ?? null,
+    commissionerId: leagueRow.commissioner_id ?? null,
+    isPublicView: leagueRow.is_public_view ?? false,
+    isMember,
     leagueId,
   })
 }

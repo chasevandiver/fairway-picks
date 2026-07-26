@@ -6,6 +6,8 @@ import {
   buildPickMap, computeStandings,
 } from '@/lib/scoring'
 import type { GolferScore, PlayerStanding } from '@/lib/types'
+import { mergeRules } from '@/lib/rules'
+import { GolferBadge, RoundCell } from '@/components/app/PlayerCard'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface LeagueData {
@@ -16,29 +18,6 @@ interface LeagueData {
   seasonMoney: any[]
   results: any[]
   picks: any[]
-}
-
-// ─── Golfer Row ───────────────────────────────────────────────────────────────
-function GolferBadge({ g }: { g: any }) {
-  const isCut = g?.status === 'cut'
-  const isWD = g?.status === 'wd'
-  const pos = g?.position ?? '—'
-  const posNum = parseInt(pos.replace(/^T/, ''))
-  const isFirst = posNum === 1
-  const isTop3 = !isNaN(posNum) && posNum >= 1 && posNum <= 3
-  const label = isCut ? 'CUT' : isWD ? 'WD' : pos
-  const color = isCut || isWD ? 'var(--red)' : isFirst ? 'var(--gold)' : isTop3 ? 'var(--green)' : 'var(--text)'
-  const bg = isCut || isWD ? 'rgba(248,113,113,0.1)' : isFirst ? 'rgba(245,158,11,0.12)' : isTop3 ? 'rgba(74,222,128,0.10)' : 'var(--surface)'
-  const borderColor = isCut || isWD ? 'rgba(248,113,113,0.25)' : isFirst ? 'rgba(245,158,11,0.3)' : isTop3 ? 'rgba(74,222,128,0.25)' : 'var(--border)'
-  return (
-    <div style={{
-      fontFamily: 'DM Mono', fontSize: 11, fontWeight: 600, color,
-      background: bg, border: `1px solid ${borderColor}`,
-      borderRadius: 6, padding: '2px 6px', minWidth: 28, textAlign: 'center',
-    }}>
-      {label}
-    </div>
-  )
 }
 
 // ─── Player Standing Card ─────────────────────────────────────────────────────
@@ -136,26 +115,9 @@ function PlayerCard({
                         {g.status === 'wd' && <span style={{ marginLeft: 6, color: 'var(--text-dim)' }}>WD</span>}
                       </div>
                     </td>
-                    {rounds.map((r: number | null, i: number) => {
-                      const toPar = r !== null ? r - par : null
-                      const thruNum = parseInt(g.thru)
-                      const priorComplete = rounds.slice(0, i).every((x: number | null) => x !== null)
-                      const laterEmpty = rounds.slice(i + 1).every((x: number | null) => x === null)
-                      const isInProgress = r === null && priorComplete && laterEmpty &&
-                        !isNaN(thruNum) && thruNum > 0 && g.status === 'active'
-                      return (
-                        <td key={i} style={{ padding: '10px 8px', textAlign: 'center' }}>
-                          <div style={{ fontFamily: 'DM Mono', fontSize: 14, fontWeight: 500 }}>
-                            {r !== null ? r : (isInProgress ? '*' : '—')}
-                          </div>
-                          <div className={`score ${isInProgress ? scoreClass(g.today) : scoreClass(toPar)}`} style={{ fontSize: 9, marginTop: 1 }}>
-                            {isInProgress && g.today !== null
-                              ? `${toRelScore(g.today)} thru ${g.thru}`
-                              : (toPar !== null ? toRelScore(toPar) : '')}
-                          </div>
-                        </td>
-                      )
-                    })}
+                    {rounds.map((r: number | null, i: number) => (
+                      <RoundCell key={i} g={g} rounds={rounds} r={r} i={i} par={par} />
+                    ))}
                     <td style={{ padding: '10px 12px', textAlign: 'center' }}>
                       <div className={`score ${scoreClass(g.adjScore ?? g.score)}`} style={{ fontSize: 16, fontFamily: 'DM Mono', fontWeight: 700 }}>
                         {toRelScore(g.adjScore ?? g.score)}
@@ -196,7 +158,8 @@ export default function GuestLeaguePage({ params }: { params: { code: string } }
     setScoresLoading(true)
     try {
       const res = await fetch('/api/scores')
-      const scores: GolferScore[] = await res.json()
+      const payload = await res.json()
+      const scores: GolferScore[] = Array.isArray(payload) ? payload : payload.golfers ?? []
       setLiveData(scores)
       setLastUpdated(new Date())
     } catch {}
@@ -224,7 +187,11 @@ export default function GuestLeaguePage({ params }: { params: { code: string } }
 
   const pickMap = data ? buildPickMap(data.picks) : {}
   const participants = data?.activeTournament?.draft_order ?? []
-  const standings = computeStandings(liveData, pickMap, participants.length > 0 ? participants : undefined)
+  const viewRoster = participants.length > 0 ? participants : Object.keys(pickMap)
+  const viewRules = mergeRules(
+    ((data?.activeTournament as any)?.rules_snapshot as any) ?? (data as any)?.leagueRules ?? {}
+  )
+  const standings = computeStandings(liveData, pickMap, viewRoster, viewRules)
   const par = liveData[0]?.par ?? 72
 
   // Season money sorted by total

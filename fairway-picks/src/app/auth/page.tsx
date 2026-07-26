@@ -56,13 +56,15 @@ export default function AuthPage() {
     if (error) {
       setOtpError(error.message)
     } else {
-      const pendingInvite = sessionStorage.getItem('pending_invite')
-      const pendingRedirect = sessionStorage.getItem('pending_redirect')
+      // A pending invite code (set by /join before redirecting here) wins:
+      // going back to /join/<code> completes the join now that we're signed in.
+      const pendingInvite = localStorage.getItem('pending_invite_code')
+      const pendingRedirect = localStorage.getItem('pending_redirect')
       if (pendingInvite) {
-        sessionStorage.removeItem('pending_invite')
+        localStorage.removeItem('pending_invite_code')
         window.location.href = `/join/${pendingInvite}`
-      } else if (pendingRedirect) {
-        sessionStorage.removeItem('pending_redirect')
+      } else if (pendingRedirect && /^\/(?!\/)/.test(pendingRedirect)) {
+        localStorage.removeItem('pending_redirect')
         window.location.href = pendingRedirect
       } else {
         window.location.href = '/'
