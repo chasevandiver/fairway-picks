@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { formatMoney } from '@/lib/scoring'
 import { FOUNDING_LEAGUE_ID } from '@/lib/founding'
 import { LEGACY_PLAYERS, MAJORS_HISTORY, MAJOR_COLORS, ALL_STATS } from '@/lib/constants'
+import { SectionDesc } from '@/components/app/SectionDesc'
 
 // ─── Generic history-derived insights (all league types) ─────────────────────
 // Everything below is computed purely from (history, golferHistory, roster) —
@@ -42,6 +43,9 @@ function HeadToHeadGrid({ history, roster }: { history: any[]; roster: string[] 
   return (
     <div className="card mb-24">
       <div className="card-header"><div className="card-title">⚔️ Head-to-Head Records</div></div>
+      <SectionDesc style={{ padding: '12px 20px 0' }}>
+        Your all-time record vs each player — a win means you finished ahead of them that week. Read across a row: green means you own that matchup.
+      </SectionDesc>
       <div className="scroll-x">
         <table style={{ width: '100%', minWidth: 640, borderCollapse: 'collapse' }}>
           <thead>
@@ -121,6 +125,9 @@ function MoneyOverTimeChart({ history, roster }: { history: any[]; roster: strin
         <div className="card-title">📈 Money Over Time</div>
         <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: 'var(--text-dim)' }}>Cumulative · {n} event{n === 1 ? '' : 's'}</span>
       </div>
+      <SectionDesc style={{ padding: '12px 20px 0' }}>
+        Cumulative season winnings after each tournament — every line is a player, and the higher it climbs, the better their season. Dips are weeks they paid out.
+      </SectionDesc>
       <div className="card-body">
         <svg
           viewBox={`0 0 ${W} ${H}`}
@@ -198,6 +205,9 @@ function TrustyGolfers({ golferHistory, roster }: { golferHistory: any[]; roster
         <div className="card-title">🤝 Trusty Golfer</div>
         <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: 'var(--text-dim)' }}>Most-picked this season</span>
       </div>
+      <SectionDesc style={{ padding: '12px 20px 0' }}>
+        The golfer each player keeps going back to, and how those picks actually finish — a low average finish means the loyalty is paying off.
+      </SectionDesc>
       <div className="card-body">
         {rows.map((r, i) => (
           <div key={r.player} style={{
@@ -253,6 +263,9 @@ function StreaksAndSplits({ history, roster }: { history: any[]; roster: string[
   return (
     <div className="card mb-24">
       <div className="card-header"><div className="card-title">🔁 Streaks & Splits</div></div>
+      <SectionDesc style={{ padding: '12px 20px 0' }}>
+        Cashing streak counts back-to-back recent weeks finishing in the money, best week is the biggest single-week haul, and the wins split shows who shows up for the majors vs the regular stops.
+      </SectionDesc>
       <div className="scroll-x">
         <table className="table" style={{ minWidth: 560 }}>
           <thead>
@@ -399,6 +412,9 @@ export function CustomLeagueStatsView({ history, golferHistory }: { history: any
           <div className="card-title">Player Stats</div>
           <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: 'var(--text-dim)' }}>This season</span>
         </div>
+        <SectionDesc style={{ padding: '12px 20px 0' }}>
+          Everyone&apos;s season at a glance — weekly finishes, majors won, times they drafted the tournament winner or a top-3 golfer, and how many of their picks got cut.
+        </SectionDesc>
         <div className="stats-table-wrap">
           <table className="stats-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
@@ -560,6 +576,9 @@ export function StatsTab({ history, golferHistory, leagueId }: { history: any[];
           <div className="card-title">All-Time Player Stats</div>
           <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: 'var(--text-dim)' }}>2020 – 2026 · All events</span>
         </div>
+        <SectionDesc style={{ padding: '12px 20px 0' }}>
+          The all-time ledger — weekly wins and podiums, majors won, times you drafted the tournament winner or a top-3 golfer, and total cuts eaten since 2020.
+        </SectionDesc>
         <div className="stats-table-wrap">
           <table className="stats-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
@@ -643,6 +662,9 @@ export function StatsTab({ history, golferHistory, leagueId }: { history: any[];
             ))}
           </div>
         </div>
+        <SectionDesc style={{ padding: '12px 20px 0' }}>
+          Who took home each of the four majors, year by year — the biggest weeks on the calendar. Tap a year chip to zoom in.
+        </SectionDesc>
         <div className="majors-grid-wrap">
           <div className="majors-grid" style={{ padding: '20px 24px', display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 0, overflowX: 'auto' }}>
           {/* Column headers */}
@@ -739,6 +761,9 @@ export function StatsTab({ history, golferHistory, leagueId }: { history: any[];
       <div className="grid-2">
         <div className="card">
           <div className="card-header"><div className="card-title">🏅 Podium Finishes</div></div>
+          <SectionDesc style={{ padding: '12px 24px 0' }}>
+            All-time 1st, 2nd, and 3rd place weekly finishes stacked into one bar per player — the more gold in the bar, the more weeks they&apos;ve won.
+          </SectionDesc>
           <div style={{ padding: '20px 24px' }}>
             {mergedStats.map(s => (
               <div key={s.player} style={{ marginBottom: 16 }}>
@@ -762,6 +787,9 @@ export function StatsTab({ history, golferHistory, leagueId }: { history: any[];
 
         <div className="card">
           <div className="card-header"><div className="card-title">✂️ Cuts Taken</div></div>
+          <SectionDesc style={{ padding: '12px 24px 0' }}>
+            How many drafted golfers missed the cut, all-time — the longer the bar, the more Fridays that ended early.
+          </SectionDesc>
           <div style={{ padding: '20px 24px' }}>
             {[...mergedStats].sort((a,b) => b.cut - a.cut).map(s => (
               <div key={s.player} style={{ marginBottom: 14 }}>
@@ -804,6 +832,9 @@ export function StatsTab({ history, golferHistory, leagueId }: { history: any[];
         return (
           <div className="card mb-24">
             <div className="card-header"><div className="card-title">⚔️ Head-to-Head Records</div></div>
+            <SectionDesc style={{ padding: '12px 20px 0' }}>
+              Your all-time record vs each player — a win means you posted a lower score than them that week. Green means you own that matchup.
+            </SectionDesc>
             <div className="scroll-x">
               <table style={{ width: '100%', minWidth: 640, borderCollapse: 'collapse' }}>
                 <thead>
@@ -890,6 +921,9 @@ export function StatsTab({ history, golferHistory, leagueId }: { history: any[];
               <div className="card-title">🔥 Rivalry Tracker</div>
               <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: 'var(--text-dim)' }}>Closest season money races</span>
             </div>
+            <SectionDesc style={{ padding: '12px 20px 0' }}>
+              The three tightest money races this season — the smaller the gap between two players week after week, the hotter the rivalry.
+            </SectionDesc>
             <div className="card-body">
               {topRivals.map((r, i) => {
                 const aTotal = cumulative[r.a] || 0
