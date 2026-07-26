@@ -18,7 +18,8 @@ export default function Error({
       <div style={{ fontSize: 40 }}>⚠️</div>
       <h2 style={{ fontSize: 18, fontWeight: 600 }}>Something went wrong</h2>
       <p style={{ color: 'var(--text-dim)', fontSize: 13, textAlign: 'center', maxWidth: 320 }}>
-        {error.message || 'An unexpected error occurred.'}
+        An unexpected error occurred. Try again, or head back home.
+        {error.digest ? ` (Ref: ${error.digest})` : ''}
       </p>
       <button className="btn btn-primary" onClick={reset}>
         Try again

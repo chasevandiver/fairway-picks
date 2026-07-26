@@ -196,7 +196,8 @@ export default function GuestLeaguePage({ params }: { params: { code: string } }
     setScoresLoading(true)
     try {
       const res = await fetch('/api/scores')
-      const scores: GolferScore[] = await res.json()
+      const payload = await res.json()
+      const scores: GolferScore[] = Array.isArray(payload) ? payload : payload.golfers ?? []
       setLiveData(scores)
       setLastUpdated(new Date())
     } catch {}

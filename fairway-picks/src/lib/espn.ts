@@ -386,7 +386,14 @@ export function parseEspnScoreboard(data: any): GolferScore[] | null {
     return competitors.length > 5 ? competitors : null
 }
 
-export async function fetchLiveScores(): Promise<GolferScore[]> {
+export interface LiveScoresResult {
+  golfers: GolferScore[]
+  /** false = the ESPN feed was unusable and `golfers` is placeholder MOCK
+   *  data. Mock scores must never be finalized or presented as real. */
+  isLive: boolean
+}
+
+export async function fetchLiveScores(): Promise<LiveScoresResult> {
   try {
     const res = await fetch(
       'https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard',
@@ -394,10 +401,12 @@ export async function fetchLiveScores(): Promise<GolferScore[]> {
     )
     if (!res.ok) throw new Error('ESPN fetch failed')
     const data = await res.json()
-    return parseEspnScoreboard(data) ?? MOCK_DATA
+    const parsed = parseEspnScoreboard(data)
+    if (parsed) return { golfers: parsed, isLive: true }
+    return { golfers: MOCK_DATA, isLive: false }
   } catch (e) {
     console.error('ESPN fetch error:', e)
-    return MOCK_DATA
+    return { golfers: MOCK_DATA, isLive: false }
   }
 }
 

@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
-import { DEFAULT_RULES, mergeRules } from '@/lib/rules'
+import { mergeRules } from '@/lib/rules'
 
 type Mode = 'choose' | 'quick' | 'custom' | 'done'
 
@@ -35,30 +35,34 @@ export default function CreateLeague() {
     setError(null)
 
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) { sessionStorage.setItem('pending_redirect', '/create'); router.push('/auth'); return }
+    if (!user) { localStorage.setItem('pending_redirect', '/create'); router.push('/auth'); return }
 
     const rules = mergeRules(customRules ? {
       picks_per_player: picksPerPlayer,
       scoring: { weekly_winner: weeklyWinner, outright_winner: outrightWinner, top3_bonus: top3Bonus },
     } : {})
 
-    // Generate a unique invite code (retry up to 5 times on collision)
+    // Codes can no longer be checked for collisions client-side (leagues are
+    // not publicly readable) — the UNIQUE constraint is the arbiter. Retry
+    // with a fresh code on a unique-violation (23505).
+    let league: any = null
     let inviteCode = ''
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < 5 && !league; i++) {
       const candidate = generateInviteCode()
-      const { data: existing } = await supabase.from('leagues').select('id').eq('invite_code', candidate).maybeSingle()
-      if (!existing) { inviteCode = candidate; break }
+      const { data, error: leagueErr } = await supabase
+        .from('leagues')
+        .insert({ name: leagueName.trim() || 'My League', invite_code: candidate, commissioner_id: user.id, rules })
+        .select()
+        .single()
+      if (data) { league = data; inviteCode = candidate; break }
+      if (leagueErr && leagueErr.code !== '23505') {
+        setError('Failed to create league. Please try again.')
+        setLoading(false)
+        return
+      }
     }
-    if (!inviteCode) { setError('Failed to generate invite code. Try again.'); setLoading(false); return }
 
-    // Create the league
-    const { data: league, error: leagueErr } = await supabase
-      .from('leagues')
-      .insert({ name: leagueName.trim() || 'My League', invite_code: inviteCode, commissioner_id: user.id, rules })
-      .select()
-      .single()
-
-    if (leagueErr || !league) { setError(leagueErr?.message ?? 'Failed to create league'); setLoading(false); return }
+    if (!league) { setError('Failed to generate a unique invite code. Try again.'); setLoading(false); return }
 
     // Add creator as a member — use upsert so a retry never hits a unique-constraint error
     const { error: memberErr } = await supabase

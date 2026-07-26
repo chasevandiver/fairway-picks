@@ -125,7 +125,7 @@ function SetupProfileScreen({
   supabase: ReturnType<typeof createClient>
   userId: string
   userEmail: string
-  onComplete: (displayName: string, isAdmin: boolean) => void
+  onComplete: (displayName: string) => void
 }) {
   const [displayName, setDisplayName] = useState(userEmail.split('@')[0])
   const [claimedName, setClaimedName] = useState<string | null>(null)
@@ -164,29 +164,26 @@ function SetupProfileScreen({
     if (!name) { setLoading(false); return }
 
     try {
-      const isAdminUser = ['Eric', 'Chase'].includes(name)
-      const FOUNDING_LEAGUE = FOUNDING_LEAGUE_ID
-
+      // is_admin is never written from the client — it's locked at the
+      // database privilege level and granted only via migration backfill.
       const { error: profileErr } = await supabase.from('profiles').upsert({
         id: userId,
         display_name: name,
         email: userEmail,
-        is_admin: isAdminUser,
       }, { onConflict: 'id' })
       if (profileErr) throw new Error(profileErr.message)
 
       if (claimedName) {
-        await supabase.from('player_aliases').upsert(
+        // Only shown to existing founding-league members (isFoundingMember
+        // gate above), so no membership insert is needed here.
+        const { error: aliasErr } = await supabase.from('player_aliases').upsert(
           { user_id: userId, player_name: claimedName },
           { onConflict: 'user_id' }
         )
-        await supabase.from('league_members').upsert(
-          { league_id: FOUNDING_LEAGUE, user_id: userId },
-          { onConflict: 'league_id,user_id' }
-        )
+        if (aliasErr) throw new Error('That name has already been claimed.')
       }
 
-      onComplete(name, isAdminUser)
+      onComplete(name)
     } catch (err: any) {
       setError(err.message || 'Something went wrong. Please try again.')
     } finally {
@@ -277,12 +274,14 @@ function SetupProfileScreen({
 function ClaimPlayerModal({
   supabase,
   userId,
+  userEmail,
   onComplete,
   onClose,
 }: {
   supabase: ReturnType<typeof createClient>
   userId: string
-  onComplete: (displayName: string, isAdmin: boolean) => void
+  userEmail: string
+  onComplete: (displayName: string) => void
   onClose: () => void
 }) {
   const [claimedName, setClaimedName] = useState<string | null>(null)
@@ -306,26 +305,22 @@ function ClaimPlayerModal({
     setLoading(true)
     setError(null)
     try {
-      const isAdminUser = ['Eric', 'Chase'].includes(claimedName)
-      const FOUNDING_LEAGUE = FOUNDING_LEAGUE_ID
-
+      // email is required (NOT NULL) — omitting it made this upsert fail for
+      // fresh rows. is_admin is never client-written.
       const { error: profileErr } = await supabase.from('profiles').upsert({
         id: userId,
         display_name: claimedName,
-        is_admin: isAdminUser,
+        email: userEmail,
       }, { onConflict: 'id' })
       if (profileErr) throw new Error(profileErr.message)
 
-      await supabase.from('player_aliases').upsert(
+      const { error: aliasErr } = await supabase.from('player_aliases').upsert(
         { user_id: userId, player_name: claimedName },
         { onConflict: 'user_id' }
       )
-      await supabase.from('league_members').upsert(
-        { league_id: FOUNDING_LEAGUE, user_id: userId },
-        { onConflict: 'league_id,user_id' }
-      )
+      if (aliasErr) throw new Error('That name has already been claimed.')
 
-      onComplete(claimedName, isAdminUser)
+      onComplete(claimedName)
     } catch (err: any) {
       setError(err.message || 'Something went wrong. Please try again.')
     } finally {
@@ -3503,6 +3498,9 @@ export default function App() {
   const [loading, setLoading] = useState(false)
   const [dataLoaded, setDataLoaded] = useState(false)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
+  // false when /api/scores served MOCK fallback data (ESPN outage/off-season).
+  // Mock scores must never be finalized into results.
+  const [isLiveData, setIsLiveData] = useState(true)
   const [bootstrapped, setBootstrapped] = useState(false)
   const [tabKey, setTabKey] = useState(0)
   const [user, setUser] = useState<{ id: string; email: string } | null>(null)
@@ -3516,13 +3514,12 @@ export default function App() {
   const [commissionerId, setCommissionerId] = useState<string | null>(null)
   const [guestMode, setGuestMode] = useState(false)
 
-  // Admin if: super-admin flag on profile, OR commissioner of THIS league.
-  // The Eric/Chase legacy fallback only applies to the founding league so it
-  // can never grant admin rights inside a custom league.
+  // Admin if: super-admin flag on profile (DB-controlled, backfilled by
+  // migration 008), OR commissioner of THIS league. Name-based fallbacks are
+  // gone — a display name is not a credential.
   const isAdmin =
     (userProfile?.is_admin ?? false) ||
-    (commissionerId !== null && commissionerId === user?.id) ||
-    (leagueId === FOUNDING_LEAGUE_ID && ['Eric', 'Chase'].includes(currentPlayer ?? ''))
+    (commissionerId !== null && commissionerId === user?.id)
   const isMasters = !!(tournament?.name?.toLowerCase().includes('masters'))
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [showClaimModal, setShowClaimModal] = useState(false)
@@ -3570,9 +3567,90 @@ export default function App() {
 
   // ── Auth state management ──
   useEffect(() => {
-    // Race getSession() against a 4s timeout — supabase-js v2 sometimes does a
-    // server-side token validation network request inside getSession(), which can
-    // hang indefinitely if the server is slow or the token is invalid.
+    // Load a league read-only via the public-view path. Used when there is no
+    // session (guest) and as the fallback when auth is slow — a returning
+    // visitor with a saved league should see the leaderboard instantly, never
+    // the landing page.
+    const loadGuestLeague = async (): Promise<boolean> => {
+      const savedLeagueId = localStorage.getItem('activeLeagueId')
+      if (!savedLeagueId) return false
+      const res = await fetch(`/api/league-data?league_id=${savedLeagueId}`).then(r => r.json()).catch(() => null)
+      if (!res || res.error) return false
+      setLeagueId(savedLeagueId)
+      if (res.leagueName) setLeagueName(res.leagueName)
+      if (res.leagueRules) setLeagueRules(mergeRules(res.leagueRules))
+      if (res.inviteCode) setInviteCode(res.inviteCode)
+      setGuestMode(true)
+      return true
+    }
+
+    // Shared post-sign-in init used by the getSession() path and the
+    // onAuthStateChange path (previously two diverging copies of this logic).
+    // Returns false when a transient error means state shouldn't change.
+    const initAuthedUser = async (session: any): Promise<void> => {
+      const u = { id: session.user.id, email: session.user.email ?? '' }
+      setUser(u)
+      // Dedupe: SIGNED_IN refires on tab focus, INITIAL_SESSION on mount —
+      // without this we'd re-hit /api/init-user constantly.
+      if (initedUserIdRef.current === u.id) {
+        setBootstrapped(true)
+        return
+      }
+      initedUserIdRef.current = u.id
+
+      const storedLeague = localStorage.getItem('activeLeagueId')
+      const initUrl = storedLeague
+        ? `/api/init-user?preferred_league_id=${storedLeague}`
+        : '/api/init-user'
+      const res = await fetch(initUrl, {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      }).then(r => r.json()).catch(() => null)
+      const { profile, membership } = res ?? {}
+
+      if (profile) {
+        profileLoadedRef.current = true
+        setUserProfile(profile)
+        setCurrentPlayer(profile.display_name)
+        setGuestMode(false)
+        const pl = pendingNewLeagueRef.current
+        if (pl) {
+          pendingNewLeagueRef.current = null
+          setLeagueId(pl.id)
+          setLeagueName(pl.name)
+          setCommissionerId(u.id)
+        } else if (membership) {
+          setLeagueId(membership.league_id)
+          localStorage.setItem('activeLeagueId', membership.league_id)
+          const l = membership.leagues as any
+          if (l) {
+            setLeagueName(l.name)
+            setLeagueRules(mergeRules(l.rules ?? {}))
+            setCommissionerId(l.commissioner_id ?? null)
+          }
+        } else {
+          // Signed in but not a member of any league — send to Dashboard
+          // to create or join one. Never auto-load the original league.
+          localStorage.removeItem('activeLeagueId')
+          router.replace('/dashboard')
+          return
+        }
+      } else if (!profileLoadedRef.current) {
+        // Genuinely new user with no profile — SetupProfileScreen shows.
+        // (If the fetch failed transiently for an already-loaded user, state
+        // is left alone so the app doesn't flash SetupProfileScreen.)
+        if (res) {
+          setUserProfile(null)
+          setCurrentPlayer(null)
+        } else {
+          // init-user itself failed (network) — allow a retry on next event.
+          initedUserIdRef.current = null
+        }
+      }
+      setBootstrapped(true)
+    }
+
+    // Race getSession() against a timeout — supabase-js v2 sometimes does a
+    // server-side token validation request inside getSession() which can hang.
     const sessionRace = Promise.race([
       supabase.auth.getSession(),
       new Promise<never>((_, reject) => setTimeout(() => reject(new Error('auth_timeout')), 4000)),
@@ -3580,71 +3658,16 @@ export default function App() {
 
     sessionRace.then(async ({ data: { session } }: any) => {
       if (session?.user) {
-        const u = { id: session.user.id, email: session.user.email ?? '' }
-        setUser(u)
-        // Skip init-user if we've already loaded this user in this session —
-        // prevents duplicate fetches when getSession() + INITIAL_SESSION /
-        // SIGNED_IN / tab-focus events all fire for the same user.
-        if (initedUserIdRef.current === u.id) {
-          setBootstrapped(true)
-          return
-        }
-        initedUserIdRef.current = u.id
-        // Use server-side init route — bypasses RLS, no auth round-trip.
-        // Pass the stored league preference so returning users land on the
-        // league they were last using rather than always falling back to EAGLE1.
-        const storedLeague = localStorage.getItem('activeLeagueId')
-        const initUrl = storedLeague
-          ? `/api/init-user?user_id=${u.id}&preferred_league_id=${storedLeague}`
-          : `/api/init-user?user_id=${u.id}`
-        const res = await fetch(initUrl).then(r => r.json()).catch(() => null)
-        const { profile, membership } = res ?? {}
-        if (profile) {
-          profileLoadedRef.current = true
-          setUserProfile(profile)
-          setCurrentPlayer(profile.display_name)
-          // If the user just came from /create, use that league directly
-          const pl = pendingNewLeagueRef.current
-          if (pl) {
-            pendingNewLeagueRef.current = null
-            setLeagueId(pl.id)
-            setLeagueName(pl.name)
-            setCommissionerId(u.id)
-          } else if (membership) {
-            setLeagueId(membership.league_id)
-            localStorage.setItem('activeLeagueId', membership.league_id)
-            const l = membership.leagues as any
-            if (l) {
-              setLeagueName(l.name)
-              setLeagueRules(mergeRules(l.rules ?? {}))
-              setCommissionerId(l.commissioner_id ?? null)
-            }
-          } else {
-            // Signed in but not a member of any league — send to Dashboard
-            // to create or join one. Never auto-load the original league.
-            localStorage.removeItem('activeLeagueId')
-            router.replace('/dashboard')
-            return
-          }
-        }
-        // If no profile: bootstrapped fires below and SetupProfileScreen is shown
+        await initAuthedUser(session)
       } else {
-        // No session — check localStorage for a saved league and load it for guest viewing
-        const savedLeagueId = localStorage.getItem('activeLeagueId')
-        if (savedLeagueId) {
-          const res = await fetch(`/api/league-data?league_id=${savedLeagueId}`).then(r => r.json()).catch(() => null)
-          if (res && !res.error) {
-            setLeagueId(savedLeagueId)
-            if (res.leagueName) setLeagueName(res.leagueName)
-            if (res.leagueRules) setLeagueRules(mergeRules(res.leagueRules))
-            if (res.inviteCode) setInviteCode(res.inviteCode)
-            setGuestMode(true)
-          }
-        }
+        await loadGuestLeague()
+        setBootstrapped(true)
       }
-      setBootstrapped(true)
-    }).catch(() => {
-      // Timeout or error — show whatever state we have rather than spinning forever
+    }).catch(async () => {
+      // Auth timed out. A device with a saved league still gets the live
+      // leaderboard as a guest while onAuthStateChange catches up in the
+      // background — slow hotel wifi must never mean a landing-page bounce.
+      await loadGuestLeague()
       setBootstrapped(true)
     })
 
@@ -3652,64 +3675,15 @@ export default function App() {
       // TOKEN_REFRESHED fires on tab focus, scroll, and every token expiry.
       // The user and profile haven't changed — skip to avoid flashing SetupProfileScreen.
       if (event === 'TOKEN_REFRESHED') return
-      // INITIAL_SESSION fires right after subscribe with the same session the
-      // getSession() branch already handled. Skipping it prevents a duplicate
-      // init-user round trip for every page load.
-      if (event === 'INITIAL_SESSION') return
+      // INITIAL_SESSION usually duplicates what getSession() handled —
+      // initAuthedUser's dedupe makes that a no-op. But when getSession()
+      // timed out (guest fallback), INITIAL_SESSION may be the only event
+      // carrying the persisted session, so it must be processed: it upgrades
+      // the guest view to the signed-in app.
+      if (event === 'INITIAL_SESSION' && !session?.user) return
 
       if (session?.user) {
-        const u = { id: session.user.id, email: session.user.email ?? '' }
-        setUser(u)
-        // Dedupe: if this user was already inited in this tab, skip the fetch.
-        // Without this, SIGNED_IN fires again on tab focus / window visibility
-        // and we'd re-hit /api/init-user every time.
-        if (initedUserIdRef.current === u.id) {
-          setBootstrapped(true)
-          return
-        }
-        initedUserIdRef.current = u.id
-        // Use server-side init route — bypasses RLS.
-        // Pass stored league preference so the user stays on the right league.
-        const storedLeague2 = localStorage.getItem('activeLeagueId')
-        const initUrl2 = storedLeague2
-          ? `/api/init-user?user_id=${u.id}&preferred_league_id=${storedLeague2}`
-          : `/api/init-user?user_id=${u.id}`
-        const res = await fetch(initUrl2).then(r => r.json()).catch(() => null)
-        const { profile, membership } = res ?? {}
-        if (profile) {
-          profileLoadedRef.current = true
-          setUserProfile(profile)
-          setCurrentPlayer(profile.display_name)
-          const pl2 = pendingNewLeagueRef.current
-          if (pl2) {
-            pendingNewLeagueRef.current = null
-            setLeagueId(pl2.id)
-            setLeagueName(pl2.name)
-            setCommissionerId(u.id)
-          } else if (membership) {
-            setLeagueId(membership.league_id)
-            localStorage.setItem('activeLeagueId', membership.league_id)
-            const l = membership.leagues as any
-            if (l) {
-              setLeagueName(l.name)
-              setLeagueRules(mergeRules(l.rules ?? {}))
-              setCommissionerId(l.commissioner_id ?? null)
-            }
-          } else {
-            // Signed in but not a member of any league — send to Dashboard.
-            localStorage.removeItem('activeLeagueId')
-            router.replace('/dashboard')
-            return
-          }
-          setBootstrapped(true)
-        } else if (!profileLoadedRef.current) {
-          // Genuinely new user with no profile — show SetupProfileScreen
-          setUserProfile(null)
-          setCurrentPlayer(null)
-          setBootstrapped(true)
-        }
-        // If profile fetch returned null but we're already loaded (transient error),
-        // keep existing state — don't flash SetupProfileScreen
+        await initAuthedUser(session)
       } else {
         profileLoadedRef.current = false
         initedUserIdRef.current = null
@@ -3725,13 +3699,19 @@ export default function App() {
 
   // ── Fetch DB data when logged in (scoped to current league) ──
   const loadData = useCallback(async () => {
-    // Single API call — service role on the server, no auth round-trip needed for reads
-    const leagueDataRes = await fetch(`/api/league-data?league_id=${leagueId}`)
+    // Single API call. Members send their token for the full payload
+    // (including the invite code); guests get the public-view subset.
+    const { data: { session } } = await supabase.auth.getSession()
+    const headers: Record<string, string> = session?.access_token
+      ? { Authorization: `Bearer ${session.access_token}` }
+      : {}
+    const leagueDataRes = await fetch(`/api/league-data?league_id=${leagueId}`, { headers })
       .then(r => r.json()).catch(() => null)
 
-    if (leagueDataRes) {
-      const { activeTournament, seasonMoney: sm, results, golferResults, picks: p, inviteCode: ic } = leagueDataRes
+    if (leagueDataRes && !leagueDataRes.error) {
+      const { activeTournament, seasonMoney: sm, results, golferResults, picks: p, inviteCode: ic, commissionerId: cid } = leagueDataRes
       if (ic != null) setInviteCode(ic)
+      if (cid !== undefined) setCommissionerId(cid)
 
       if (sm) setSeasonMoney(sm)
 
@@ -3794,7 +3774,11 @@ export default function App() {
     setLoading(true)
     try {
       const res = await fetch('/api/scores')
-      const data: GolferScore[] = await res.json()
+      const payload = await res.json()
+      // New shape: { golfers, isLive, fetchedAt }. (Array fallback covers a
+      // cached pre-upgrade response.)
+      const data: GolferScore[] = Array.isArray(payload) ? payload : payload.golfers ?? []
+      setIsLiveData(Array.isArray(payload) ? true : payload.isLive !== false)
       // Detect score changes for flash animation
       setLiveData(prev => {
         const newFlash: Record<string, 'up' | 'down'> = {}
@@ -3843,15 +3827,22 @@ export default function App() {
   // ── Handlers ──
   const handleLogout = async () => {
     await supabase.auth.signOut()
-    setUser(null)
-    setUserProfile(null)
-    setCurrentPlayer(null)
-    setTab('live')
+    // Full reload for a clean slate — the bootstrap will come back up in
+    // guest mode for a public-view league (activeLeagueId is kept), instead
+    // of leaving half-authenticated state behind.
+    window.location.reload()
   }
 
   const handleSetupTournament = async (data: { name: string; course: string; date: string; draft_order: string[]; is_major: boolean }) => {
-    // Get current active tournament so we can clear its picks
-    const { data: oldT } = await supabase.from('tournaments').select('id').eq('status', 'active').single()
+    // Get THIS league's active tournament so we can clear its picks. The
+    // league_id filter is critical — without it this used to find (and
+    // finalize, and delete the picks of) another league's active tournament.
+    const { data: oldT } = await supabase
+      .from('tournaments')
+      .select('id')
+      .eq('status', 'active')
+      .eq('league_id', leagueId)
+      .maybeSingle()
     if (oldT) {
       await supabase.from('picks').delete().eq('tournament_id', oldT.id)
       await supabase.from('tournaments').update({ status: 'finalized' }).eq('id', oldT.id)
@@ -3877,6 +3868,10 @@ export default function App() {
 
   const handleFinalize = async () => {
     if (!tournament || !standings.length) return
+    if (!isLiveData) {
+      alert('Live scores are unavailable right now (showing placeholder data). Finalizing is disabled until the real feed is back — try again in a few minutes.')
+      return
+    }
     const money = weekMoney
 
     // Insert results
@@ -3910,15 +3905,18 @@ export default function App() {
     }
     await supabase.from('golfer_results').upsert(golferRows, { onConflict: 'tournament_id,player_name,golfer_name' })
 
-    // Update season money
-    for (const player of PLAYERS) {
+    // Update season money — scoped to THIS league and this week's actual
+    // participants (never the hardcoded founding roster).
+    for (const s of standings) {
+      const player = s.player
       const delta = money[player] || 0
       const current = seasonMoney.find((sm) => sm.player_name === player)?.total || 0
       await supabase.from('season_money').upsert({
+        league_id: leagueId,
         player_name: player,
         total: current + delta,
         updated_at: new Date().toISOString(),
-      }, { onConflict: 'player_name' })
+      }, { onConflict: 'league_id,player_name' })
     }
 
     await supabase.from('tournaments').update({ status: 'finalized' }).eq('id', tournament.id)
@@ -3946,16 +3944,17 @@ export default function App() {
   }
 
   const handleDeleteTournament = async (tournamentId: string, moneyByPlayer: Record<string, number>) => {
-    // Reverse season money for this tournament
-    for (const player of PLAYERS) {
+    // Reverse season money for this tournament (league-scoped)
+    for (const player of Object.keys(moneyByPlayer)) {
       const delta = moneyByPlayer[player] || 0
       if (delta === 0) continue
       const current = seasonMoney.find((sm) => sm.player_name === player)?.total || 0
       await supabase.from('season_money').upsert({
+        league_id: leagueId,
         player_name: player,
         total: current - delta,
         updated_at: new Date().toISOString(),
-      }, { onConflict: 'player_name' })
+      }, { onConflict: 'league_id,player_name' })
     }
     // Delete results and tournament (picks cascade-delete)
     await supabase.from('results').delete().eq('tournament_id', tournamentId)
@@ -3972,20 +3971,7 @@ export default function App() {
     await supabase.from('golfer_results').delete()
       .eq('tournament_id', tournamentId)
       .eq('player_name', playerName)
-    // Reverse season money — recalculate from scratch
-    const { data: allResults } = await supabase.from('results').select('player_name, money_won')
-    if (allResults) {
-      const totals: Record<string, number> = {}
-      PLAYERS.forEach(p => totals[p] = 0)
-      for (const r of allResults) { totals[r.player_name] = (totals[r.player_name] || 0) + (r.money_won || 0) }
-      for (const player of PLAYERS) {
-        await supabase.from('season_money').upsert({
-          player_name: player,
-          total: totals[player],
-          updated_at: new Date().toISOString(),
-        }, { onConflict: 'player_name' })
-      }
-    }
+    await recalcSeasonMoney()
     await loadData()
   }
 
@@ -3995,23 +3981,31 @@ export default function App() {
       .eq('tournament_id', tournamentId)
       .eq('player_name', playerName)
 
-    // If editing money_won, recalculate season totals from scratch
-    if (field === 'money_won') {
-      const { data: allResults } = await supabase.from('results').select('player_name, money_won')
-      if (allResults) {
-        const totals: Record<string, number> = {}
-        PLAYERS.forEach(p => totals[p] = 0)
-        for (const r of allResults) { totals[r.player_name] = (totals[r.player_name] || 0) + (r.money_won || 0) }
-        for (const player of PLAYERS) {
-          await supabase.from('season_money').upsert({
-            player_name: player,
-            total: totals[player],
-            updated_at: new Date().toISOString(),
-          }, { onConflict: 'player_name' })
-        }
-      }
-    }
+    if (field === 'money_won') await recalcSeasonMoney()
     await loadData()
+  }
+
+  // Rebuild this league's season totals from its results rows. Previously this
+  // read results across EVERY visible league and wrote totals under the
+  // hardcoded founding roster's names — cross-league money corruption.
+  const recalcSeasonMoney = async () => {
+    const { data: leagueResults } = await supabase
+      .from('results')
+      .select('player_name, money_won, tournaments!inner(league_id)')
+      .eq('tournaments.league_id', leagueId)
+    if (!leagueResults) return
+    const totals: Record<string, number> = {}
+    for (const r of leagueResults as any[]) {
+      totals[r.player_name] = (totals[r.player_name] || 0) + (r.money_won || 0)
+    }
+    for (const player of Object.keys(totals)) {
+      await supabase.from('season_money').upsert({
+        league_id: leagueId,
+        player_name: player,
+        total: totals[player],
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'league_id,player_name' })
+    }
   }
 
   const handleSaveRules = async (newRules: Partial<LeagueRules>) => {
@@ -4021,15 +4015,20 @@ export default function App() {
   }
 
   const handleSaveInviteCode = async (code: string) => {
-    const session = await supabase.auth.getSession()
-    const token = session.data.session?.access_token
-    if (!token) return
-    const res = await fetch('/api/league-info', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ invite_code: code.trim().toUpperCase() }),
-    })
-    if (res.ok) setInviteCode(code.trim().toUpperCase())
+    // Direct update under the commissioner RLS policy (008). The old
+    // /api/league-info route hardcoded the FOUNDING league id, so "saving"
+    // a custom league's code silently rewrote the original league's.
+    const cleaned = code.trim().toUpperCase()
+    const { error } = await supabase.from('leagues')
+      .update({ invite_code: cleaned })
+      .eq('id', leagueId)
+    if (error) {
+      alert(error.code === '23505'
+        ? 'That invite code is already taken — try another.'
+        : 'Could not save the invite code. Only the commissioner can change it.')
+      return
+    }
+    setInviteCode(cleaned)
   }
 
   if (!bootstrapped) return <div className="loading-screen"><div className="spin" style={{ fontSize: 32 }}>⛳</div>Loading…</div>
@@ -4039,40 +4038,41 @@ export default function App() {
       supabase={supabase}
       userId={user.id}
       userEmail={user.email}
-      onComplete={(displayName, isAdmin) => {
+      onComplete={async (displayName) => {
         profileLoadedRef.current = true
-        setUserProfile({ display_name: displayName, is_admin: isAdmin })
+        // is_admin comes from the server (init-user), never from the client.
+        setUserProfile({ display_name: displayName, is_admin: false })
         setCurrentPlayer(displayName)
-        // Check for a just-created league passed via URL params from /create
         const pl = pendingNewLeagueRef.current
         if (pl) {
           pendingNewLeagueRef.current = null
           setLeagueId(pl.id)
           setLeagueName(pl.name)
           setCommissionerId(user.id)
-        } else {
-          // Use service-role init-user to bypass RLS and find the correct league.
-          // Pass stored preference so a new user who just joined a league lands there.
-          const storedLeague3 = localStorage.getItem('activeLeagueId')
-          const initUrl3 = storedLeague3
-            ? `/api/init-user?user_id=${user.id}&preferred_league_id=${storedLeague3}`
-            : `/api/init-user?user_id=${user.id}`
-          fetch(initUrl3)
-            .then(r => r.json())
-            .then(({ membership }) => {
-              if (membership) {
-                setLeagueId(membership.league_id)
-                localStorage.setItem('activeLeagueId', membership.league_id)
-                const l = membership.leagues as any
-                if (l) {
-                  setLeagueName(l.name)
-                  setLeagueRules(mergeRules(l.rules ?? {}))
-                  setCommissionerId(l.commissioner_id ?? null)
-                }
-              }
-            })
-            .catch(() => {})
+          return
         }
+        const { data: { session } } = await supabase.auth.getSession()
+        if (!session) return
+        const storedLeague = localStorage.getItem('activeLeagueId')
+        const initUrl = storedLeague
+          ? `/api/init-user?preferred_league_id=${storedLeague}`
+          : '/api/init-user'
+        fetch(initUrl, { headers: { Authorization: `Bearer ${session.access_token}` } })
+          .then(r => r.json())
+          .then(({ profile, membership }) => {
+            if (profile) setUserProfile(profile)
+            if (membership) {
+              setLeagueId(membership.league_id)
+              localStorage.setItem('activeLeagueId', membership.league_id)
+              const l = membership.leagues as any
+              if (l) {
+                setLeagueName(l.name)
+                setLeagueRules(mergeRules(l.rules ?? {}))
+                setCommissionerId(l.commissioner_id ?? null)
+              }
+            }
+          })
+          .catch(() => {})
       }}
     />
   )
@@ -4102,10 +4102,11 @@ export default function App() {
         <ClaimPlayerModal
           supabase={supabase}
           userId={user.id}
-          onComplete={(name, isAdminUser) => {
+          userEmail={user.email}
+          onComplete={(name) => {
             profileLoadedRef.current = true
             setCurrentPlayer(name)
-            setUserProfile({ display_name: name, is_admin: isAdminUser })
+            setUserProfile(prev => ({ display_name: name, is_admin: prev?.is_admin ?? false }))
             setShowClaimModal(false)
           }}
           onClose={() => setShowClaimModal(false)}
