@@ -5,6 +5,106 @@ import type { SeasonMoney } from '@/lib/types'
 import { FOUNDING_LEAGUE_ID } from '@/lib/founding'
 import { LEGACY_PLAYERS } from '@/lib/constants'
 
+// ─── Award card (recap-local presentational helper) ──────────────────────────
+function AwardCard({ emoji, name, winner, detail }: {
+  emoji: string
+  name: string
+  winner: string
+  detail: string
+}) {
+  return (
+    <div className="card" style={{ padding: '16px 18px', textAlign: 'center' }}>
+      <div style={{ fontSize: 28, lineHeight: 1, marginBottom: 8 }}>{emoji}</div>
+      <div style={{ fontFamily: 'DM Mono', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-dim)', marginBottom: 6 }}>{name}</div>
+      <div style={{ fontFamily: 'DM Serif Display', fontSize: 22, lineHeight: 1.2, marginBottom: 4 }}>{winner}</div>
+      <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>{detail}</div>
+    </div>
+  )
+}
+
+// Season awards derived purely from history/golferHistory — works for both
+// the founding league and custom leagues.
+function computeSeasonAwards(history: any[], golferHistory: any[], players: string[]) {
+  const awards: { emoji: string; name: string; winner: string; detail: string }[] = []
+  if (history.length === 0 || players.length === 0) return awards
+
+  // Season MVP — most total money across the season
+  const totals: Record<string, number> = {}
+  players.forEach(p => { totals[p] = 0 })
+  for (const h of history) {
+    players.forEach(p => { totals[p] += h.money?.[p] ?? 0 })
+  }
+  const mvp = players.reduce((best, p) => (totals[p] > totals[best] ? p : best), players[0])
+  awards.push({
+    emoji: '👑', name: 'Season MVP', winner: mvp,
+    detail: `${formatMoney(totals[mvp])} total on the season`,
+  })
+
+  // Best Single Week — biggest one-tournament haul
+  let bw: { player: string; tournament: string; amount: number } | null = null
+  for (const h of history) {
+    for (const p of players) {
+      const v = h.money?.[p]
+      if (v === undefined) continue
+      if (!bw || v > bw.amount) bw = { player: p, tournament: h.tournament_name || '—', amount: v }
+    }
+  }
+  if (bw) awards.push({
+    emoji: '💰', name: 'Best Single Week', winner: bw.player,
+    detail: `${formatMoney(bw.amount)} at ${bw.tournament}`,
+  })
+
+  // Cut Magnet — most cut/wd golfers picked
+  const cutCounts: Record<string, number> = {}
+  for (const g of golferHistory) {
+    if (g.status === 'cut' || g.status === 'wd') {
+      cutCounts[g.player_name] = (cutCounts[g.player_name] ?? 0) + 1
+    }
+  }
+  const cutEntries = Object.entries(cutCounts).filter(([p]) => players.includes(p))
+  if (cutEntries.length > 0) {
+    const [cutPlayer, cuts] = cutEntries.sort((a, b) => b[1] - a[1])[0]
+    awards.push({
+      emoji: '✂️', name: 'Cut Magnet', winner: cutPlayer,
+      detail: `${cuts} golfer${cuts === 1 ? '' : 's'} missed the weekend`,
+    })
+  }
+
+  // Bargain Hunter — best single golfer finish (lowest numeric position)
+  let bh: { player: string; golfer: string; tournament: string; pos: number } | null = null
+  for (const g of golferHistory) {
+    if (!players.includes(g.player_name)) continue
+    const pos = parseInt((g.position || '').replace(/^T/i, ''), 10)
+    if (isNaN(pos)) continue
+    if (!bh || pos < bh.pos) {
+      bh = { player: g.player_name, golfer: g.golfer_name, tournament: g.tournaments?.name || '—', pos }
+    }
+  }
+  if (bh) awards.push({
+    emoji: '🎯', name: 'Bargain Hunter', winner: bh.player,
+    detail: `${bh.golfer} finished ${bh.pos === 1 ? '1st' : `#${bh.pos}`} at ${bh.tournament}`,
+  })
+
+  // Consistency Award — best average rank, min 2 tournaments played
+  let ca: { player: string; avg: number; played: number } | null = null
+  for (const p of players) {
+    const ranks: number[] = []
+    for (const h of history) {
+      const s = (h.standings || []).find((st: any) => st.player === p)
+      if (s && s.rank != null) ranks.push(s.rank)
+    }
+    if (ranks.length < 2) continue
+    const avg = ranks.reduce((s, v) => s + v, 0) / ranks.length
+    if (!ca || avg < ca.avg) ca = { player: p, avg, played: ranks.length }
+  }
+  if (ca) awards.push({
+    emoji: '🧊', name: 'Consistency Award', winner: ca.player,
+    detail: `Avg finish ${ca.avg.toFixed(1)} over ${ca.played} events`,
+  })
+
+  return awards
+}
+
 // ─── Season Recap Tab ─────────────────────────────────────────────────────────
 export function SeasonRecapTab({ history, golferHistory, seasonMoney, leagueId }: {
   history: any[]
@@ -227,6 +327,25 @@ export function SeasonRecapTab({ history, golferHistory, seasonMoney, leagueId }
           </table>
         </div>
       </div>
+
+      {/* ── Season Awards ── */}
+      {(() => {
+        const awards = computeSeasonAwards(history, golferHistory, leaguePlayers)
+        if (awards.length === 0) return null
+        return (
+          <div style={{ marginTop: 24 }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, marginBottom: 12 }}>
+              <div style={{ fontFamily: 'DM Serif Display', fontSize: 20 }}>🏆 Season Awards</div>
+              <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: 'var(--text-dim)', whiteSpace: 'nowrap' }}>Screenshot & share 📸</span>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 12 }}>
+              {awards.map(a => (
+                <AwardCard key={a.name} emoji={a.emoji} name={a.name} winner={a.winner} detail={a.detail} />
+              ))}
+            </div>
+          </div>
+        )
+      })()}
     </div>
   )
 }
