@@ -1,12 +1,12 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { toRelScore, buildPickMap, snakeDraftOrder } from '@/lib/scoring'
+import { toRelScore, snakeDraftOrder } from '@/lib/scoring'
 import type { Tournament, Pick, GolferScore } from '@/lib/types'
 
 // ─── Draft Tab ────────────────────────────────────────────────────────────────
 export function DraftTab({
-  tournament, picks, liveData, currentPlayer, isAdmin, onPickMade, picksPerPlayer
+  tournament, picks, liveData, currentPlayer, isAdmin, onPickMade, onUndoPick, picksPerPlayer
 }: {
   tournament: Tournament | null
   picks: Pick[]
@@ -14,19 +14,22 @@ export function DraftTab({
   currentPlayer: string
   isAdmin: boolean
   onPickMade: (golferName: string, playerName: string) => Promise<void>
+  onUndoPick: (pickId: string) => Promise<void>
   picksPerPlayer: number
 }) {
   const [search, setSearch] = useState('')
   const [draftOrder, setDraftOrder] = useState<{ player: string; pick: number; round: number }[]>([])
   const [saving, setSaving] = useState(false)
+  const [undoingId, setUndoingId] = useState<string | null>(null)
 
   const takenGolfers = picks.map((p) => p.golfer_name.toLowerCase())
-  const pickMap = buildPickMap(picks)
   const draftParticipants = tournament?.draft_order ?? []
   const totalPicks = draftParticipants.length * picksPerPlayer
   const pickIndex = picks.length
   const isDraftComplete = totalPicks > 0 && picks.length >= totalPicks
   const currentPickPlayer = draftOrder[pickIndex]?.player
+  // Once any golfer has teed off, picks are locked — no more undo.
+  const scoresLocked = liveData.some(g => g.thru !== '—' && g.rounds?.some(r => r !== null))
 
   useEffect(() => {
     if (tournament?.draft_order?.length) {
@@ -153,7 +156,10 @@ export function DraftTab({
           <div className="card-header"><div className="card-title">Current Picks</div></div>
           <div className="card-body">
             {draftParticipants.map((player) => {
-              const playerPicks = pickMap[player] || []
+              const playerPicks = picks
+                .filter((p) => p.player_name === player)
+                .sort((a, b) => a.pick_order - b.pick_order)
+              const lastPickId = playerPicks[playerPicks.length - 1]?.id
               return (
                 <div key={player} style={{ marginBottom: 18 }}>
                   <div style={{ fontWeight: 600, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -166,9 +172,35 @@ export function DraftTab({
                     <div style={{ color: 'var(--text-dim)', fontSize: 13 }}>No picks yet</div>
                   ) : (
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                      {playerPicks.map((g) => (
-                        <span key={g} className="badge badge-gray">{g}</span>
-                      ))}
+                      {playerPicks.map((pk) => {
+                        // Undo: your own most recent pick (or any pick if admin),
+                        // only mid-draft and only before anyone tees off.
+                        const canUndo = !isDraftComplete && !scoresLocked &&
+                          (isAdmin || (player === currentPlayer && pk.id === lastPickId))
+                        return (
+                          <span key={pk.id} className="badge badge-gray" style={canUndo ? { display: 'inline-flex', alignItems: 'center', gap: 5 } : undefined}>
+                            {pk.golfer_name}
+                            {canUndo && (
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  if (undoingId) return
+                                  setUndoingId(pk.id)
+                                  await onUndoPick(pk.id)
+                                  setUndoingId(null)
+                                }}
+                                disabled={undoingId !== null}
+                                title="Undo this pick"
+                                style={{
+                                  background: 'none', border: 'none', padding: 0,
+                                  color: 'var(--red)', cursor: 'pointer', fontSize: 11,
+                                  lineHeight: 1, opacity: undoingId === pk.id ? 0.5 : 1,
+                                }}
+                              >✕</button>
+                            )}
+                          </span>
+                        )
+                      })}
                     </div>
                   )}
                 </div>

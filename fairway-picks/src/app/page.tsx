@@ -475,6 +475,15 @@ export default function App() {
     await loadData()
   }
 
+  const handleUndoPick = async (pickId: string) => {
+    const { error } = await supabase.from('picks').delete().eq('id', pickId)
+    if (error) {
+      notify('Could not undo the pick. Try again.')
+      return
+    }
+    await loadData()
+  }
+
   const handleFinalize = async () => {
     if (!tournament || !standings.length) return
     if (!isLiveData) {
@@ -701,7 +710,7 @@ export default function App() {
             {tab === 'live'    && <LeaderboardTab tournament={tournament} standings={standings} roster={roster} liveData={liveData} pickMap={pickMap} loading={loading} lastUpdated={lastUpdated} onRefresh={fetchScores} money={weekMoney} flashMap={flashMap} />}
             {tab === 'picks'   && <PicksTab standings={standings} pickMap={pickMap} liveData={liveData} tournament={tournament} roster={roster} />}
             {tab === 'money'   && <MoneyTab seasonMoney={seasonMoney} weekMoney={weekMoney} tournament={tournament} history={history} roster={roster} rules={effectiveRules} />}
-            {tab === 'draft'   && <DraftTab tournament={tournament} picks={picks} liveData={liveData} currentPlayer={currentPlayer ?? ''} isAdmin={isAdmin} onPickMade={handlePickMade} picksPerPlayer={effectiveRules.picks_per_player} />}
+            {tab === 'draft'   && <DraftTab tournament={tournament} picks={picks} liveData={liveData} currentPlayer={currentPlayer ?? ''} isAdmin={isAdmin} onPickMade={handlePickMade} onUndoPick={handleUndoPick} picksPerPlayer={effectiveRules.picks_per_player} />}
             {tab === 'history' && <HistoryTab history={history} golferHistory={golferHistory} isAdmin={isAdmin} roster={roster} rules={leagueRules} onDeleteTournament={handleDeleteTournament} onEditResult={handleEditResult} onDeleteResult={handleDeleteResult} />}
             {tab === 'stats'   && <StatsTab history={history} leagueId={leagueId} />}
             {tab === 'recap'   && <SeasonRecapTab history={history} golferHistory={golferHistory} seasonMoney={seasonMoney} leagueId={leagueId} />}
