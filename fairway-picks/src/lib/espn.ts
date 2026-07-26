@@ -14,21 +14,18 @@ const MOCK_DATA: GolferScore[] = [
   { name: 'Tony Finau',          position: 'CUT', score: 8,   today: 4,  thru: 'CUT', status: 'cut',    rounds: [76, 76, null, null], par: DEFAULT_PAR },
 ]
 
-export async function fetchLiveScores(): Promise<GolferScore[]> {
-  try {
-    const res = await fetch(
-      'https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard',
-      { next: { revalidate: 120 } }
-    )
-    if (!res.ok) throw new Error('ESPN fetch failed')
-    const data = await res.json()
-
+/**
+ * Pure parser for the ESPN scoreboard payload. Returns null when the payload
+ * is unusable (no event, no competition, or too few competitors) so the
+ * caller can decide how to fall back.
+ */
+export function parseEspnScoreboard(data: any): GolferScore[] | null {
     const events = data?.events || []
-    if (!events.length) return MOCK_DATA
+    if (!events.length) return null
     const competitions = events[0]?.competitions || []
-    if (!competitions.length) return MOCK_DATA
+    if (!competitions.length) return null
     const raw = competitions[0]?.competitors || []
-    if (raw.length < 5) return MOCK_DATA
+    if (raw.length < 5) return null
 
     // Competition-level current round (1-indexed period from ESPN tournament status).
     // This is more reliable than counting completed rounds because ESPN sets it as soon
@@ -386,7 +383,18 @@ export async function fetchLiveScores(): Promise<GolferScore[]> {
       } as GolferScore
     })
 
-    return competitors.length > 5 ? competitors : MOCK_DATA
+    return competitors.length > 5 ? competitors : null
+}
+
+export async function fetchLiveScores(): Promise<GolferScore[]> {
+  try {
+    const res = await fetch(
+      'https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard',
+      { next: { revalidate: 120 } }
+    )
+    if (!res.ok) throw new Error('ESPN fetch failed')
+    const data = await res.json()
+    return parseEspnScoreboard(data) ?? MOCK_DATA
   } catch (e) {
     console.error('ESPN fetch error:', e)
     return MOCK_DATA

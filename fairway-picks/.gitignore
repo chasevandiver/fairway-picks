@@ -18,3 +18,10 @@ node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# TypeScript incremental build cache
+*.tsbuildinfo
+
+# Env files (all variants)
+.env*
+!.env.example

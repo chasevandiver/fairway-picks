@@ -2,6 +2,10 @@ import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
+// Always per-request: reads query params and hits the database. Without this
+// the build tries to prerender the route and crashes before dynamic detection.
+export const dynamic = 'force-dynamic'
+
 // Returns all league data needed by the app (history, season money, active tournament).
 // No auth check on reads — data is non-sensitive (6-person golf league).
 // Uses service role key so RLS is bypassed entirely.
