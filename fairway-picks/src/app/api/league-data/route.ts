@@ -141,6 +141,7 @@ export async function GET(request: NextRequest) {
     leagueName: leagueRow.name ?? '',
     leagueRules: leagueRow.rules ?? null,
     commissionerId: leagueRow.commissioner_id ?? null,
+    isPublicView: leagueRow.is_public_view ?? false,
     isMember,
     leagueId,
   })

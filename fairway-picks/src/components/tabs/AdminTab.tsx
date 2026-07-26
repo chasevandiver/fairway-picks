@@ -5,12 +5,15 @@ import type { LeagueRules } from '@/lib/rules'
 import type { Tournament, Pick, GolferScore, PlayerStanding } from '@/lib/types'
 import { PGA_SCHEDULE } from '@/lib/constants'
 import { useConfirm } from '@/components/app/ConfirmDialog'
+import type { LeagueMember } from '@/lib/roster'
 
 // ─── Admin Tab ────────────────────────────────────────────────────────────────
 export function AdminTab({
   tournament, standings, weekMoney, picks, liveData,
-  leagueId, inviteCode, leagueRules, roster,
-  onSetupTournament, onFinalize, onClearTournament, onClearPicks, onSwapGolfer, onSaveRules, onSaveInviteCode
+  leagueId, leagueName, inviteCode, leagueRules, roster,
+  members, commissionerId, currentUserId, isPublicView,
+  onSetupTournament, onFinalize, onClearTournament, onClearPicks, onSwapGolfer, onSaveRules, onSaveInviteCode,
+  onRemoveMember, onRenameLeague, onTogglePublicView
 }: {
   tournament: Tournament | null
   standings: PlayerStanding[]
@@ -18,9 +21,14 @@ export function AdminTab({
   picks: Pick[]
   liveData: GolferScore[]
   leagueId: string
+  leagueName: string
   inviteCode: string
   leagueRules: LeagueRules
   roster: string[]
+  members: LeagueMember[]
+  commissionerId: string | null
+  currentUserId: string
+  isPublicView: boolean
   onSetupTournament: (data: { name: string; course: string; date: string; draft_order: string[]; is_major: boolean }) => Promise<void>
   onFinalize: () => Promise<void>
   onClearTournament: () => Promise<void>
@@ -28,6 +36,9 @@ export function AdminTab({
   onSwapGolfer: (pickId: string, newGolferName: string) => Promise<void>
   onSaveRules: (rules: Partial<LeagueRules>) => Promise<void>
   onSaveInviteCode: (code: string) => Promise<void>
+  onRemoveMember: (userId: string) => Promise<void>
+  onRenameLeague: (name: string) => Promise<void>
+  onTogglePublicView: (next: boolean) => Promise<void>
 }) {
   const [selectedEvent, setSelectedEvent] = useState('')
   const [participants, setParticipants] = useState<string[]>(roster)
@@ -46,6 +57,26 @@ export function AdminTab({
   const [savingCode, setSavingCode] = useState(false)
   const [editingCode, setEditingCode] = useState(!inviteCode)
   const { confirm, dialog } = useConfirm()
+  // League name editor (same edit pattern as the invite code)
+  const [nameInput, setNameInput] = useState(leagueName)
+  const [editingName, setEditingName] = useState(false)
+  const [savingName, setSavingName] = useState(false)
+  const [togglingView, setTogglingView] = useState(false)
+
+  const handleSaveName = async () => {
+    if (!nameInput.trim()) return
+    setSavingName(true)
+    await onRenameLeague(nameInput.trim())
+    setEditingName(false)
+    setSavingName(false)
+  }
+
+  const handleToggleView = async () => {
+    if (togglingView) return
+    setTogglingView(true)
+    await onTogglePublicView(!isPublicView)
+    setTogglingView(false)
+  }
 
   const handleSaveCode = async () => {
     if (!codeInput.trim()) return
@@ -178,6 +209,41 @@ export function AdminTab({
         <div className="card-header"><div className="card-title">League Info</div></div>
         <div className="card-body">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {/* League name — commissioner-editable, same pattern as the invite code */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontFamily: 'DM Mono', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-dim)', marginBottom: 4 }}>League Name</div>
+                {editingName ? (
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <input
+                      type="text"
+                      value={nameInput}
+                      onChange={e => setNameInput(e.target.value)}
+                      placeholder="League name"
+                      style={{
+                        background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8,
+                        padding: '8px 12px', color: 'var(--text)', fontSize: 15, fontWeight: 600,
+                        outline: 'none', width: 220,
+                      }}
+                    />
+                    <button className="btn btn-green btn-sm" onClick={handleSaveName} disabled={savingName || !nameInput.trim()}>
+                      {savingName ? 'Saving…' : 'Save'}
+                    </button>
+                    <button className="btn btn-outline btn-sm" onClick={() => { setNameInput(leagueName); setEditingName(false) }}>
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <div style={{ fontSize: 18, fontWeight: 700 }}>{leagueName || '—'}</div>
+                    <button className="btn btn-outline btn-sm" onClick={() => { setNameInput(leagueName); setEditingName(true) }} style={{ fontSize: 11 }}>
+                      ✏️ Edit
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="divider" />
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontFamily: 'DM Mono', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-dim)', marginBottom: 4 }}>Invite Code</div>
@@ -243,44 +309,124 @@ export function AdminTab({
               Share the <strong style={{ color: 'var(--text)' }}>Invite Code</strong> with players. They can enter it at the Join page to join your league.
             </div>
             <div className="divider" />
-            {/* Public guest view link — no sign-in required */}
+            {/* Public guest view — toggle + shareable link (no sign-in required) */}
             <div>
               <div style={{ fontFamily: 'DM Mono', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-dim)', marginBottom: 6 }}>
-                Public View Link
+                Public View
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                <div style={{ fontFamily: 'DM Mono', fontSize: 12, color: 'var(--text-mid)', wordBreak: 'break-all', flex: 1 }}>
-                  {`/view/${inviteCode}`}
-                </div>
-                <button
-                  className="btn btn-outline btn-sm"
-                  onClick={() => {
-                    const url = `${window.location.origin}/view/${inviteCode}`
-                    navigator.clipboard.writeText(url)
-                    setCopiedField('publicLink')
-                    setTimeout(() => setCopiedField(null), 2000)
+              <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+                <div
+                  onClick={handleToggleView}
+                  style={{
+                    width: 20, height: 20, borderRadius: 4, border: `2px solid ${isPublicView ? 'var(--green)' : 'var(--border-bright)'}`,
+                    background: isPublicView ? 'var(--green)' : 'transparent',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    cursor: 'pointer', flexShrink: 0, transition: 'all 0.15s',
+                    opacity: togglingView ? 0.6 : 1,
                   }}
-                  disabled={!inviteCode}
                 >
-                  {copiedField === 'publicLink' ? '✓ Copied!' : '🔗 Copy Link'}
-                </button>
-                {inviteCode && (
-                  <a
-                    href={`/view/${inviteCode}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="btn btn-outline btn-sm"
-                    style={{ textDecoration: 'none' }}
-                  >
-                    ↗ Preview
-                  </a>
-                )}
-              </div>
-              <div style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 6 }}>
-                Anyone with this link can view live scores and standings — <strong style={{ color: 'var(--text)' }}>no sign-in required</strong>.
-              </div>
+                  {isPublicView && <span style={{ color: '#0a0c0f', fontSize: 13, fontWeight: 900, lineHeight: 1 }}>✓</span>}
+                </div>
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: 14 }}>Public read-only view</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 2 }}>
+                    The /view/{inviteCode || 'CODE'} link works for anyone — no sign-in required.
+                  </div>
+                </div>
+              </label>
+              {isPublicView && (
+                <div style={{ marginTop: 12 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                    <div style={{ fontFamily: 'DM Mono', fontSize: 12, color: 'var(--text-mid)', wordBreak: 'break-all', flex: 1 }}>
+                      {`/view/${inviteCode}`}
+                    </div>
+                    <button
+                      className="btn btn-outline btn-sm"
+                      onClick={() => {
+                        const url = `${window.location.origin}/view/${inviteCode}`
+                        navigator.clipboard.writeText(url)
+                        setCopiedField('publicLink')
+                        setTimeout(() => setCopiedField(null), 2000)
+                      }}
+                      disabled={!inviteCode}
+                    >
+                      {copiedField === 'publicLink' ? '✓ Copied!' : '🔗 Copy Link'}
+                    </button>
+                    {inviteCode && (
+                      <a
+                        href={`/view/${inviteCode}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="btn btn-outline btn-sm"
+                        style={{ textDecoration: 'none' }}
+                      >
+                        ↗ Preview
+                      </a>
+                    )}
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 6 }}>
+                    Anyone with this link can view live scores and standings — <strong style={{ color: 'var(--text)' }}>no sign-in required</strong>.
+                  </div>
+                </div>
+              )}
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* ── Members ── */}
+      <div className="card mb-24">
+        <div className="card-header">
+          <div className="card-title">Members</div>
+          <span style={{ fontFamily: 'DM Mono', fontSize: 12, color: 'var(--text-dim)' }}>
+            {members.length} {members.length === 1 ? 'member' : 'members'}
+          </span>
+        </div>
+        <div className="card-body">
+          {members.length === 0 ? (
+            <div style={{ color: 'var(--text-dim)', fontSize: 13 }}>
+              No members yet — share the invite code to get people in.
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              {members.map((m, i) => (
+                <div
+                  key={m.user_id}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0',
+                    borderBottom: i < members.length - 1 ? '1px solid var(--border)' : 'none',
+                  }}
+                >
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <span style={{ fontWeight: 600, fontSize: 14 }}>{m.display_name || '—'}</span>
+                    {m.player_name && m.player_name !== m.display_name && (
+                      <span style={{ color: 'var(--text-dim)', fontSize: 12, marginLeft: 6 }}>({m.player_name})</span>
+                    )}
+                  </div>
+                  {m.user_id === commissionerId && (
+                    <span className="badge badge-gold">Commissioner</span>
+                  )}
+                  {currentUserId === commissionerId && m.user_id !== currentUserId && (
+                    <button
+                      type="button"
+                      onClick={() => confirm({
+                        title: 'Remove Member',
+                        message: `Remove ${m.display_name || 'this member'} from the league? They can rejoin with an invite code.`,
+                        confirmLabel: 'Remove',
+                        danger: true,
+                        onConfirm: () => onRemoveMember(m.user_id),
+                      })}
+                      style={{
+                        background: 'none', border: '1px solid rgba(248,113,113,0.3)', borderRadius: 4,
+                        color: 'var(--red)', cursor: 'pointer', fontSize: 11, padding: '2px 6px',
+                      }}
+                      title="Remove from league"
+                    >✕</button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 

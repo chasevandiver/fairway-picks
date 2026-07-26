@@ -73,6 +73,7 @@ export default function App() {
   const [inviteCode, setInviteCode] = useState<string>('')
   const [commissionerId, setCommissionerId] = useState<string | null>(null)
   const [members, setMembers] = useState<LeagueMember[]>([])
+  const [isPublicView, setIsPublicView] = useState(false)
   const [guestMode, setGuestMode] = useState(false)
 
   // Admin if: super-admin flag on profile (DB-controlled, backfilled by
@@ -256,10 +257,11 @@ export default function App() {
       .then(r => r.json()).catch(() => null)
 
     if (leagueDataRes && !leagueDataRes.error) {
-      const { activeTournament, seasonMoney: sm, results, golferResults, picks: p, inviteCode: ic, commissionerId: cid, members: mem } = leagueDataRes
+      const { activeTournament, seasonMoney: sm, results, golferResults, picks: p, inviteCode: ic, commissionerId: cid, members: mem, isPublicView: ipv } = leagueDataRes
       if (ic != null) setInviteCode(ic)
       if (cid !== undefined) setCommissionerId(cid)
       if (Array.isArray(mem)) setMembers(mem)
+      if (typeof ipv === 'boolean') setIsPublicView(ipv)
 
       if (sm) setSeasonMoney(sm)
 
@@ -606,6 +608,38 @@ export default function App() {
     notify('League rules saved.', 'success')
   }
 
+  const handleRemoveMember = async (userId: string) => {
+    const { error } = await supabase.from('league_members').delete()
+      .eq('league_id', leagueId)
+      .eq('user_id', userId)
+    if (error) {
+      notify('Could not remove that member. Only the commissioner can do this.')
+      return
+    }
+    notify('Member removed.', 'success')
+    await loadData()
+  }
+
+  const handleRenameLeague = async (name: string) => {
+    const { error } = await supabase.from('leagues').update({ name }).eq('id', leagueId)
+    if (error) {
+      notify('Could not rename the league. Only the commissioner can change it.')
+      return
+    }
+    setLeagueName(name)
+    notify('League renamed.', 'success')
+  }
+
+  const handleTogglePublicView = async (next: boolean) => {
+    const { error } = await supabase.from('leagues').update({ is_public_view: next }).eq('id', leagueId)
+    if (error) {
+      notify('Could not update the public view setting. Only the commissioner can change it.')
+      return
+    }
+    setIsPublicView(next)
+    notify(next ? 'Public read-only view enabled.' : 'Public read-only view disabled.', 'success')
+  }
+
   const handleSaveInviteCode = async (code: string) => {
     // Direct update under the commissioner RLS policy (008). The old
     // /api/league-info route hardcoded the FOUNDING league id, so "saving"
@@ -714,7 +748,7 @@ export default function App() {
             {tab === 'history' && <HistoryTab history={history} golferHistory={golferHistory} isAdmin={isAdmin} roster={roster} rules={leagueRules} onDeleteTournament={handleDeleteTournament} onEditResult={handleEditResult} onDeleteResult={handleDeleteResult} />}
             {tab === 'stats'   && <StatsTab history={history} leagueId={leagueId} />}
             {tab === 'recap'   && <SeasonRecapTab history={history} golferHistory={golferHistory} seasonMoney={seasonMoney} leagueId={leagueId} />}
-            {tab === 'admin'   && isAdmin && <AdminTab tournament={tournament} standings={standings} weekMoney={weekMoney} picks={picks} liveData={liveData} leagueId={leagueId} inviteCode={inviteCode} leagueRules={leagueRules} roster={roster} onSetupTournament={handleSetupTournament} onFinalize={handleFinalize} onClearTournament={handleClearTournament} onClearPicks={handleClearPicks} onSwapGolfer={handleSwapGolfer} onSaveRules={handleSaveRules} onSaveInviteCode={handleSaveInviteCode} />}
+            {tab === 'admin'   && isAdmin && <AdminTab tournament={tournament} standings={standings} weekMoney={weekMoney} picks={picks} liveData={liveData} leagueId={leagueId} leagueName={leagueName} inviteCode={inviteCode} leagueRules={leagueRules} roster={roster} members={members} commissionerId={commissionerId} currentUserId={user?.id ?? ''} isPublicView={isPublicView} onSetupTournament={handleSetupTournament} onFinalize={handleFinalize} onClearTournament={handleClearTournament} onClearPicks={handleClearPicks} onSwapGolfer={handleSwapGolfer} onSaveRules={handleSaveRules} onSaveInviteCode={handleSaveInviteCode} onRemoveMember={handleRemoveMember} onRenameLeague={handleRenameLeague} onTogglePublicView={handleTogglePublicView} />}
           </div>
         )}
       </main>
