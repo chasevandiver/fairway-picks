@@ -741,7 +741,7 @@ export default function App() {
           <SkeletonScreen />
         ) : (
           <div key={tabKey} className="tab-content">
-            {tab === 'live'    && <LeaderboardTab tournament={tournament} standings={standings} roster={roster} liveData={liveData} pickMap={pickMap} loading={loading} lastUpdated={lastUpdated} onRefresh={fetchScores} money={weekMoney} flashMap={flashMap} isLiveData={isLiveData} />}
+            {tab === 'live'    && <LeaderboardTab tournament={tournament} standings={standings} roster={roster} liveData={liveData} pickMap={pickMap} loading={loading} lastUpdated={lastUpdated} onRefresh={fetchScores} money={weekMoney} flashMap={flashMap} isLiveData={isLiveData} currentPlayer={currentPlayer} />}
             {tab === 'picks'   && <PicksTab standings={standings} pickMap={pickMap} liveData={liveData} tournament={tournament} roster={roster} />}
             {tab === 'money'   && <MoneyTab seasonMoney={seasonMoney} weekMoney={weekMoney} tournament={tournament} history={history} roster={roster} rules={effectiveRules} />}
             {tab === 'draft'   && <DraftTab tournament={tournament} picks={picks} liveData={liveData} currentPlayer={currentPlayer ?? ''} isAdmin={isAdmin} onPickMade={handlePickMade} onUndoPick={handleUndoPick} picksPerPlayer={effectiveRules.picks_per_player} />}

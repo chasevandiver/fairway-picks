@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { toRelScore, scoreClass, getCurrentRound } from '@/lib/scoring'
+import { toRelScore, scoreClass, getCurrentRound, formatMoney, moneyClass } from '@/lib/scoring'
 import type { Tournament, GolferScore, PlayerStanding } from '@/lib/types'
 import { ExpandablePlayerCard } from '@/components/app/PlayerCard'
 
@@ -17,7 +17,7 @@ function posValue(g: GolferScore): number {
 
 // ─── Leaderboard Tab ──────────────────────────────────────────────────────────
 export function LeaderboardTab({
-  tournament, standings, liveData, pickMap, loading, lastUpdated, onRefresh, money, flashMap, roster, isLiveData
+  tournament, standings, liveData, pickMap, loading, lastUpdated, onRefresh, money, flashMap, roster, isLiveData, currentPlayer
 }: {
   tournament: Tournament | null
   standings: PlayerStanding[]
@@ -30,6 +30,7 @@ export function LeaderboardTab({
   money: Record<string, number>
   flashMap: Record<string, 'up' | 'down'>
   isLiveData: boolean
+  currentPlayer: string | null
 }) {
   const safeData = Array.isArray(liveData) ? liveData : []
   const par = safeData[0]?.par ?? 72
@@ -154,6 +155,67 @@ export function LeaderboardTab({
       {!isLiveData && (
         <div className="alert alert-gold mb-24">
           ⚠️ Live scores are temporarily unavailable — showing placeholder data. Standings will update when the feed returns.
+        </div>
+      )}
+
+      {/* ── My Picks Today strip ── */}
+      {currentPlayer && (pickMap[currentPlayer]?.length ?? 0) > 0 && (() => {
+        const mine = standings.find(s => s.player === currentPlayer)
+        if (!mine || mine.golfers.length === 0) return null
+        // Last name only when the full name would crowd the chip.
+        const shortName = (name: string) =>
+          name.length > 14 ? name.split(' ').slice(-1)[0] : name
+        return (
+          <div className="card mb-24">
+            <div className="card-header">
+              <div className="card-title">My Picks Today</div>
+              <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: 'var(--text-dim)' }}>{currentPlayer}</span>
+            </div>
+            <div style={{ display: 'flex', gap: 8, overflowX: 'auto', padding: '12px 16px' }}>
+              {mine.golfers.map(g => (
+                <div key={g.name} style={{
+                  flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: 8,
+                  background: 'var(--surface2)', border: '1px solid var(--border)',
+                  borderRadius: 8, padding: '8px 12px',
+                }}>
+                  <span style={{ fontWeight: 600, fontSize: 13, whiteSpace: 'nowrap' }}>{shortName(g.name)}</span>
+                  {g.status === 'cut'
+                    ? <span className="badge badge-red">CUT</span>
+                    : g.status === 'wd'
+                      ? <span className="badge badge-gray">WD</span>
+                      : <span className="badge badge-green">{g.position || '—'}</span>}
+                  <span className={`score ${scoreClass(g.score)}`} style={{ fontSize: 13 }}>{toRelScore(g.score)}</span>
+                  <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: 'var(--text-dim)', whiteSpace: 'nowrap' }}>
+                    {toRelScore(g.today)} · {g.thru}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )
+      })()}
+
+      {/* ── Projected payouts (live, not final) ── */}
+      {roster.length > 0 && standings.length > 0 && (
+        <div className="card mb-24">
+          <div className="card-header">
+            <div className="card-title">Projected Payouts</div>
+            <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: 'var(--gold)' }}>As it stands — live projection, not final</span>
+          </div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', padding: '12px 16px' }}>
+            {[...roster].sort((a, b) => (money[b] ?? 0) - (money[a] ?? 0)).map(p => (
+              <div key={p} style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                background: 'var(--surface2)', border: '1px solid var(--border)',
+                borderRadius: 8, padding: '6px 12px',
+              }}>
+                <span style={{ fontWeight: 600, fontSize: 13 }}>{p}</span>
+                <span className={moneyClass(money[p] ?? 0)} style={{ fontFamily: 'DM Mono', fontSize: 13, fontWeight: 700 }}>
+                  {formatMoney(money[p] ?? 0)}
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
