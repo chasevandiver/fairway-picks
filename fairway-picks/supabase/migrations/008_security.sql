@@ -48,6 +48,28 @@ CREATE TABLE IF NOT EXISTS backup_leagues_008        AS SELECT * FROM leagues;
 CREATE TABLE IF NOT EXISTS backup_league_members_008 AS SELECT * FROM league_members;
 CREATE TABLE IF NOT EXISTS backup_player_aliases_008 AS SELECT * FROM player_aliases;
 
+-- ── 0b. Live-DB drift cleanup ────────────────────────────────────────────────
+-- The production database accumulated ad-hoc policies that exist in no
+-- migration file. Policies OR together, so any permissive stray silently
+-- defeats the scoped policies below. Found during the pre-apply audit:
+--   * anon_write_golfer_results — FOR ALL USING (true): golfer_results was
+--     world-WRITABLE despite migration 006's member-scoped policies.
+--   * leagues_select / members_select / aliases_select — USING (true) reads
+--     for authenticated that would defeat this migration's lockdowns.
+--   * public_read_golfer_results, profiles_select/insert/update,
+--     members_insert, aliases_write — redundant duplicates of policies that
+--     already exist (or that this migration recreates properly).
+DROP POLICY IF EXISTS "anon_write_golfer_results"  ON golfer_results;
+DROP POLICY IF EXISTS "public_read_golfer_results" ON golfer_results;
+DROP POLICY IF EXISTS "leagues_select"             ON leagues;
+DROP POLICY IF EXISTS "members_select"             ON league_members;
+DROP POLICY IF EXISTS "members_insert"             ON league_members;
+DROP POLICY IF EXISTS "aliases_select"             ON player_aliases;
+DROP POLICY IF EXISTS "aliases_write"              ON player_aliases;
+DROP POLICY IF EXISTS "profiles_select"            ON profiles;
+DROP POLICY IF EXISTS "profiles_insert"            ON profiles;
+DROP POLICY IF EXISTS "profiles_update"            ON profiles;
+
 -- ── 1. profiles: self-update only, is_admin unwritable via API roles ─────────
 DROP POLICY IF EXISTS "Users can update their own profile" ON profiles;
 CREATE POLICY "Users can update their own profile" ON profiles
