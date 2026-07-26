@@ -1,8 +1,19 @@
 'use client'
 
+import { useMemo, useState } from 'react'
 import { toRelScore, scoreClass, getCurrentRound } from '@/lib/scoring'
 import type { Tournament, GolferScore, PlayerStanding } from '@/lib/types'
 import { ExpandablePlayerCard } from '@/components/app/PlayerCard'
+
+type SortKey = 'pos' | 'golfer' | 'total' | 'today'
+
+// Numeric position for sorting: strips the "T" tie prefix; CUT/WD and
+// non-numeric positions sort last.
+function posValue(g: GolferScore): number {
+  if (g.status === 'cut' || g.status === 'wd') return Infinity
+  const n = parseInt((g.position || '').replace(/^T/, ''), 10)
+  return isNaN(n) ? Infinity : n
+}
 
 // ─── Leaderboard Tab ──────────────────────────────────────────────────────────
 export function LeaderboardTab({
@@ -21,6 +32,61 @@ export function LeaderboardTab({
 }) {
   const safeData = Array.isArray(liveData) ? liveData : []
   const par = safeData[0]?.par ?? 72
+
+  // Tour Leaderboard sorting — default (sortKey null) keeps the feed's
+  // position order.
+  const [sortKey, setSortKey] = useState<SortKey | null>(null)
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
+
+  const toggleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir(d => (d === 'asc' ? 'desc' : 'asc'))
+    } else {
+      setSortKey(key)
+      setSortDir('asc')
+    }
+  }
+
+  const sortedData = useMemo(() => {
+    if (!sortKey) return safeData
+    const dir = sortDir === 'asc' ? 1 : -1
+    // Nulls always sort last, regardless of direction.
+    const cmpNullable = (a: number | null, b: number | null) => {
+      if (a === null && b === null) return 0
+      if (a === null) return 1
+      if (b === null) return -1
+      return (a - b) * dir
+    }
+    return [...safeData].sort((a, b) => {
+      switch (sortKey) {
+        case 'pos': {
+          const pa = posValue(a)
+          const pb = posValue(b)
+          if (pa === Infinity && pb === Infinity) return 0
+          if (pa === Infinity) return 1
+          if (pb === Infinity) return -1
+          return (pa - pb) * dir
+        }
+        case 'golfer': return a.name.localeCompare(b.name) * dir
+        case 'total':  return cmpNullable(a.score, b.score)
+        case 'today':  return cmpNullable(a.today, b.today)
+      }
+    })
+  }, [safeData, sortKey, sortDir])
+
+  const sortableTh = (key: SortKey, label: string) => (
+    <th
+      onClick={() => toggleSort(key)}
+      style={{
+        cursor: 'pointer',
+        userSelect: 'none',
+        color: sortKey === key ? 'var(--green)' : undefined,
+      }}
+      title={`Sort by ${label}`}
+    >
+      {label}{sortKey === key ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}
+    </th>
+  )
 
   if (!tournament) return (
     <div className="empty-state card">
@@ -138,16 +204,16 @@ export function LeaderboardTab({
           <table className="table">
             <thead>
               <tr>
-                <th>Pos</th>
-                <th>Golfer</th>
-                <th>Total</th>
-                <th>Today</th>
+                {sortableTh('pos', 'Pos')}
+                {sortableTh('golfer', 'Golfer')}
+                {sortableTh('total', 'Total')}
+                {sortableTh('today', 'Today')}
                 <th>Thru</th>
                 <th>Picked By</th>
               </tr>
             </thead>
             <tbody>
-              {liveData.map((g, i) => {
+              {sortedData.map((g, i) => {
                 const pickedBy = Object.keys(pickMap).find((p) =>
                   (pickMap[p] || []).some((n) => n.toLowerCase() === g.name.toLowerCase())
                 )
