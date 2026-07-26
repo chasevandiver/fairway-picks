@@ -11,6 +11,7 @@ import {
   snakeDraftOrder,
 } from '../scoring'
 import type { GolferScore } from '../types'
+import { DEFAULT_RULES } from '../rules'
 
 // Characterization tests: these pin the CURRENT behavior of the scoring engine
 // (as used by the founding league) before the rules-aware refactor. The founding
@@ -147,12 +148,11 @@ describe('computeStandings (founding-league behavior)', () => {
       ['Eric', 'Max', 'Chase']
     )
     expect(standings[0].player).toBe('Eric')
-    // BUG (pinned as current behavior, fix planned in the rules-aware rewrite):
-    // the rank map reads prev.rank from the PRE-map array where every rank is
-    // still 0, so tied players after the first get rank 0 instead of sharing
-    // the previous player's rank.
+    // Max and Chase tie exactly (same score, same bestPosition) → shared rank
+    // 2. (The pre-rewrite implementation had a bug giving the second tied
+    // player rank 0.)
     expect(standings[1].rank).toBe(2)
-    expect(standings[2].rank).toBe(0)
+    expect(standings[2].rank).toBe(2)
   })
 })
 
@@ -182,16 +182,69 @@ describe('computeMoney (founding-league behavior: $10/$10/$5)', () => {
     expect(money.Max).toBe(-30)
   })
 
-  it('only standings[0] is paid weekly winner even on exact ties (current behavior)', () => {
+  it('tied weekly winners split the pot instead of first-listed taking all', () => {
     const live = [golfer({ name: 'A', position: 'T5', score: -3 })]
-    const standings = computeStandings(live, { Eric: ['A'], Max: ['A'] }, ['Eric', 'Max'])
+    const standings = computeStandings(live, { Eric: ['A'], Max: ['A'], Hayden: [] }, ['Eric', 'Max', 'Hayden'])
     expect(standings[0].rank).toBe(1)
-    // Same pre-map rank bug as above: the tied second player reads rank 0.
-    expect(standings[1].rank).toBe(0)
-    const money = computeMoney(standings, ['Eric', 'Max'])
-    // Both are rank 1 but only the first collects — pinned so the fix is a deliberate change.
-    expect(money[standings[0].player]).toBe(10)
-    expect(money[standings[1].player]).toBe(-10)
+    expect(standings[1].rank).toBe(1)
+    const money = computeMoney(standings, ['Eric', 'Max', 'Hayden'])
+    // Hayden pays the normal $10 stake; Eric and Max split it $5/$5.
+    expect(money.Eric).toBe(5)
+    expect(money.Max).toBe(5)
+    expect(money.Hayden).toBe(-10)
+  })
+})
+
+describe('rules-aware scoring', () => {
+  const cutLive = [
+    golfer({ name: 'Cut Guy', position: 'CUT', score: 6, status: 'cut', rounds: [75, 75, null, null] }),
+    golfer({ name: 'WD Guy', position: 'WD', score: 3, status: 'wd', rounds: [75, null, null, null] }),
+    golfer({ name: 'Solid', position: '2', score: -8, status: 'active', rounds: [68, 68, 68, 68] }),
+  ]
+
+  it("cut_handling 'none' leaves the 36-hole score unpenalized", () => {
+    const rules = { ...DEFAULT_RULES, penalties: { cut_handling: 'none' as const, wd_handling: 'use_actual' as const } }
+    const standings = computeStandings(cutLive, { Eric: ['Cut Guy'] }, ['Eric'], rules)
+    expect(standings[0].totalScore).toBe(6)
+    expect(standings[0].golfers[0].displayRounds).toEqual([75, 75, null, null])
+  })
+
+  it("cut_handling 'average' behaves like 'double' (same total by definition)", () => {
+    const rules = { ...DEFAULT_RULES, penalties: { cut_handling: 'average' as const, wd_handling: 'use_actual' as const } }
+    const standings = computeStandings(cutLive, { Eric: ['Cut Guy'] }, ['Eric'], rules)
+    expect(standings[0].totalScore).toBe(12)
+  })
+
+  it("wd_handling 'none' penalizes a WD like a cut", () => {
+    const rules = { ...DEFAULT_RULES, penalties: { cut_handling: 'double' as const, wd_handling: 'none' as const } }
+    const standings = computeStandings(cutLive, { Eric: ['WD Guy'] }, ['Eric'], rules)
+    expect(standings[0].totalScore).toBe(6) // 3 doubled
+  })
+
+  it('major multiplier scales every payout', () => {
+    const live = [golfer({ name: 'A', position: '5', score: -5 })]
+    const standings = computeStandings(live, { Eric: ['A'], Max: [] }, ['Eric', 'Max'])
+    const rules = { ...DEFAULT_RULES, multipliers: { major: 2 } }
+    const normal = computeMoney(standings, ['Eric', 'Max'], rules, false)
+    const major = computeMoney(standings, ['Eric', 'Max'], rules, true)
+    expect(normal.Eric).toBe(10)
+    expect(major.Eric).toBe(20)
+    expect(major.Max).toBe(-20)
+  })
+
+  it("tiebreaker 'most_winners' beats bestPosition when configured", () => {
+    const live = [
+      golfer({ name: 'Champ', position: '1', score: -5 }),
+      golfer({ name: 'Runner', position: '2', score: -5 }),
+    ]
+    const rules = { ...DEFAULT_RULES, tiebreaker: 'most_winners' as const }
+    // Both players total -5. Max's golfer finished 2nd (better would win on
+    // best_position is false here: 1 < 2 for Eric) — but with most_winners,
+    // Eric holding the tournament winner is what breaks the tie.
+    const standings = computeStandings(live, { Eric: ['Champ'], Max: ['Runner'] }, ['Eric', 'Max'], rules)
+    expect(standings[0].player).toBe('Eric')
+    expect(standings[0].rank).toBe(1)
+    expect(standings[1].rank).toBe(2)
   })
 })
 

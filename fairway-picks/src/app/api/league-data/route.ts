@@ -71,12 +71,10 @@ export async function GET(request: NextRequest) {
   // ── Data ───────────────────────────────────────────────────────────────────
   const [
     { data: tournaments },
-    { data: seasonMoney },
     { data: activeTournament },
     { data: memberRows },
   ] = await Promise.all([
     db.from('tournaments').select('id').eq('league_id', leagueId).in('status', ['completed', 'finalized']),
-    db.from('season_money').select('player_name, total, updated_at').eq('league_id', leagueId),
     db.from('tournaments').select('*').eq('league_id', leagueId).eq('status', 'active').maybeSingle(),
     db.from('league_members')
       .select('user_id, joined_at, profiles(display_name, player_aliases(player_name))')
@@ -113,6 +111,17 @@ export async function GET(request: NextRequest) {
     picks = p ?? []
   }
 
+  // Season money is DERIVED from results (single source of truth) rather than
+  // read from the legacy season_money running-total table — the running total
+  // could drift and, pre-fix, was even overwritten across leagues.
+  const moneyTotals: Record<string, number> = {}
+  for (const r of results) {
+    moneyTotals[r.player_name] = (moneyTotals[r.player_name] || 0) + (r.money_won || 0)
+  }
+  const seasonMoney = Object.entries(moneyTotals)
+    .map(([player_name, total]) => ({ player_name, total }))
+    .sort((a, b) => b.total - a.total)
+
   const members = (memberRows ?? []).map((m: any) => ({
     user_id: m.user_id,
     joined_at: m.joined_at,
@@ -122,7 +131,7 @@ export async function GET(request: NextRequest) {
 
   return NextResponse.json({
     activeTournament,
-    seasonMoney: seasonMoney ?? [],
+    seasonMoney,
     results,
     golferResults,
     picks,

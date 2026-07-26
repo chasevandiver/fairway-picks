@@ -6,6 +6,7 @@ import {
   buildPickMap, computeStandings,
 } from '@/lib/scoring'
 import type { GolferScore, PlayerStanding } from '@/lib/types'
+import { mergeRules } from '@/lib/rules'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface LeagueData {
@@ -225,7 +226,11 @@ export default function GuestLeaguePage({ params }: { params: { code: string } }
 
   const pickMap = data ? buildPickMap(data.picks) : {}
   const participants = data?.activeTournament?.draft_order ?? []
-  const standings = computeStandings(liveData, pickMap, participants.length > 0 ? participants : undefined)
+  const viewRoster = participants.length > 0 ? participants : Object.keys(pickMap)
+  const viewRules = mergeRules(
+    ((data?.activeTournament as any)?.rules_snapshot as any) ?? (data as any)?.leagueRules ?? {}
+  )
+  const standings = computeStandings(liveData, pickMap, viewRoster, viewRules)
   const par = liveData[0]?.par ?? 72
 
   // Season money sorted by total

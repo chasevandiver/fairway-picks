@@ -8,14 +8,16 @@ import {
   buildPickMap, computeStandings, computeMoney, snakeDraftOrder,
   getCurrentRound, buildCutDisplayRounds
 } from '@/lib/scoring'
-import { PLAYERS, PAYOUT_RULES } from '@/lib/types'
 import { DEFAULT_RULES, mergeRules } from '@/lib/rules'
 import type { LeagueRules } from '@/lib/rules'
 import type { Tournament, Pick, GolferScore, PlayerStanding, SeasonMoney } from '@/lib/types'
-import { FOUNDING_LEAGUE_ID } from '@/lib/founding'
+import { FOUNDING_LEAGUE_ID, LEGACY_PLAYER_NAMES } from '@/lib/founding'
+import { getLeagueRoster, type LeagueMember } from '@/lib/roster'
 import LandingPage from '@/components/Landing'
 
-const PICKS_PER_PLAYER = 4
+// The founding league's historical roster — used only for founding-league
+// claiming and legacy stats. Custom leagues derive their roster from members.
+const LEGACY_PLAYERS: string[] = [...LEGACY_PLAYER_NAMES]
 
 // ─── 2026 PGA Tour Schedule ───────────────────────────────────────────────────
 const PGA_SCHEDULE = [
@@ -149,7 +151,7 @@ function SetupProfileScreen({
       const claimedByOthers = (aliasData ?? [])
         .filter((a: any) => a.user_id !== userId)
         .map((a: any) => a.player_name)
-      setUnclaimedNames(PLAYERS.filter((p) => !claimedByOthers.includes(p)))
+      setUnclaimedNames(LEGACY_PLAYERS.filter((p) => !claimedByOthers.includes(p)))
       // Pre-select if this user already has an alias (handles missing-profile edge case)
       const mine = (aliasData ?? []).find((a: any) => a.user_id === userId)
       if (mine) setClaimedName(mine.player_name)
@@ -294,7 +296,7 @@ function ClaimPlayerModal({
       const claimedByOthers = (data ?? [])
         .filter((a: any) => a.user_id !== userId)
         .map((a: any) => a.player_name)
-      setUnclaimedNames(PLAYERS.filter((p) => !claimedByOthers.includes(p)))
+      setUnclaimedNames(LEGACY_PLAYERS.filter((p) => !claimedByOthers.includes(p)))
       const mine = (data ?? []).find((a: any) => a.user_id === userId)
       if (mine) setClaimedName(mine.player_name)
     })
@@ -399,7 +401,7 @@ const NAV_ITEMS = [
 ]
 
 function Sidebar({
-  currentPlayer, tab, setTab, isAdmin, onLogout, tournament, isOpen, onClose, isMasters, leagueName, onClaimPlayer
+  currentPlayer, tab, setTab, isAdmin, onLogout, tournament, isOpen, onClose, isMasters, leagueName, onClaimPlayer, showClaim
 }: {
   currentPlayer: string
   tab: string
@@ -412,6 +414,7 @@ function Sidebar({
   isMasters: boolean
   leagueName: string
   onClaimPlayer?: () => void
+  showClaim?: boolean
 }) {
   return (
     <>
@@ -503,7 +506,7 @@ function Sidebar({
             title="Switch player"
           >↩</button>
         </div>
-        {!(PLAYERS as string[]).includes(currentPlayer) && onClaimPlayer && (
+        {showClaim && onClaimPlayer && (
           <button
             type="button"
             onClick={onClaimPlayer}
@@ -707,10 +710,11 @@ function ExpandablePlayerCard({
 
 // ─── Leaderboard Tab ──────────────────────────────────────────────────────────
 function LeaderboardTab({
-  tournament, standings, liveData, pickMap, loading, lastUpdated, onRefresh, money, flashMap
+  tournament, standings, liveData, pickMap, loading, lastUpdated, onRefresh, money, flashMap, roster
 }: {
   tournament: Tournament | null
   standings: PlayerStanding[]
+  roster: string[]
   liveData: GolferScore[]
   pickMap: Record<string, string[]>
   loading: boolean
@@ -783,7 +787,7 @@ function LeaderboardTab({
 
       <div className="stats-row mb-24">
         <div className="stat-box">
-          <div className="stat-val">{PLAYERS.length}</div>
+          <div className="stat-val">{roster.length}</div>
           <div className="stat-label">Players</div>
         </div>
         <div className="stat-box">
@@ -848,7 +852,7 @@ function LeaderboardTab({
             </thead>
             <tbody>
               {liveData.map((g, i) => {
-                const pickedBy = PLAYERS.find((p) =>
+                const pickedBy = Object.keys(pickMap).find((p) =>
                   (pickMap[p] || []).some((n) => n.toLowerCase() === g.name.toLowerCase())
                 )
                 return (
@@ -962,11 +966,12 @@ function ScorecardRow({ g, par }: { g: any; par: number }) {
   )
 }
 
-function PicksTab({ standings, pickMap, liveData, tournament }: {
+function PicksTab({ standings, pickMap, liveData, tournament, roster }: {
   standings: PlayerStanding[]
   pickMap: Record<string, string[]>
   liveData: GolferScore[]
   tournament: Tournament | null
+  roster: string[]
 }) {
   if (!tournament) return <div className="empty-state card"><div className="empty-icon">📋</div><p>No active tournament.</p></div>
   if (Object.keys(pickMap).length === 0) return (
@@ -990,7 +995,7 @@ function PicksTab({ standings, pickMap, liveData, tournament }: {
         <div style={{ fontSize: 12, color: 'var(--text-dim)', fontFamily: 'DM Mono' }}>Par {par} · *CUT/WD rounds use avg of R1+R2</div>
       </div>
 
-      {PLAYERS.map((player) => {
+      {roster.map((player) => {
         const playerPicks = pickMap[player] || []
         const s = standings.find((x) => x.player === player)
         if (playerPicks.length === 0) return null
@@ -1152,11 +1157,13 @@ function PicksTab({ standings, pickMap, liveData, tournament }: {
 }
 
 // ─── Money Tab ────────────────────────────────────────────────────────────────
-function MoneyTab({ seasonMoney, weekMoney, tournament, history }: {
+function MoneyTab({ seasonMoney, weekMoney, tournament, history, roster, rules }: {
   seasonMoney: SeasonMoney[]
   weekMoney: Record<string, number>
   tournament: Tournament | null
   history: any[]
+  roster: string[]
+  rules: LeagueRules
 }) {
   const sorted = [...seasonMoney].sort((a, b) => b.total - a.total)
   // Total dollars that changed hands (sum of positive balances = what winners collected)
@@ -1229,7 +1236,7 @@ function MoneyTab({ seasonMoney, weekMoney, tournament, history }: {
           </div>
           <div className="card-body">
             <div className="money-grid mb-24">
-              {PLAYERS.map((p) => {
+              {roster.map((p) => {
                 const v = weekMoney[p] || 0
                 return (
                   <div key={p} className="money-card" style={{ background: 'var(--surface2)' }}>
@@ -1242,9 +1249,9 @@ function MoneyTab({ seasonMoney, weekMoney, tournament, history }: {
             </div>
             <div className="divider" />
             <div style={{ fontSize: 12, color: 'var(--text-dim)', fontFamily: 'DM Mono', lineHeight: 2 }}>
-              🏆 Low Strokes → ${PAYOUT_RULES.lowestStrokes} × {PLAYERS.length - 1} = ${PAYOUT_RULES.lowestStrokes * (PLAYERS.length - 1)} max
-              &nbsp;·&nbsp; 🎯 Tour Win → ${PAYOUT_RULES.outrightWinner} × {PLAYERS.length - 1}
-              &nbsp;·&nbsp; 🔝 Top 3 → ${PAYOUT_RULES.top3} × {PLAYERS.length - 1}
+              🏆 Low Strokes → ${rules.scoring.weekly_winner} × {roster.length - 1} = ${rules.scoring.weekly_winner * (roster.length - 1)} max
+              &nbsp;·&nbsp; 🎯 Tour Win → ${rules.scoring.outright_winner} × {roster.length - 1}
+              &nbsp;·&nbsp; 🔝 Top 3 → ${rules.scoring.top3_bonus} × {roster.length - 1}
             </div>
           </div>
         </div>
@@ -1258,7 +1265,7 @@ function MoneyTab({ seasonMoney, weekMoney, tournament, history }: {
               <thead>
                 <tr>
                   <th>Tournament</th>
-                  {PLAYERS.map((p) => <th key={p}>{p}</th>)}
+                  {roster.map((p) => <th key={p}>{p}</th>)}
                 </tr>
               </thead>
               <tbody>
@@ -1268,7 +1275,7 @@ function MoneyTab({ seasonMoney, weekMoney, tournament, history }: {
                       <div style={{ fontWeight: 500 }}>{h.tournament_name}</div>
                       <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: 'var(--text-dim)' }}>{h.date}</div>
                     </td>
-                    {PLAYERS.map((p) => {
+                    {roster.map((p) => {
                       const v = h.money?.[p] || 0
                       return (
                         <td key={p}>
@@ -1291,7 +1298,7 @@ function MoneyTab({ seasonMoney, weekMoney, tournament, history }: {
 
 // ─── Draft Tab ────────────────────────────────────────────────────────────────
 function DraftTab({
-  tournament, picks, liveData, currentPlayer, isAdmin, onPickMade
+  tournament, picks, liveData, currentPlayer, isAdmin, onPickMade, picksPerPlayer
 }: {
   tournament: Tournament | null
   picks: Pick[]
@@ -1299,6 +1306,7 @@ function DraftTab({
   currentPlayer: string
   isAdmin: boolean
   onPickMade: (golferName: string, playerName: string) => Promise<void>
+  picksPerPlayer: number
 }) {
   const [search, setSearch] = useState('')
   const [draftOrder, setDraftOrder] = useState<{ player: string; pick: number; round: number }[]>([])
@@ -1306,16 +1314,17 @@ function DraftTab({
 
   const takenGolfers = picks.map((p) => p.golfer_name.toLowerCase())
   const pickMap = buildPickMap(picks)
-  const totalPicks = PLAYERS.length * PICKS_PER_PLAYER
+  const draftParticipants = tournament?.draft_order ?? []
+  const totalPicks = draftParticipants.length * picksPerPlayer
   const pickIndex = picks.length
-  const isDraftComplete = picks.length >= totalPicks
+  const isDraftComplete = totalPicks > 0 && picks.length >= totalPicks
   const currentPickPlayer = draftOrder[pickIndex]?.player
 
   useEffect(() => {
     if (tournament?.draft_order?.length) {
-      setDraftOrder(snakeDraftOrder(tournament.draft_order, PICKS_PER_PLAYER))
+      setDraftOrder(snakeDraftOrder(tournament.draft_order, picksPerPlayer))
     }
-  }, [tournament])
+  }, [tournament, picksPerPlayer])
 
   const isMyTurn = currentPickPlayer === currentPlayer || isAdmin
 
@@ -1435,14 +1444,14 @@ function DraftTab({
         <div className="card">
           <div className="card-header"><div className="card-title">Current Picks</div></div>
           <div className="card-body">
-            {PLAYERS.map((player) => {
+            {draftParticipants.map((player) => {
               const playerPicks = pickMap[player] || []
               return (
                 <div key={player} style={{ marginBottom: 18 }}>
                   <div style={{ fontWeight: 600, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
                     {player}
                     <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: 'var(--text-dim)' }}>
-                      {playerPicks.length}/{PICKS_PER_PLAYER}
+                      {playerPicks.length}/{picksPerPlayer}
                     </span>
                   </div>
                   {playerPicks.length === 0 ? (
@@ -1467,7 +1476,7 @@ function DraftTab({
 // ─── Admin Tab ────────────────────────────────────────────────────────────────
 function AdminTab({
   tournament, standings, weekMoney, picks, liveData,
-  leagueId, inviteCode, leagueRules,
+  leagueId, inviteCode, leagueRules, roster,
   onSetupTournament, onFinalize, onClearTournament, onClearPicks, onSwapGolfer, onSaveRules, onSaveInviteCode
 }: {
   tournament: Tournament | null
@@ -1478,6 +1487,7 @@ function AdminTab({
   leagueId: string
   inviteCode: string
   leagueRules: LeagueRules
+  roster: string[]
   onSetupTournament: (data: { name: string; course: string; date: string; draft_order: string[]; is_major: boolean }) => Promise<void>
   onFinalize: () => Promise<void>
   onClearTournament: () => Promise<void>
@@ -1487,7 +1497,7 @@ function AdminTab({
   onSaveInviteCode: (code: string) => Promise<void>
 }) {
   const [selectedEvent, setSelectedEvent] = useState('')
-  const [participants, setParticipants] = useState<string[]>(PLAYERS)
+  const [participants, setParticipants] = useState<string[]>(roster)
   const [isMajor, setIsMajor] = useState(false)
   const [saving, setSaving] = useState(false)
   const [finalizing, setFinalizing] = useState(false)
@@ -1862,7 +1872,7 @@ function AdminTab({
                     </div>
                   ))}
                   {/* Players not yet in the draft */}
-                  {PLAYERS.filter(p => !participants.includes(p)).map((p) => (
+                  {roster.filter(p => !participants.includes(p)).map((p) => (
                     <div key={p} style={{
                       display: 'flex', alignItems: 'center', gap: 8,
                       padding: '8px 12px', borderRadius: 8,
@@ -1975,7 +1985,7 @@ function AdminTab({
                   <div className="form-group">
                     <label className="form-label">Select Player</label>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                      {PLAYERS.filter(p => picks.some(pk => pk.player_name === p)).map((p) => (
+                      {roster.filter(p => picks.some(pk => pk.player_name === p)).map((p) => (
                         <button
                           key={p}
                           onClick={() => { setSwapPlayer(p); setSwapPickId(null); setSwapPickGolfer(''); setSwapSearch('') }}
@@ -2078,9 +2088,9 @@ function AdminTab({
             <div className="card-header"><div className="card-title">Payout Rules</div></div>
             <div className="card-body">
               {[
-                ['🏆 Lowest Total Strokes', `$${PAYOUT_RULES.lowestStrokes} from each other player`],
-                ['🎯 Outright Tournament Winner', `$${PAYOUT_RULES.outrightWinner} from each other player`],
-                ['🔝 Top 3 Golfer (incl. ties)', `$${PAYOUT_RULES.top3} from each other player`],
+                ['🏆 Lowest Total Strokes', `$${leagueRules.scoring.weekly_winner} from each other player`],
+                ['🎯 Outright Tournament Winner', `$${leagueRules.scoring.outright_winner} from each other player`],
+                ['🔝 Top 3 Golfer (incl. ties)', `$${leagueRules.scoring.top3_bonus} from each other player`],
                 ['✂️ Cut Golfer', 'R3 & R4 = average of R1 & R2 (rounded up)'],
                 ['🚫 WD Golfer', 'Remaining rounds filled from last played round'],
               ].map(([rule, desc]) => (
@@ -2098,10 +2108,12 @@ function AdminTab({
 }
 
 // ─── History Tab ──────────────────────────────────────────────────────────────
-function HistoryTab({ history, golferHistory, isAdmin, onDeleteTournament, onEditResult, onDeleteResult }: {
+function HistoryTab({ history, golferHistory, isAdmin, roster, rules, onDeleteTournament, onEditResult, onDeleteResult }: {
   history: any[]
   golferHistory: any[]
   isAdmin: boolean
+  roster: string[]
+  rules: LeagueRules
   onDeleteTournament: (tournamentId: string, moneyByPlayer: Record<string, number>) => Promise<void>
   onEditResult: (tournamentId: string, playerName: string, field: 'total_score' | 'money_won', value: number) => Promise<void>
   onDeleteResult: (tournamentId: string, playerName: string, moneyWon: number) => Promise<void>
@@ -2110,7 +2122,7 @@ function HistoryTab({ history, golferHistory, isAdmin, onDeleteTournament, onEdi
   const [editVal, setEditVal] = useState('')
   const [deleting, setDeleting] = useState<string | null>(null)
   const [subtab, setSubtab] = useState<'tournaments' | 'golfers'>('tournaments')
-  const [selectedPlayer, setSelectedPlayer] = useState<string>(PLAYERS[0])
+  const [selectedPlayer, setSelectedPlayer] = useState<string>(roster[0] ?? '')
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
 
   const toggleRow = (tid: string, player: string) => {
@@ -2176,7 +2188,7 @@ function HistoryTab({ history, golferHistory, isAdmin, onDeleteTournament, onEdi
         <div>
           {/* Player selector */}
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 24 }}>
-            {PLAYERS.map(p => (
+            {roster.map(p => (
               <button key={p} onClick={() => setSelectedPlayer(p)} style={{
                 padding: '8px 18px', borderRadius: 8, border: '1px solid',
                 fontFamily: 'Sora', fontSize: 13, fontWeight: 600, cursor: 'pointer',
@@ -2485,19 +2497,21 @@ function HistoryTab({ history, golferHistory, isAdmin, onDeleteTournament, onEdi
             const tourWinners = standings.filter((s: any) => s.has_winner)
             const top3Players = standings.filter((s: any) => s.has_top3)
 
+            // Payouts from the league rules (majors scale by the multiplier)
+            const mult = h.is_major ? (rules.multipliers?.major ?? 1) : 1
             if (strokeWinner) {
               participants.filter(p => p !== strokeWinner.player).forEach(p => {
-                net[p][strokeWinner.player] += PAYOUT_RULES.lowestStrokes
+                net[p][strokeWinner.player] += rules.scoring.weekly_winner * mult
               })
             }
             tourWinners.forEach((w: any) => {
               participants.filter(p => p !== w.player).forEach(p => {
-                net[p][w.player] += PAYOUT_RULES.outrightWinner
+                net[p][w.player] += rules.scoring.outright_winner * mult
               })
             })
             top3Players.forEach((w: any) => {
               participants.filter(p => p !== w.player).forEach(p => {
-                net[p][w.player] += PAYOUT_RULES.top3
+                net[p][w.player] += rules.scoring.top3_bonus * mult
               })
             })
 
@@ -2779,7 +2793,7 @@ function StatsTab({ history, leagueId }: { history: any[]; leagueId: string }) {
   // ── Merge hardcoded baseline + live Supabase results ──
   // Live results come from finalized tournaments stored in DB (2026+)
   const liveStatsByPlayer: Record<string, { first: number; second: number; third: number; winners: number; top3: number; cut: number; majors: number }> = {}
-  PLAYERS.forEach(p => liveStatsByPlayer[p] = { first: 0, second: 0, third: 0, winners: 0, top3: 0, cut: 0, majors: 0 })
+  LEGACY_PLAYERS.forEach(p => liveStatsByPlayer[p] = { first: 0, second: 0, third: 0, winners: 0, top3: 0, cut: 0, majors: 0 })
 
   const liveMajors: typeof MAJORS_HISTORY = []
 
@@ -2794,7 +2808,7 @@ function StatsTab({ history, leagueId }: { history: any[]; leagueId: string }) {
       liveStatsByPlayer[p].cut += s.golfers_cut || 0
     }
     if (h.money) {
-      for (const p of PLAYERS) {
+      for (const p of LEGACY_PLAYERS) {
         if (!liveStatsByPlayer[p]) continue
         const r = (h.standings || []).find((s: any) => s.player === p)
         if (r?.has_winner) liveStatsByPlayer[p].winners++
@@ -2837,9 +2851,9 @@ function StatsTab({ history, leagueId }: { history: any[]; leagueId: string }) {
 
   // Major wins per player (merged)
   const majorsByPlayer: Record<string, number> = {}
-  PLAYERS.forEach(p => majorsByPlayer[p] = 0)
+  LEGACY_PLAYERS.forEach(p => majorsByPlayer[p] = 0)
   allMajors.forEach(m => {
-    for (const p of PLAYERS) {
+    for (const p of LEGACY_PLAYERS) {
       if (m.winner.includes(p)) majorsByPlayer[p] += m.winner.includes('Tie') ? 0.5 : 1
     }
   })
@@ -3096,16 +3110,16 @@ function StatsTab({ history, leagueId }: { history: any[]; leagueId: string }) {
       {history.length > 0 && (() => {
         // Build H2H: for each pair, count who finished with lower score
         const h2h: Record<string, Record<string, { wins: number; losses: number }>> = {}
-        PLAYERS.forEach(a => {
+        LEGACY_PLAYERS.forEach(a => {
           h2h[a] = {}
-          PLAYERS.forEach(b => { if (a !== b) h2h[a][b] = { wins: 0, losses: 0 } })
+          LEGACY_PLAYERS.forEach(b => { if (a !== b) h2h[a][b] = { wins: 0, losses: 0 } })
         })
 
         for (const tournament of history) {
           const standings = tournament.standings || []
-          for (let i = 0; i < PLAYERS.length; i++) {
-            for (let j = i + 1; j < PLAYERS.length; j++) {
-              const a = PLAYERS[i], b = PLAYERS[j]
+          for (let i = 0; i < LEGACY_PLAYERS.length; i++) {
+            for (let j = i + 1; j < LEGACY_PLAYERS.length; j++) {
+              const a = LEGACY_PLAYERS[i], b = LEGACY_PLAYERS[j]
               const sa = standings.find((s: any) => s.player === a)
               const sb = standings.find((s: any) => s.player === b)
               if (!sa || !sb) continue
@@ -3123,20 +3137,20 @@ function StatsTab({ history, leagueId }: { history: any[]; leagueId: string }) {
                 <thead>
                   <tr style={{ borderBottom: '2px solid var(--border)' }}>
                     <th style={{ padding: '10px 16px', textAlign: 'left', fontFamily: 'DM Mono', fontSize: 10, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Player</th>
-                    {PLAYERS.map(p => (
+                    {LEGACY_PLAYERS.map(p => (
                       <th key={p} style={{ padding: '10px 12px', textAlign: 'center', fontFamily: 'DM Mono', fontSize: 10, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{p}</th>
                     ))}
                     <th style={{ padding: '10px 12px', textAlign: 'center', fontFamily: 'DM Mono', fontSize: 10, color: 'var(--green)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Overall</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {PLAYERS.map((a, ai) => {
-                    const totalWins = PLAYERS.filter(b => b !== a).reduce((s, b) => s + h2h[a][b].wins, 0)
-                    const totalGames = PLAYERS.filter(b => b !== a).reduce((s, b) => s + h2h[a][b].wins + h2h[a][b].losses, 0)
+                  {LEGACY_PLAYERS.map((a, ai) => {
+                    const totalWins = LEGACY_PLAYERS.filter(b => b !== a).reduce((s, b) => s + h2h[a][b].wins, 0)
+                    const totalGames = LEGACY_PLAYERS.filter(b => b !== a).reduce((s, b) => s + h2h[a][b].wins + h2h[a][b].losses, 0)
                     return (
                       <tr key={a} style={{ borderTop: '1px solid var(--border)', background: ai % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.015)' }}>
                         <td style={{ padding: '12px 16px', fontWeight: 700 }}>{a}</td>
-                        {PLAYERS.map(b => {
+                        {LEGACY_PLAYERS.map(b => {
                           if (a === b) return <td key={b} style={{ padding: '12px 12px', textAlign: 'center', background: 'var(--surface2)', color: 'var(--text-dim)' }}>—</td>
                           const rec = h2h[a][b]
                           const winPct = rec.wins + rec.losses > 0 ? rec.wins / (rec.wins + rec.losses) : 0.5
@@ -3173,12 +3187,12 @@ function StatsTab({ history, leagueId }: { history: any[]; leagueId: string }) {
 
         // Running totals per tournament
         const runningTotals: Record<string, number[]> = {}
-        PLAYERS.forEach(p => runningTotals[p] = [])
+        LEGACY_PLAYERS.forEach(p => runningTotals[p] = [])
         const sortedByDate = [...moneyByTournament].sort((a, b) => a.date?.localeCompare(b.date))
         let cumulative: Record<string, number> = {}
-        PLAYERS.forEach(p => cumulative[p] = 0)
+        LEGACY_PLAYERS.forEach(p => cumulative[p] = 0)
         for (const t of sortedByDate) {
-          PLAYERS.forEach(p => {
+          LEGACY_PLAYERS.forEach(p => {
             cumulative[p] = (cumulative[p] || 0) + (t.money[p] || 0)
             runningTotals[p].push(cumulative[p])
           })
@@ -3186,9 +3200,9 @@ function StatsTab({ history, leagueId }: { history: any[]; leagueId: string }) {
 
         // Find closest pairs: smallest average gap in running totals
         const rivals: { a: string; b: string; avgGap: number; currentGap: number }[] = []
-        for (let i = 0; i < PLAYERS.length; i++) {
-          for (let j = i + 1; j < PLAYERS.length; j++) {
-            const a = PLAYERS[i], b = PLAYERS[j]
+        for (let i = 0; i < LEGACY_PLAYERS.length; i++) {
+          for (let j = i + 1; j < LEGACY_PLAYERS.length; j++) {
+            const a = LEGACY_PLAYERS[i], b = LEGACY_PLAYERS[j]
             const gaps = runningTotals[a].map((v, k) => Math.abs(v - runningTotals[b][k]))
             const avgGap = gaps.reduce((s, v) => s + v, 0) / gaps.length
             const currentGap = Math.abs((cumulative[a] || 0) - (cumulative[b] || 0))
@@ -3254,13 +3268,13 @@ function SeasonRecapTab({ history, golferHistory, seasonMoney, leagueId }: {
     </div>
   )
 
-  // Scope players to this league. For the founding league we keep PLAYERS
+  // Scope players to this league. For the founding league we keep LEGACY_PLAYERS
   // (hardcoded Eric/Max/Hayden/Andrew/Brennan/Chase) so the legacy roster is
   // preserved. For any other league we derive players from the league's own
   // history so no founding-league names or stats leak in.
   const isFoundingLeague = leagueId === FOUNDING_LEAGUE_ID
   const leaguePlayers = isFoundingLeague
-    ? PLAYERS
+    ? LEGACY_PLAYERS
     : (Array.from(new Set(
         history.flatMap(h => (h.standings || []).map((s: any) => s.player))
       )) as string[])
@@ -3512,6 +3526,7 @@ export default function App() {
   const [leagueRules, setLeagueRules] = useState<LeagueRules>(DEFAULT_RULES)
   const [inviteCode, setInviteCode] = useState<string>('')
   const [commissionerId, setCommissionerId] = useState<string | null>(null)
+  const [members, setMembers] = useState<LeagueMember[]>([])
   const [guestMode, setGuestMode] = useState(false)
 
   // Admin if: super-admin flag on profile (DB-controlled, backfilled by
@@ -3709,9 +3724,10 @@ export default function App() {
       .then(r => r.json()).catch(() => null)
 
     if (leagueDataRes && !leagueDataRes.error) {
-      const { activeTournament, seasonMoney: sm, results, golferResults, picks: p, inviteCode: ic, commissionerId: cid } = leagueDataRes
+      const { activeTournament, seasonMoney: sm, results, golferResults, picks: p, inviteCode: ic, commissionerId: cid, members: mem } = leagueDataRes
       if (ic != null) setInviteCode(ic)
       if (cid !== undefined) setCommissionerId(cid)
+      if (Array.isArray(mem)) setMembers(mem)
 
       if (sm) setSeasonMoney(sm)
 
@@ -3819,10 +3835,17 @@ export default function App() {
   }, [currentPlayer])
 
   // ── Computed ──
-  const participants = tournament?.draft_order ?? []
+  // Active-week scoring uses the tournament's frozen rules_snapshot so a
+  // mid-season rules edit can never retroactively change a week in play.
+  const effectiveRules = mergeRules(((tournament as any)?.rules_snapshot as Partial<LeagueRules>) ?? leagueRules)
+  const roster = getLeagueRoster({
+    leagueId,
+    members,
+    draftOrder: tournament?.draft_order,
+  })
   const pickMap = buildPickMap(picks)
-  const standings = computeStandings(liveData, pickMap, participants.length > 0 ? participants : undefined)
-  const weekMoney = computeMoney(standings, participants.length > 0 ? participants : undefined, leagueRules)
+  const standings = computeStandings(liveData, pickMap, roster, effectiveRules)
+  const weekMoney = computeMoney(standings, roster, effectiveRules, (tournament as any)?.is_major ?? false)
 
   // ── Handlers ──
   const handleLogout = async () => {
@@ -3905,19 +3928,8 @@ export default function App() {
     }
     await supabase.from('golfer_results').upsert(golferRows, { onConflict: 'tournament_id,player_name,golfer_name' })
 
-    // Update season money — scoped to THIS league and this week's actual
-    // participants (never the hardcoded founding roster).
-    for (const s of standings) {
-      const player = s.player
-      const delta = money[player] || 0
-      const current = seasonMoney.find((sm) => sm.player_name === player)?.total || 0
-      await supabase.from('season_money').upsert({
-        league_id: leagueId,
-        player_name: player,
-        total: current + delta,
-        updated_at: new Date().toISOString(),
-      }, { onConflict: 'league_id,player_name' })
-    }
+    // Season money is derived from results server-side — no running-total
+    // writes needed (the drift-prone season_money table is display-legacy).
 
     await supabase.from('tournaments').update({ status: 'finalized' }).eq('id', tournament.id)
     setTournament(null)
@@ -3943,20 +3955,8 @@ export default function App() {
     await loadData()
   }
 
-  const handleDeleteTournament = async (tournamentId: string, moneyByPlayer: Record<string, number>) => {
-    // Reverse season money for this tournament (league-scoped)
-    for (const player of Object.keys(moneyByPlayer)) {
-      const delta = moneyByPlayer[player] || 0
-      if (delta === 0) continue
-      const current = seasonMoney.find((sm) => sm.player_name === player)?.total || 0
-      await supabase.from('season_money').upsert({
-        league_id: leagueId,
-        player_name: player,
-        total: current - delta,
-        updated_at: new Date().toISOString(),
-      }, { onConflict: 'league_id,player_name' })
-    }
-    // Delete results and tournament (picks cascade-delete)
+  const handleDeleteTournament = async (tournamentId: string, _moneyByPlayer: Record<string, number>) => {
+    // Season money is derived from results, so deleting the rows is enough.
     await supabase.from('results').delete().eq('tournament_id', tournamentId)
     await supabase.from('tournaments').delete().eq('id', tournamentId)
     await loadData()
@@ -3971,7 +3971,6 @@ export default function App() {
     await supabase.from('golfer_results').delete()
       .eq('tournament_id', tournamentId)
       .eq('player_name', playerName)
-    await recalcSeasonMoney()
     await loadData()
   }
 
@@ -3980,32 +3979,8 @@ export default function App() {
       .update({ [field]: value })
       .eq('tournament_id', tournamentId)
       .eq('player_name', playerName)
-
-    if (field === 'money_won') await recalcSeasonMoney()
+    // Season money is derived from results server-side — reload picks it up.
     await loadData()
-  }
-
-  // Rebuild this league's season totals from its results rows. Previously this
-  // read results across EVERY visible league and wrote totals under the
-  // hardcoded founding roster's names — cross-league money corruption.
-  const recalcSeasonMoney = async () => {
-    const { data: leagueResults } = await supabase
-      .from('results')
-      .select('player_name, money_won, tournaments!inner(league_id)')
-      .eq('tournaments.league_id', leagueId)
-    if (!leagueResults) return
-    const totals: Record<string, number> = {}
-    for (const r of leagueResults as any[]) {
-      totals[r.player_name] = (totals[r.player_name] || 0) + (r.money_won || 0)
-    }
-    for (const player of Object.keys(totals)) {
-      await supabase.from('season_money').upsert({
-        league_id: leagueId,
-        player_name: player,
-        total: totals[player],
-        updated_at: new Date().toISOString(),
-      }, { onConflict: 'league_id,player_name' })
-    }
   }
 
   const handleSaveRules = async (newRules: Partial<LeagueRules>) => {
@@ -4097,6 +4072,7 @@ export default function App() {
         isMasters={isMasters}
         leagueName={leagueName}
         onClaimPlayer={() => setShowClaimModal(true)}
+        showClaim={!!user && leagueId === FOUNDING_LEAGUE_ID && !LEGACY_PLAYERS.includes(currentPlayer ?? '')}
       />
       {showClaimModal && user && (
         <ClaimPlayerModal
@@ -4117,14 +4093,14 @@ export default function App() {
           <SkeletonScreen />
         ) : (
           <div key={tabKey} className="tab-content">
-            {tab === 'live'    && <LeaderboardTab tournament={tournament} standings={standings} liveData={liveData} pickMap={pickMap} loading={loading} lastUpdated={lastUpdated} onRefresh={fetchScores} money={weekMoney} flashMap={flashMap} />}
-            {tab === 'picks'   && <PicksTab standings={standings} pickMap={pickMap} liveData={liveData} tournament={tournament} />}
-            {tab === 'money'   && <MoneyTab seasonMoney={seasonMoney} weekMoney={weekMoney} tournament={tournament} history={history} />}
-            {tab === 'draft'   && <DraftTab tournament={tournament} picks={picks} liveData={liveData} currentPlayer={currentPlayer ?? ''} isAdmin={isAdmin} onPickMade={handlePickMade} />}
-            {tab === 'history' && <HistoryTab history={history} golferHistory={golferHistory} isAdmin={isAdmin} onDeleteTournament={handleDeleteTournament} onEditResult={handleEditResult} onDeleteResult={handleDeleteResult} />}
+            {tab === 'live'    && <LeaderboardTab tournament={tournament} standings={standings} roster={roster} liveData={liveData} pickMap={pickMap} loading={loading} lastUpdated={lastUpdated} onRefresh={fetchScores} money={weekMoney} flashMap={flashMap} />}
+            {tab === 'picks'   && <PicksTab standings={standings} pickMap={pickMap} liveData={liveData} tournament={tournament} roster={roster} />}
+            {tab === 'money'   && <MoneyTab seasonMoney={seasonMoney} weekMoney={weekMoney} tournament={tournament} history={history} roster={roster} rules={effectiveRules} />}
+            {tab === 'draft'   && <DraftTab tournament={tournament} picks={picks} liveData={liveData} currentPlayer={currentPlayer ?? ''} isAdmin={isAdmin} onPickMade={handlePickMade} picksPerPlayer={effectiveRules.picks_per_player} />}
+            {tab === 'history' && <HistoryTab history={history} golferHistory={golferHistory} isAdmin={isAdmin} roster={roster} rules={leagueRules} onDeleteTournament={handleDeleteTournament} onEditResult={handleEditResult} onDeleteResult={handleDeleteResult} />}
             {tab === 'stats'   && <StatsTab history={history} leagueId={leagueId} />}
             {tab === 'recap'   && <SeasonRecapTab history={history} golferHistory={golferHistory} seasonMoney={seasonMoney} leagueId={leagueId} />}
-            {tab === 'admin'   && isAdmin && <AdminTab tournament={tournament} standings={standings} weekMoney={weekMoney} picks={picks} liveData={liveData} leagueId={leagueId} inviteCode={inviteCode} leagueRules={leagueRules} onSetupTournament={handleSetupTournament} onFinalize={handleFinalize} onClearTournament={handleClearTournament} onClearPicks={handleClearPicks} onSwapGolfer={handleSwapGolfer} onSaveRules={handleSaveRules} onSaveInviteCode={handleSaveInviteCode} />}
+            {tab === 'admin'   && isAdmin && <AdminTab tournament={tournament} standings={standings} weekMoney={weekMoney} picks={picks} liveData={liveData} leagueId={leagueId} inviteCode={inviteCode} leagueRules={leagueRules} roster={roster} onSetupTournament={handleSetupTournament} onFinalize={handleFinalize} onClearTournament={handleClearTournament} onClearPicks={handleClearPicks} onSwapGolfer={handleSwapGolfer} onSaveRules={handleSaveRules} onSaveInviteCode={handleSaveInviteCode} />}
           </div>
         )}
       </main>

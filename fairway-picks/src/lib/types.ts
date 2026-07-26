@@ -1,13 +1,3 @@
-export type Player = 'Eric' | 'Max' | 'Hayden' | 'Andrew' | 'Brennan' | 'Chase'
-
-export const PLAYERS: Player[] = ['Eric', 'Max', 'Hayden', 'Andrew', 'Brennan', 'Chase']
-
-export const PAYOUT_RULES = {
-  lowestStrokes: 10,  // per other player
-  outrightWinner: 10, // per other player
-  top3: 5,            // per other player
-}
-
 export interface Tournament {
   id: string
   name: string
@@ -15,6 +5,9 @@ export interface Tournament {
   date: string
   status: 'upcoming' | 'active' | 'finalized'
   draft_order: string[]
+  is_major?: boolean
+  /** Frozen copy of the league rules at activation time. */
+  rules_snapshot?: Record<string, unknown> | null
 }
 
 export interface Pick {
@@ -60,4 +53,5 @@ export interface Result {
 export interface SeasonMoney {
   player_name: string
   total: number
+  league_id?: string
 }
