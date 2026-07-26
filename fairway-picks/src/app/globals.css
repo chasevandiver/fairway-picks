@@ -678,9 +678,13 @@ body {
   .sidebar-overlay { display: block !important; }
   .main-content { margin-left: 0; padding: 12px; padding-top: 16px; padding-bottom: 90px; }
 
-  /* Show bottom tab bar, hide hamburger */
+  /* Show bottom tab bar AND the hamburger — the bottom bar only covers the
+     tabs; the sidebar drawer (opened by the hamburger) is the only way to
+     reach Logout, Switch League, and league settings on mobile. This was
+     display:none, making all of those unreachable on phones. */
   .bottom-tab-bar { display: flex; }
-  .hamburger-btn { display: none !important; }
+  .hamburger-btn { display: flex; }
+  .main-content { padding-top: 64px; }
 
   /* Page headers */
   .page-header { margin-bottom: 16px; gap: 8px; }
@@ -1732,4 +1736,29 @@ html, body {
 .toast-success { border-color: rgba(74,222,128,0.45); }
 @media (min-width: 769px) {
   .toast { bottom: 24px; }
+}
+
+/* ── Accessibility ── */
+/* Visible keyboard focus everywhere (previously no focus styles at all). */
+:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+button:focus-visible,
+a:focus-visible,
+input:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
+}
+
+/* Honor reduced-motion preferences — the app is animation-heavy
+   (shimmer, pulse, ticker, flash, reveal-on-scroll). */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
