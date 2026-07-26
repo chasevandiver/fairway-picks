@@ -83,6 +83,8 @@ export function ExpandablePlayerCard({
     <div style={{ marginBottom: 8 }}>
       <button
         onClick={() => setExpanded(!expanded)}
+        aria-expanded={expanded}
+        aria-label={`${standing.player} scorecard, ${expanded ? 'collapse' : 'expand'}`}
         style={{
           width: '100%',
           padding: '12px 16px',

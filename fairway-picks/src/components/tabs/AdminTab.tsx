@@ -554,6 +554,7 @@ export function AdminTab({
                             display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0,
                           }}
                           title="Move up"
+                          aria-label={`Move ${p} up in draft order`}
                         >▲</button>
                         <button
                           type="button"
@@ -566,6 +567,7 @@ export function AdminTab({
                             display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0,
                           }}
                           title="Move down"
+                          aria-label={`Move ${p} down in draft order`}
                         >▼</button>
                       </div>
                       <button
@@ -576,6 +578,7 @@ export function AdminTab({
                           color: 'var(--red)', cursor: 'pointer', fontSize: 11, padding: '2px 6px',
                         }}
                         title="Remove from draft"
+                        aria-label={`Remove ${p} from draft`}
                       >✕</button>
                     </div>
                   ))}
@@ -608,17 +611,21 @@ export function AdminTab({
               </div>
               <div className="form-group">
                 <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
-                  <div
+                  <button
+                    type="button"
+                    role="checkbox"
+                    aria-checked={isMajor}
+                    aria-label="Major Championship"
                     onClick={() => setIsMajor(!isMajor)}
                     style={{
                       width: 20, height: 20, borderRadius: 4, border: `2px solid ${isMajor ? 'var(--green)' : 'var(--border-bright)'}`,
                       background: isMajor ? 'var(--green)' : 'transparent',
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      cursor: 'pointer', flexShrink: 0, transition: 'all 0.15s',
+                      cursor: 'pointer', flexShrink: 0, transition: 'all 0.15s', padding: 0,
                     }}
                   >
                     {isMajor && <span style={{ color: '#0a0c0f', fontSize: 13, fontWeight: 900, lineHeight: 1 }}>✓</span>}
-                  </div>
+                  </button>
                   <div>
                     <div style={{ fontWeight: 600, fontSize: 14 }}>⛳ Major Championship</div>
                     <div style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 2 }}>Masters, PGA Championship, US Open, or The Open</div>

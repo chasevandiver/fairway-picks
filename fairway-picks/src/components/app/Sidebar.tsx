@@ -37,7 +37,7 @@ export function Sidebar({
         />
       )}
     <div className={`sidebar${isOpen ? ' open' : ''}`}>
-      <button className="sidebar-close-btn" onClick={onClose} style={{ display: 'none' }}>✕</button>
+      <button className="sidebar-close-btn" onClick={onClose} style={{ display: 'none' }} aria-label="Close menu">✕</button>
       <div className="sidebar-logo">
         {isMasters ? (
           <>
@@ -137,7 +137,8 @@ export function Sidebar({
           <button
             onClick={onLogout}
             style={{ marginLeft: 'auto', background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 16 }}
-            title="Switch player"
+            title="Log out"
+            aria-label="Log out"
           >↩</button>
         </div>
         )}

@@ -123,26 +123,35 @@ export function DraftTab({
                         </div>
                       )}
                       {filteredGolfers.slice(0, 50).map((g) => (
-                        <div
+                        <button
                           key={g.name}
+                          type="button"
                           className="golfer-option"
-                          onClick={() => !saving && handlePick(g.name)}
+                          disabled={saving}
+                          onClick={() => handlePick(g.name)}
+                          style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', font: 'inherit', color: 'inherit' }}
                         >
                           <div>
                             <div style={{ fontWeight: 500 }}>{g.name}</div>
                             <div className="golfer-meta">#{g.position} · {toRelScore(g.score)}</div>
                           </div>
                           <span className="badge badge-green">Pick</span>
-                        </div>
+                        </button>
                       ))}
                       {search && !filteredGolfers.find((g) => g.name.toLowerCase() === search.toLowerCase()) && (
-                        <div className="golfer-option" onClick={() => !saving && handlePick(search)}>
+                        <button
+                          type="button"
+                          className="golfer-option"
+                          disabled={saving}
+                          onClick={() => handlePick(search)}
+                          style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', font: 'inherit', color: 'inherit' }}
+                        >
                           <div>
                             <div style={{ fontWeight: 500 }}>{search}</div>
                             <div className="golfer-meta">Custom entry</div>
                           </div>
                           <span className="badge badge-gold">+ Add</span>
-                        </div>
+                        </button>
                       )}
                     </div>
                   </>
