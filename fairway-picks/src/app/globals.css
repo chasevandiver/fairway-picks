@@ -1706,3 +1706,30 @@ html, body {
   .fp-landing .hero-actions .btn-primary,
   .fp-landing .hero-actions .btn-ghost { width: 100%; justify-content: center; }
 }
+
+/* ── Toast notifications ── */
+.toast {
+  position: fixed;
+  bottom: calc(76px + env(safe-area-inset-bottom));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 300;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: min(92vw, 420px);
+  padding: 11px 16px;
+  border-radius: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border-bright);
+  color: var(--text);
+  font-size: 13px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.45);
+  cursor: pointer;
+  animation: slideDown 0.25s cubic-bezier(0.16,1,0.3,1) both;
+}
+.toast-error   { border-color: rgba(248,113,113,0.45); }
+.toast-success { border-color: rgba(74,222,128,0.45); }
+@media (min-width: 769px) {
+  .toast { bottom: 24px; }
+}

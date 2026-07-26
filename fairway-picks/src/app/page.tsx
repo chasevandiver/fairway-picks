@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { buildPickMap, computeStandings, computeMoney } from '@/lib/scoring'
@@ -23,6 +23,7 @@ import { AdminTab } from '@/components/tabs/AdminTab'
 import { HistoryTab } from '@/components/tabs/HistoryTab'
 import { StatsTab } from '@/components/tabs/StatsTab'
 import { SeasonRecapTab } from '@/components/tabs/SeasonRecapTab'
+import { Toast, type ToastState } from '@/components/app/Toast'
 
 export default function App() {
   const supabase = createClient()
@@ -49,7 +50,6 @@ export default function App() {
   const [tournament, setTournament] = useState<Tournament | null>(null)
   const [picks, setPicks] = useState<Pick[]>([])
   const [liveData, setLiveData] = useState<GolferScore[]>([])
-  const [prevScores, setPrevScores] = useState<Record<string, number | null>>({})
   const [flashMap, setFlashMap] = useState<Record<string, 'up' | 'down'>>({})
   const [seasonMoney, setSeasonMoney] = useState<SeasonMoney[]>([])
   const [history, setHistory] = useState<any[]>([])
@@ -83,29 +83,20 @@ export default function App() {
   const isMasters = !!(tournament?.name?.toLowerCase().includes('masters'))
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [showClaimModal, setShowClaimModal] = useState(false)
+  const [toast, setToast] = useState<ToastState | null>(null)
   // Tracks whether we've completed the initial profile load for the current user.
   // Used to prevent TOKEN_REFRESHED events from clearing already-loaded state.
   const profileLoadedRef = useRef(false)
-  // Holds league id+name passed via URL when navigating from /create.
-  // Set synchronously before the auth effect's async callbacks run, so
-  // whichever auth path fires first can consume it exactly once.
-  const pendingNewLeagueRef = useRef<{ id: string; name: string } | null>(null)
   // Dedupes /api/init-user across duplicate auth events. supabase-js refires
   // SIGNED_IN on tab focus, INITIAL_SESSION at mount, etc. — without this
   // guard init-user was being hit several times per second per session.
   const initedUserIdRef = useRef<string | null>(null)
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // ── Read new-league URL params from /create navigation (runs before auth callbacks) ──
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
-    const id = params.get('newLeague')
-    const name = params.get('newLeagueName')
-    if (id) {
-      pendingNewLeagueRef.current = { id, name: name ? decodeURIComponent(name) : 'My League' }
-      // Persist so subsequent page loads (refreshes) still open this league.
-      localStorage.setItem('activeLeagueId', id)
-      window.history.replaceState(null, '', window.location.pathname)
-    }
+  const notify = useCallback((message: string, type: ToastState['type'] = 'error') => {
+    setToast({ message, type })
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
+    toastTimerRef.current = setTimeout(() => setToast(null), 5000)
   }, [])
 
   // Apply Masters theme to body when Masters tournament is active
@@ -172,13 +163,7 @@ export default function App() {
         setUserProfile(profile)
         setCurrentPlayer(profile.display_name)
         setGuestMode(false)
-        const pl = pendingNewLeagueRef.current
-        if (pl) {
-          pendingNewLeagueRef.current = null
-          setLeagueId(pl.id)
-          setLeagueName(pl.name)
-          setCommissionerId(u.id)
-        } else if (membership) {
+        if (membership) {
           setLeagueId(membership.league_id)
           localStorage.setItem('activeLeagueId', membership.league_id)
           const l = membership.leagues as any
@@ -317,10 +302,13 @@ export default function App() {
       }
 
       setGolferHistory(golferResults ?? [])
+    } else {
+      // A failed load used to be indistinguishable from an empty league.
+      notify("Couldn't load league data. Pull to refresh or try again shortly.")
     }
 
     setDataLoaded(true)
-  }, [leagueId])
+  }, [leagueId, notify, supabase])
 
   useEffect(() => {
     // Only load data once we have a real leagueId — prevents requests
@@ -369,28 +357,46 @@ export default function App() {
   }, [tournament, fetchScores])
 
   // ── Realtime subscriptions ──
+  // Filtered to THIS league (and the active tournament's picks) — the old
+  // unfiltered channel made every connected client of every league refetch on
+  // any league's draft pick. Keyed on leagueId so a league switch resubscribes
+  // with a fresh loadData closure.
   useEffect(() => {
-    if (!currentPlayer) return
-    const channel = supabase
-      .channel('picks-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'picks' }, () => loadData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'tournaments' }, () => loadData())
-      .subscribe()
+    if (!leagueId || (!currentPlayer && !guestMode)) return
+    const channel = supabase.channel(`league-${leagueId}`)
+    channel.on('postgres_changes',
+      { event: '*', schema: 'public', table: 'tournaments', filter: `league_id=eq.${leagueId}` },
+      () => loadData())
+    if (tournament?.id) {
+      channel.on('postgres_changes',
+        { event: '*', schema: 'public', table: 'picks', filter: `tournament_id=eq.${tournament.id}` },
+        () => loadData())
+    }
+    channel.subscribe()
     return () => { supabase.removeChannel(channel) }
-  }, [currentPlayer])
+  }, [leagueId, currentPlayer, guestMode, tournament?.id, loadData, supabase])
 
-  // ── Computed ──
+  // ── Computed (memoized — these recompute over the full field of ~150
+  // golfers and previously ran on every render) ──
   // Active-week scoring uses the tournament's frozen rules_snapshot so a
   // mid-season rules edit can never retroactively change a week in play.
-  const effectiveRules = mergeRules(((tournament as any)?.rules_snapshot as Partial<LeagueRules>) ?? leagueRules)
-  const roster = getLeagueRoster({
-    leagueId,
-    members,
-    draftOrder: tournament?.draft_order,
-  })
-  const pickMap = buildPickMap(picks)
-  const standings = computeStandings(liveData, pickMap, roster, effectiveRules)
-  const weekMoney = computeMoney(standings, roster, effectiveRules, (tournament as any)?.is_major ?? false)
+  const effectiveRules = useMemo(
+    () => mergeRules(((tournament as any)?.rules_snapshot as Partial<LeagueRules>) ?? leagueRules),
+    [tournament, leagueRules]
+  )
+  const roster = useMemo(
+    () => getLeagueRoster({ leagueId, members, draftOrder: tournament?.draft_order }),
+    [leagueId, members, tournament]
+  )
+  const pickMap = useMemo(() => buildPickMap(picks), [picks])
+  const standings = useMemo(
+    () => computeStandings(liveData, pickMap, roster, effectiveRules),
+    [liveData, pickMap, roster, effectiveRules]
+  )
+  const weekMoney = useMemo(
+    () => computeMoney(standings, roster, effectiveRules, (tournament as any)?.is_major ?? false),
+    [standings, roster, effectiveRules, tournament]
+  )
 
   // ── Handlers ──
   const handleLogout = async () => {
@@ -415,29 +421,39 @@ export default function App() {
       await supabase.from('picks').delete().eq('tournament_id', oldT.id)
       await supabase.from('tournaments').update({ status: 'finalized' }).eq('id', oldT.id)
     }
-    const { data: t } = await supabase.from('tournaments').insert({ ...data, status: 'active', league_id: leagueId, rules_snapshot: leagueRules }).select().single()
-    if (t) setTournament(t)
+    const { data: t, error } = await supabase.from('tournaments').insert({ ...data, status: 'active', league_id: leagueId, rules_snapshot: leagueRules }).select().single()
+    if (error || !t) {
+      notify('Could not create the tournament. Please try again.')
+      return
+    }
+    setTournament(t)
     setPicks([])
     await loadData()
+    notify(`${t.name} is live — draft away!`, 'success')
   }
 
   const handlePickMade = async (golferName: string, playerName: string) => {
     if (!tournament) return
     const playerPicks = picks.filter((p) => p.player_name === playerName)
     const pickOrder = playerPicks.length + 1
-    await supabase.from('picks').insert({
+    const { error } = await supabase.from('picks').insert({
       tournament_id: tournament.id,
       player_name: playerName,
       golfer_name: golferName,
       pick_order: pickOrder,
     })
+    if (error) {
+      notify(error.code === '23505'
+        ? 'That pick was already made — the board just refreshed.'
+        : 'Pick failed to save. Check your connection and try again.')
+    }
     await loadData()
   }
 
   const handleFinalize = async () => {
     if (!tournament || !standings.length) return
     if (!isLiveData) {
-      alert('Live scores are unavailable right now (showing placeholder data). Finalizing is disabled until the real feed is back — try again in a few minutes.')
+      notify('Live scores are unavailable (showing placeholder data). Finalizing is disabled until the real feed is back.')
       return
     }
     const money = weekMoney
@@ -453,7 +469,11 @@ export default function App() {
       money_won: money[s.player] || 0,
       golfers_cut: s.golfers.filter((g: any) => g.status === 'cut' || g.status === 'wd').length,
     }))
-    await supabase.from('results').upsert(resultRows, { onConflict: 'tournament_id,player_name' })
+    const { error: resultsErr } = await supabase.from('results').upsert(resultRows, { onConflict: 'tournament_id,player_name' })
+    if (resultsErr) {
+      notify('Finalize failed while saving results — nothing was recorded. Try again.')
+      return
+    }
 
     // Save individual golfer results
     const golferRows: any[] = []
@@ -471,19 +491,26 @@ export default function App() {
         })
       }
     }
-    await supabase.from('golfer_results').upsert(golferRows, { onConflict: 'tournament_id,player_name,golfer_name' })
+    const { error: golferErr } = await supabase.from('golfer_results').upsert(golferRows, { onConflict: 'tournament_id,player_name,golfer_name' })
+    if (golferErr) notify('Results saved, but the golfer log failed to record.')
 
     // Season money is derived from results server-side — no running-total
     // writes needed (the drift-prone season_money table is display-legacy).
 
-    await supabase.from('tournaments').update({ status: 'finalized' }).eq('id', tournament.id)
+    const { error: finalErr } = await supabase.from('tournaments').update({ status: 'finalized' }).eq('id', tournament.id)
+    if (finalErr) {
+      notify('Results saved but the tournament could not be marked finalized. Try finalizing again.')
+      return
+    }
     setTournament(null)
     await loadData()
+    notify('Week finalized and money recorded. 🏆', 'success')
   }
 
   const handleClearTournament = async () => {
     if (!tournament) return
-    await supabase.from('tournaments').delete().eq('id', tournament.id)
+    const { error } = await supabase.from('tournaments').delete().eq('id', tournament.id)
+    if (error) { notify('Could not delete the tournament.'); return }
     setTournament(null)
     setPicks([])
     await loadData()
@@ -491,47 +518,58 @@ export default function App() {
 
   const handleClearPicks = async () => {
     if (!tournament) return
-    await supabase.from('picks').delete().eq('tournament_id', tournament.id)
+    const { error } = await supabase.from('picks').delete().eq('tournament_id', tournament.id)
+    if (error) { notify('Could not clear picks.'); return }
     setPicks([])
   }
 
   const handleSwapGolfer = async (pickId: string, newGolferName: string) => {
-    await supabase.from('picks').update({ golfer_name: newGolferName }).eq('id', pickId)
+    const { error } = await supabase.from('picks').update({ golfer_name: newGolferName }).eq('id', pickId)
+    if (error) notify('Swap failed to save.')
     await loadData()
   }
 
   const handleDeleteTournament = async (tournamentId: string, _moneyByPlayer: Record<string, number>) => {
     // Season money is derived from results, so deleting the rows is enough.
-    await supabase.from('results').delete().eq('tournament_id', tournamentId)
-    await supabase.from('tournaments').delete().eq('id', tournamentId)
+    const { error: rErr } = await supabase.from('results').delete().eq('tournament_id', tournamentId)
+    const { error: tErr } = await supabase.from('tournaments').delete().eq('id', tournamentId)
+    if (rErr || tErr) notify('Delete did not fully complete — refresh and check the history tab.')
     await loadData()
   }
 
   const handleDeleteResult = async (tournamentId: string, playerName: string, moneyWon: number) => {
-    // Delete the result row
-    await supabase.from('results').delete()
+    const { error: rErr } = await supabase.from('results').delete()
       .eq('tournament_id', tournamentId)
       .eq('player_name', playerName)
-    // Delete golfer results for this player in this tournament
-    await supabase.from('golfer_results').delete()
+    const { error: gErr } = await supabase.from('golfer_results').delete()
       .eq('tournament_id', tournamentId)
       .eq('player_name', playerName)
+    if (rErr || gErr) notify('Delete did not fully complete — refresh and check the history tab.')
     await loadData()
   }
 
   const handleEditResult = async (tournamentId: string, playerName: string, field: 'total_score' | 'money_won', value: number) => {
-    await supabase.from('results')
+    const { error } = await supabase.from('results')
       .update({ [field]: value })
       .eq('tournament_id', tournamentId)
       .eq('player_name', playerName)
+    if (error) notify('Edit failed to save.')
     // Season money is derived from results server-side — reload picks it up.
     await loadData()
   }
 
   const handleSaveRules = async (newRules: Partial<LeagueRules>) => {
     const merged = mergeRules(newRules)
-    await supabase.from('leagues').update({ rules: merged }).eq('id', leagueId)
+    // Commissioner-only under RLS. (Pre-008 this silently failed for the
+    // founding league — commissioner_id was NULL — so surfacing the error
+    // matters.)
+    const { error } = await supabase.from('leagues').update({ rules: merged }).eq('id', leagueId)
+    if (error) {
+      notify('Could not save rules. Only the commissioner can change them.')
+      return
+    }
     setLeagueRules(merged)
+    notify('League rules saved.', 'success')
   }
 
   const handleSaveInviteCode = async (code: string) => {
@@ -543,12 +581,13 @@ export default function App() {
       .update({ invite_code: cleaned })
       .eq('id', leagueId)
     if (error) {
-      alert(error.code === '23505'
+      notify(error.code === '23505'
         ? 'That invite code is already taken — try another.'
         : 'Could not save the invite code. Only the commissioner can change it.')
       return
     }
     setInviteCode(cleaned)
+    notify('Invite code updated.', 'success')
   }
 
   if (!bootstrapped) return <div className="loading-screen"><div className="spin" style={{ fontSize: 32 }}>⛳</div>Loading…</div>
@@ -563,14 +602,6 @@ export default function App() {
         // is_admin comes from the server (init-user), never from the client.
         setUserProfile({ display_name: displayName, is_admin: false })
         setCurrentPlayer(displayName)
-        const pl = pendingNewLeagueRef.current
-        if (pl) {
-          pendingNewLeagueRef.current = null
-          setLeagueId(pl.id)
-          setLeagueName(pl.name)
-          setCommissionerId(user.id)
-          return
-        }
         const { data: { session } } = await supabase.auth.getSession()
         if (!session) return
         const storedLeague = localStorage.getItem('activeLeagueId')
@@ -599,6 +630,7 @@ export default function App() {
 
   return (
     <div className="app-shell">
+      <Toast toast={toast} onDismiss={() => setToast(null)} />
       {/* Hamburger button — mobile only, hide when sidebar open */}
       {!sidebarOpen && (
         <button className="hamburger-btn" onClick={() => setSidebarOpen(true)}>

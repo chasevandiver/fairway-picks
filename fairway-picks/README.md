@@ -1,154 +1,126 @@
-# ⛳ Fairway Picks — Setup Guide
+# ⛳ Fore Picks (Fairway Picks)
 
-A full-stack golf pick'em league tracker with live PGA Tour scores, snake draft, and money tracking.
+A full-stack golf pick'em league tracker — live PGA Tour scores, snake drafts,
+automatic money tracking, and shareable leagues. Built with Next.js 14
+(App Router) + Supabase, deployed on Vercel.
 
----
+## Features
 
-## What You're Getting
+- **Multi-league**: create a league, share an invite link (`/join/CODE`), and
+  members join with one tap. Each league has its own rules, roster, history,
+  and money.
+- **Email code sign-in** (6-digit OTP, no passwords) with sessions that
+  persist between visits — sign in once per device.
+- **Live leaderboard** pulling ESPN scores every ~2 minutes, with cut/WD
+  handling, score-change flashes, and a public read-only view at
+  `/view/CODE` for leagues with public view enabled.
+- **Snake draft** with realtime updates across devices.
+- **Configurable rules**: picks per player, payout amounts, cut/WD penalties,
+  majors multiplier, tiebreakers. Active tournaments freeze a rules snapshot
+  so mid-season edits never rewrite history.
+- **Money tracking** derived from finalized results (single source of truth),
+  plus season stats, head-to-head records, and a season recap.
 
-- 🔐 **Player login** — each of your 5 friends taps their name to sign in
-- 📋 **Snake Draft** — real-time draft that updates for everyone simultaneously
-- ⛳ **Live Leaderboard** — pulls live scores from ESPN every 2 minutes
-- 💰 **Money Tracking** — auto-calculates who owes what each week and season-long
-- 📈 **History** — every past tournament recorded permanently
-- ⚙️ **Admin Panel** — only Eric (or whoever you set) can manage tournaments
+## Setup
 
----
+### 1. Supabase
 
-## Step 1 — Create Your Supabase Project (Free)
+1. Create a project at [supabase.com](https://supabase.com) (free tier works).
+2. In the SQL editor, run the migrations in `supabase/migrations/` **in
+   order**: `001` → `002` → `003` → `005` → `006` → `007` → `008` → `009` → `010`.
+   (`004` is a guarded one-time repair — skip it; it aborts if run.)
+   For `006`, `008`, and `009`, run the matching scripts in
+   `supabase/verification/` before and after and compare the output.
+3. In **Auth → Providers → Email**, enable email OTP sign-in.
+4. Recommended (so infrequent players stay signed in between tournaments):
+   in **Auth → Sessions**, leave "Inactivity timeout" disabled and keep
+   refresh-token rotation on its defaults.
 
-1. Go to **[supabase.com](https://supabase.com)** → "Start your project" → sign up free
-2. Click **"New Project"**
-   - Name it `fairway-picks`
-   - Pick a region close to you
-   - Set a database password (save it)
-3. Wait ~2 minutes for it to spin up
-4. Go to **Database → SQL Editor → New Query**
-5. Paste the entire contents of `supabase/migrations/001_initial_schema.sql` and click **Run**
-6. Go to **Settings → API** and copy:
-   - **Project URL** → this is your `NEXT_PUBLIC_SUPABASE_URL`
-   - **anon / public** key → this is your `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+### 2. Environment variables
 
----
+Copy `.env.example` to `.env.local` and fill in all three values:
 
-## Step 2 — Deploy to Vercel (Free)
+| Variable | Where to find it | Used by |
+|---|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` | Settings → API | browser + server |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Settings → API | browser + server |
+| `SUPABASE_SERVICE_ROLE_KEY` | Settings → API (**secret**) | server API routes only |
 
-### Option A: GitHub (recommended)
-1. Create a free [GitHub](https://github.com) account if you don't have one
-2. Create a new repo called `fairway-picks`
-3. Upload all the files from this folder to the repo
-4. Go to **[vercel.com](https://vercel.com)** → sign up with GitHub → "New Project"
-5. Import your `fairway-picks` repo
-6. Under **Environment Variables**, add:
-   ```
-   NEXT_PUBLIC_SUPABASE_URL = paste_your_supabase_url_here
-   NEXT_PUBLIC_SUPABASE_ANON_KEY = paste_your_supabase_anon_key_here
-   ```
-7. Click **Deploy** — Vercel will give you a URL like `fairway-picks.vercel.app`
+All three are **required** — the app's read API (`/api/league-data`,
+`/api/init-user`) and the invite-link page use the service-role key
+server-side (it is never sent to the browser).
 
-### Option B: Vercel CLI (if you're comfortable with terminal)
+### 3. Deploy (Vercel)
+
+1. Import the repo in Vercel; set the project **Root Directory** to
+   `fairway-picks/`.
+2. Add the three environment variables above.
+3. Deploy. Push-to-main auto-deploys from there.
+
+### 4. First-time league setup
+
+Open the site → **Create a league** → sign in with your email → share the
+invite link with your group. The creator is the league's commissioner and
+gets the Admin tab (activate tournaments, finalize results, edit rules and
+the invite code).
+
+## Development
+
 ```bash
-npm install -g vercel
 cd fairway-picks
 npm install
-vercel
-# Follow the prompts, add env vars when asked
+npm run dev        # local dev server
+npm run typecheck  # tsc --noEmit
+npm run lint       # eslint (next/core-web-vitals)
+npm test           # vitest — scoring + ESPN parser tests
+npm run build      # production build
 ```
 
----
+CI (GitHub Actions) runs typecheck, lint, tests, and a production build on
+every push and pull request.
 
-## Step 3 — First Time Setup
-
-1. Open your Vercel URL
-2. Tap **Eric** to log in (Eric is set as admin by default)
-3. Go to **⚙️ Admin** tab
-4. Fill in the tournament name, course, and date
-5. Set the draft order (or leave default)
-6. Click **Activate Tournament**
-7. Go to **Draft** tab → click **Start Draft** and have everyone pick their golfers
-
----
-
-## How Each Week Works
-
-1. **Admin sets up the tournament** (name, course, date, draft order)
-2. **Everyone opens the site** on their phone — no app download needed
-3. **Snake draft happens** — the site shows who's on the clock in real time
-4. **Scores update automatically** every 2 minutes from ESPN
-5. **After the tournament**, admin clicks **Finalize & Record Results**
-   - Money is automatically calculated and added to season totals
-   - Results are saved to history permanently
-
----
-
-## Changing the Admin
-
-Open `src/app/page.tsx` and find this line (around line 245):
-
-```ts
-const isAdmin = currentPlayer === 'Eric'
-```
-
-Change `'Eric'` to whoever should be admin, or make it a list:
-```ts
-const isAdmin = ['Eric', 'Max'].includes(currentPlayer ?? '')
-```
-
-## Changing the Players
-
-Open `src/lib/types.ts` and edit the `PLAYERS` array:
-```ts
-export const PLAYERS: Player[] = ['Eric', 'Max', 'Hayden', 'Andrew', 'Brennan']
-```
-
----
-
-## Payout Rules (Configurable)
-
-In `src/lib/types.ts`:
-```ts
-export const PAYOUT_RULES = {
-  lowestStrokes: 10,  // $10 per other player
-  outrightWinner: 10, // $10 per other player
-  top3: 5,            // $5 per other player
-}
-```
-
----
-
-## Tech Stack (all free tier)
-
-| Service | What it does | Cost |
-|---------|-------------|------|
-| **Vercel** | Hosts the website | Free |
-| **Supabase** | Database + real-time sync | Free (500MB, plenty) |
-| **ESPN API** | Live golf scores | Free (public) |
-| **Next.js** | The app framework | Free / open source |
-
----
-
-## File Structure
+## Project layout
 
 ```
 fairway-picks/
 ├── src/
 │   ├── app/
-│   │   ├── page.tsx          ← Main app (all tabs)
-│   │   ├── layout.tsx        ← HTML root
-│   │   ├── globals.css       ← All styles
-│   │   └── api/scores/
-│   │       └── route.ts      ← ESPN score fetcher endpoint
+│   │   ├── page.tsx              # App shell: auth bootstrap, state, handlers
+│   │   ├── auth/                 # Email OTP sign-in
+│   │   ├── create/               # League creation wizard
+│   │   ├── dashboard/            # Your leagues
+│   │   ├── join/[code]/          # Invite links (join via RPC)
+│   │   ├── league/[id]/          # Bookmarkable league URL
+│   │   ├── view/[code]/          # Public read-only league view
+│   │   └── api/
+│   │       ├── league-data/      # Authorized league reads (service role)
+│   │       ├── init-user/        # Profile + membership for the caller
+│   │       └── scores/           # ESPN proxy with 120s revalidate
+│   ├── components/
+│   │   ├── app/                  # Sidebar, PlayerCard, modals, Toast…
+│   │   └── tabs/                 # Leaderboard, Picks, Money, Draft, Admin…
 │   └── lib/
-│       ├── supabase.ts       ← DB client
-│       ├── types.ts          ← Types + constants
-│       ├── scoring.ts        ← Money/standings math
-│       └── espn.ts           ← ESPN API + fallback data
+│       ├── scoring.ts            # Standings + money engine (rules-aware)
+│       ├── espn.ts               # ESPN scoreboard parser
+│       ├── rules.ts              # LeagueRules types + defaults
+│       ├── roster.ts             # League roster derivation
+│       ├── founding.ts           # Founding-league constants
+│       └── apiAuth.ts            # Bearer-token auth for API routes
 ├── supabase/
-│   └── migrations/
-│       └── 001_initial_schema.sql  ← Run this in Supabase
-├── package.json
-├── next.config.js
-├── tsconfig.json
-└── .env.example              ← Copy to .env.local with your keys
+│   ├── migrations/               # 001–010, run in order
+│   ├── verification/             # Pre/postflight checks for risky migrations
+│   └── rollback/                 # Rollbacks (run in reverse order)
+└── .github/workflows/ci.yml     # typecheck + lint + test + build
 ```
 
+## Scoring rules (defaults)
+
+- **Weekly winner** — lowest combined (adjusted) score collects $10 from each
+  other player; exact ties split the pot.
+- **Outright winner** — picking the tournament winner collects $10 from each
+  other player.
+- **Top 3 bonus** — each golfer finishing 2nd–3rd collects $5 from each other
+  player.
+- **Cut/WD** — a cut golfer's missed weekend counts as a repeat of R1+R2
+  (equivalently: doubled 36-hole score). Configurable per league, as are all
+  dollar amounts, the majors multiplier, and the tiebreaker.

@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { getUserFromRequest, serviceClient } from '@/lib/apiAuth'
-import { FOUNDING_LEAGUE_ID } from '@/lib/founding'
 
 // Always per-request: reads query params and hits the database.
 export const dynamic = 'force-dynamic'
