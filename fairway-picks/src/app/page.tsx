@@ -702,7 +702,7 @@ export default function App() {
       {confirmDialog}
       {/* Hamburger button — mobile only, hide when sidebar open */}
       {!sidebarOpen && (
-        <button className="hamburger-btn" onClick={() => setSidebarOpen(true)}>
+        <button className="hamburger-btn" onClick={() => setSidebarOpen(true)} aria-label="Open menu">
           <span /><span /><span />
         </button>
       )}
