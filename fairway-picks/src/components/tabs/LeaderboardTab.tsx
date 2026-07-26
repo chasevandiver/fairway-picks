@@ -17,7 +17,7 @@ function posValue(g: GolferScore): number {
 
 // ─── Leaderboard Tab ──────────────────────────────────────────────────────────
 export function LeaderboardTab({
-  tournament, standings, liveData, pickMap, loading, lastUpdated, onRefresh, money, flashMap, roster
+  tournament, standings, liveData, pickMap, loading, lastUpdated, onRefresh, money, flashMap, roster, isLiveData
 }: {
   tournament: Tournament | null
   standings: PlayerStanding[]
@@ -29,6 +29,7 @@ export function LeaderboardTab({
   onRefresh: () => void
   money: Record<string, number>
   flashMap: Record<string, 'up' | 'down'>
+  isLiveData: boolean
 }) {
   const safeData = Array.isArray(liveData) ? liveData : []
   const par = safeData[0]?.par ?? 72
@@ -106,6 +107,9 @@ export function LeaderboardTab({
           {lastUpdated && (
             <span style={{ fontFamily: 'DM Mono', fontSize: 12, color: 'var(--text-dim)' }}>
               Updated {lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              {Date.now() - lastUpdated.getTime() > 10 * 60 * 1000 && (
+                <span style={{ color: 'var(--gold)', marginLeft: 4 }}>(stale)</span>
+              )}
             </span>
           )}
           <button className="refresh-btn" onClick={onRefresh} disabled={loading}>
@@ -146,6 +150,12 @@ export function LeaderboardTab({
           </div>
         )
       })()}
+
+      {!isLiveData && (
+        <div className="alert alert-gold mb-24">
+          ⚠️ Live scores are temporarily unavailable — showing placeholder data. Standings will update when the feed returns.
+        </div>
+      )}
 
       <div className="stats-row mb-24">
         <div className="stat-box">
