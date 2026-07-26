@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { toRelScore, scoreClass, formatMoney } from '@/lib/scoring'
 import type { LeagueRules } from '@/lib/rules'
+import { useConfirm } from '@/components/app/ConfirmDialog'
 
 // ─── History Tab ──────────────────────────────────────────────────────────────
 export function HistoryTab({ history, golferHistory, isAdmin, roster, rules, onDeleteTournament, onEditResult, onDeleteResult }: {
@@ -21,6 +22,7 @@ export function HistoryTab({ history, golferHistory, isAdmin, roster, rules, onD
   const [subtab, setSubtab] = useState<'tournaments' | 'golfers'>('tournaments')
   const [selectedPlayer, setSelectedPlayer] = useState<string>(roster[0] ?? '')
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
+  const { confirm, dialog } = useConfirm()
 
   const toggleRow = (tid: string, player: string) => {
     const key = `${tid}:${player}`
@@ -52,15 +54,23 @@ export function HistoryTab({ history, golferHistory, isAdmin, roster, rules, onD
     setEditing(null)
   }
 
-  const handleDelete = async (h: any) => {
-    if (!confirm(`Delete "${h.tournament_name}" from history? This will also reverse season money.`)) return
-    setDeleting(h.tournament_id)
-    await onDeleteTournament(h.tournament_id, h.money || {})
-    setDeleting(null)
+  const handleDelete = (h: any) => {
+    confirm({
+      title: 'Delete Tournament',
+      message: `Delete "${h.tournament_name}" from history? This will also reverse season money. This cannot be undone.`,
+      confirmLabel: 'Delete',
+      danger: true,
+      onConfirm: async () => {
+        setDeleting(h.tournament_id)
+        await onDeleteTournament(h.tournament_id, h.money || {})
+        setDeleting(null)
+      },
+    })
   }
 
   return (
     <div>
+      {dialog}
       <div className="page-header">
         <div className="page-title">History</div>
         {isAdmin && <div style={{ fontSize: 12, color: 'var(--text-dim)', fontFamily: 'DM Mono' }}>Click any score or $ to edit</div>}
@@ -310,10 +320,13 @@ export function HistoryTab({ history, golferHistory, isAdmin, roster, rules, onD
                         <td onClick={e => e.stopPropagation()}>
                           <button
                             className="btn btn-danger btn-sm"
-                            onClick={() => {
-                              if (confirm(`Remove ${s.player} from this tournament? Their money will be reversed.`))
-                                onDeleteResult(h.tournament_id, s.player, moneyVal)
-                            }}
+                            onClick={() => confirm({
+                              title: 'Remove Result',
+                              message: `Remove ${s.player} from this tournament? Their money will be reversed. This cannot be undone.`,
+                              confirmLabel: 'Remove',
+                              danger: true,
+                              onConfirm: () => onDeleteResult(h.tournament_id, s.player, moneyVal),
+                            })}
                             title="Remove this player's result"
                           >✕</button>
                         </td>

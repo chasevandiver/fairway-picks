@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import type { LeagueRules } from '@/lib/rules'
 import type { Tournament, Pick, GolferScore, PlayerStanding } from '@/lib/types'
 import { PGA_SCHEDULE } from '@/lib/constants'
+import { useConfirm } from '@/components/app/ConfirmDialog'
 
 // ─── Admin Tab ────────────────────────────────────────────────────────────────
 export function AdminTab({
@@ -44,6 +45,7 @@ export function AdminTab({
   const [codeInput, setCodeInput] = useState(inviteCode)
   const [savingCode, setSavingCode] = useState(false)
   const [editingCode, setEditingCode] = useState(!inviteCode)
+  const { confirm, dialog } = useConfirm()
 
   const handleSaveCode = async () => {
     if (!codeInput.trim()) return
@@ -122,12 +124,39 @@ export function AdminTab({
     setTimeout(() => setMsg(''), 3000)
   }
 
-  const handleFinalize = async () => {
-    setFinalizing(true)
-    await onFinalize()
-    setMsg('✅ Results recorded & season money updated!')
-    setFinalizing(false)
-    setTimeout(() => setMsg(''), 4000)
+  const handleFinalize = () => {
+    confirm({
+      title: 'Finalize & Record Results',
+      message: `This records the results and money for the week${tournament ? ` (${tournament.name})` : ''} and closes the tournament. Standings and season money will be updated for everyone.`,
+      confirmLabel: 'Finalize',
+      onConfirm: async () => {
+        setFinalizing(true)
+        await onFinalize()
+        setMsg('✅ Results recorded & season money updated!')
+        setFinalizing(false)
+        setTimeout(() => setMsg(''), 4000)
+      },
+    })
+  }
+
+  const handleClearPicks = () => {
+    confirm({
+      title: 'Clear All Picks',
+      message: 'This deletes every pick for the active tournament so the draft can be redone. This cannot be undone.',
+      confirmLabel: 'Clear Picks',
+      danger: true,
+      onConfirm: onClearPicks,
+    })
+  }
+
+  const handleClearTournament = () => {
+    confirm({
+      title: 'Remove Tournament',
+      message: `This deletes the active tournament${tournament ? ` (${tournament.name})` : ''} and all of its picks. This cannot be undone.`,
+      confirmLabel: 'Remove',
+      danger: true,
+      onConfirm: onClearTournament,
+    })
   }
 
   // Group schedule into upcoming vs past
@@ -137,6 +166,7 @@ export function AdminTab({
 
   return (
     <div>
+      {dialog}
       <div className="page-header">
         <div className="page-title">Admin</div>
       </div>
@@ -474,10 +504,10 @@ export function AdminTab({
                   <button className="btn btn-green" onClick={handleFinalize} disabled={finalizing || standings.length === 0}>
                     {finalizing ? '⏳ Recording…' : '✓ Finalize & Record Results'}
                   </button>
-                  <button className="btn btn-outline" onClick={onClearPicks}>
+                  <button className="btn btn-outline" onClick={handleClearPicks}>
                     🗑 Clear Picks (redo draft)
                   </button>
-                  <button className="btn btn-danger" onClick={onClearTournament}>
+                  <button className="btn btn-danger" onClick={handleClearTournament}>
                     ✕ Remove Tournament
                   </button>
                 </div>
