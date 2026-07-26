@@ -5,10 +5,314 @@ import { formatMoney } from '@/lib/scoring'
 import { FOUNDING_LEAGUE_ID } from '@/lib/founding'
 import { LEGACY_PLAYERS, MAJORS_HISTORY, MAJOR_COLORS, ALL_STATS } from '@/lib/constants'
 
+// ─── Generic history-derived insights (all league types) ─────────────────────
+// Everything below is computed purely from (history, golferHistory, roster) —
+// no hardcoded baselines — so the same components render for the founding
+// league (with LEGACY_PLAYERS) and custom leagues (history-derived rosters).
+
+const CHART_COLORS = ['#4ade80', '#f59e0b', '#60a5fa', '#f87171', '#c084fc', '#22d3ee', '#fb923c', '#a3e635']
+
+const labelStyle: React.CSSProperties = {
+  fontFamily: 'DM Mono', fontSize: 10, textTransform: 'uppercase',
+  letterSpacing: '0.08em', color: 'var(--text-dim)',
+}
+
+// Head-to-head by finishing rank: a "win" is a tournament where a's rank is
+// better (lower) than b's. Ties are skipped.
+function HeadToHeadGrid({ history, roster }: { history: any[]; roster: string[] }) {
+  if (roster.length < 2 || history.length === 0) return null
+  const h2h: Record<string, Record<string, { wins: number; losses: number }>> = {}
+  roster.forEach(a => {
+    h2h[a] = {}
+    roster.forEach(b => { if (a !== b) h2h[a][b] = { wins: 0, losses: 0 } })
+  })
+  for (const t of history) {
+    const standings = t.standings || []
+    for (let i = 0; i < roster.length; i++) {
+      for (let j = i + 1; j < roster.length; j++) {
+        const a = roster[i], b = roster[j]
+        const sa = standings.find((s: any) => s.player === a)
+        const sb = standings.find((s: any) => s.player === b)
+        if (!sa || !sb || sa.rank == null || sb.rank == null) continue
+        if (sa.rank < sb.rank) { h2h[a][b].wins++; h2h[b][a].losses++ }
+        else if (sb.rank < sa.rank) { h2h[b][a].wins++; h2h[a][b].losses++ }
+      }
+    }
+  }
+  return (
+    <div className="card mb-24">
+      <div className="card-header"><div className="card-title">⚔️ Head-to-Head Records</div></div>
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr style={{ borderBottom: '2px solid var(--border)' }}>
+              <th style={{ ...labelStyle, padding: '10px 16px', textAlign: 'left' }}>Player</th>
+              {roster.map(p => (
+                <th key={p} style={{ ...labelStyle, padding: '10px 12px', textAlign: 'center' }}>{p}</th>
+              ))}
+              <th style={{ ...labelStyle, padding: '10px 12px', textAlign: 'center', color: 'var(--green)' }}>Overall</th>
+            </tr>
+          </thead>
+          <tbody>
+            {roster.map((a, ai) => {
+              const totalWins = roster.filter(b => b !== a).reduce((s, b) => s + h2h[a][b].wins, 0)
+              const totalGames = roster.filter(b => b !== a).reduce((s, b) => s + h2h[a][b].wins + h2h[a][b].losses, 0)
+              return (
+                <tr key={a} style={{ borderTop: '1px solid var(--border)', background: ai % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.015)' }}>
+                  <td style={{ padding: '12px 16px', fontWeight: 700 }}>{a}</td>
+                  {roster.map(b => {
+                    if (a === b) return <td key={b} style={{ padding: '12px 12px', textAlign: 'center', background: 'var(--surface2)', color: 'var(--text-dim)' }}>—</td>
+                    const rec = h2h[a][b]
+                    const played = rec.wins + rec.losses
+                    const color = played === 0 ? 'var(--text-dim)'
+                      : rec.wins > rec.losses ? 'var(--green)'
+                      : rec.wins < rec.losses ? 'var(--red)' : 'var(--text-dim)'
+                    return (
+                      <td key={b} style={{ padding: '12px 12px', textAlign: 'center' }}>
+                        <span style={{ fontFamily: 'DM Mono', fontSize: 13, fontWeight: 700, color }}>{rec.wins}-{rec.losses}</span>
+                      </td>
+                    )
+                  })}
+                  <td style={{ padding: '12px 12px', textAlign: 'center' }}>
+                    <span style={{ fontFamily: 'DM Mono', fontSize: 13, fontWeight: 700, color: 'var(--green)' }}>
+                      {totalWins}-{totalGames - totalWins}
+                    </span>
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+// Cumulative money line chart — plain inline SVG, no libraries.
+function MoneyOverTimeChart({ history, roster }: { history: any[]; roster: string[] }) {
+  if (history.length === 0 || roster.length === 0) return null
+  const sorted = [...history].sort((a, b) => (a.date || '').localeCompare(b.date || ''))
+
+  // Cumulative series per player
+  const series: Record<string, number[]> = {}
+  roster.forEach(p => { series[p] = [] })
+  const cumulative: Record<string, number> = {}
+  roster.forEach(p => { cumulative[p] = 0 })
+  for (const t of sorted) {
+    roster.forEach(p => {
+      cumulative[p] += t.money?.[p] ?? 0
+      series[p].push(cumulative[p])
+    })
+  }
+
+  const W = 800, H = 280, PAD_X = 16, PAD_Y = 20
+  const all = roster.flatMap(p => series[p])
+  const maxV = Math.max(0, ...all)
+  const minV = Math.min(0, ...all)
+  const range = maxV - minV || 1
+  const n = sorted.length
+  const x = (i: number) => n === 1 ? W / 2 : PAD_X + (i * (W - 2 * PAD_X)) / (n - 1)
+  const y = (v: number) => PAD_Y + ((maxV - v) * (H - 2 * PAD_Y)) / range
+  const zeroY = y(0)
+
+  return (
+    <div className="card mb-24">
+      <div className="card-header">
+        <div className="card-title">📈 Money Over Time</div>
+        <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: 'var(--text-dim)' }}>Cumulative · {n} event{n === 1 ? '' : 's'}</span>
+      </div>
+      <div className="card-body">
+        <svg
+          viewBox={`0 0 ${W} ${H}`}
+          preserveAspectRatio="none"
+          style={{ width: '100%', height: 280, display: 'block' }}
+          role="img"
+          aria-label="Cumulative season money per player"
+        >
+          {/* $0 gridline */}
+          <line x1={0} y1={zeroY} x2={W} y2={zeroY} stroke="var(--border)" strokeWidth={1} strokeDasharray="4 4" vectorEffect="non-scaling-stroke" />
+          {roster.map((p, pi) => {
+            const color = CHART_COLORS[pi % CHART_COLORS.length]
+            const pts = series[p]
+            if (pts.length === 0) return null
+            const d = pts.map((v, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ')
+            const last = pts[pts.length - 1]
+            return (
+              <g key={p}>
+                {pts.length > 1 && (
+                  <path d={d} fill="none" stroke={color} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+                )}
+                <circle cx={x(pts.length - 1)} cy={y(last)} r={3.5} fill={color} />
+              </g>
+            )
+          })}
+        </svg>
+        {/* Legend chips with current totals */}
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 14 }}>
+          {roster.map((p, pi) => {
+            const color = CHART_COLORS[pi % CHART_COLORS.length]
+            const total = series[p][series[p].length - 1] ?? 0
+            return (
+              <div key={p} style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                background: 'var(--surface2)', border: '1px solid var(--border)',
+                borderRadius: 100, padding: '4px 12px',
+              }}>
+                <span style={{ width: 8, height: 8, borderRadius: '50%', background: color, display: 'inline-block' }} />
+                <span style={{ fontSize: 12, fontWeight: 600 }}>{p}</span>
+                <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: total > 0 ? 'var(--green)' : total < 0 ? 'var(--red)' : 'var(--text-dim)' }}>
+                  {formatMoney(total)}
+                </span>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Most-picked golfer per player, with pick count and average numeric finish.
+function TrustyGolfers({ golferHistory, roster }: { golferHistory: any[]; roster: string[] }) {
+  const rows = roster.map(p => {
+    const mine = golferHistory.filter(g => g.player_name === p)
+    if (mine.length === 0) return null
+    const byGolfer: Record<string, { count: number; positions: number[] }> = {}
+    for (const g of mine) {
+      if (!byGolfer[g.golfer_name]) byGolfer[g.golfer_name] = { count: 0, positions: [] }
+      byGolfer[g.golfer_name].count++
+      const pos = parseInt((g.position || '').replace(/^T/i, ''), 10)
+      if (!isNaN(pos)) byGolfer[g.golfer_name].positions.push(pos)
+    }
+    const [golfer, info] = Object.entries(byGolfer).sort((a, b) => b[1].count - a[1].count)[0]
+    const avgFinish = info.positions.length > 0
+      ? info.positions.reduce((s, v) => s + v, 0) / info.positions.length
+      : null
+    return { player: p, golfer, count: info.count, avgFinish }
+  }).filter((r): r is { player: string; golfer: string; count: number; avgFinish: number | null } => r !== null)
+
+  if (rows.length === 0) return null
+  return (
+    <div className="card mb-24">
+      <div className="card-header">
+        <div className="card-title">🤝 Trusty Golfer</div>
+        <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: 'var(--text-dim)' }}>Most-picked this season</span>
+      </div>
+      <div className="card-body">
+        {rows.map((r, i) => (
+          <div key={r.player} style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+            padding: '10px 0', borderTop: i > 0 ? '1px solid var(--border)' : undefined,
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+              <span style={{ fontWeight: 600, fontSize: 13 }}>{r.player}</span>
+              <span style={{ color: 'var(--text-dim)', fontSize: 12 }}>→</span>
+              <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--green)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.golfer}</span>
+            </div>
+            <span style={{ fontFamily: 'DM Mono', fontSize: 12, color: 'var(--text-dim)', whiteSpace: 'nowrap' }}>
+              ×{r.count}{r.avgFinish !== null ? ` · avg finish ${r.avgFinish.toFixed(1)}` : ''}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// Current cashing streak, best week, and majors-vs-regular wins per player.
+function StreaksAndSplits({ history, roster }: { history: any[]; roster: string[] }) {
+  if (history.length === 0 || roster.length === 0) return null
+  const sorted = [...history].sort((a, b) => (a.date || '').localeCompare(b.date || ''))
+  const rows = roster.map(p => {
+    // Current cashing streak: consecutive most-recent tournaments with money > 0
+    let streak = 0
+    for (let i = sorted.length - 1; i >= 0; i--) {
+      if ((sorted[i].money?.[p] ?? 0) > 0) streak++
+      else break
+    }
+    // Best single week
+    let bestWeek: number | null = null
+    let majorWins = 0
+    let regularWins = 0
+    let played = 0
+    for (const t of sorted) {
+      const s = (t.standings || []).find((st: any) => st.player === p)
+      if (!s) continue
+      played++
+      const m = t.money?.[p] ?? 0
+      if (bestWeek === null || m > bestWeek) bestWeek = m
+      if (s.rank === 1) {
+        if (t.is_major) majorWins++
+        else regularWins++
+      }
+    }
+    return { player: p, streak, bestWeek, majorWins, regularWins, played }
+  }).filter(r => r.played > 0)
+
+  if (rows.length === 0) return null
+  return (
+    <div className="card mb-24">
+      <div className="card-header"><div className="card-title">🔁 Streaks & Splits</div></div>
+      <div style={{ overflowX: 'auto' }}>
+        <table className="table">
+          <thead>
+            <tr>
+              <th>Player</th>
+              <th>Cashing Streak</th>
+              <th>Best Week</th>
+              <th>Major Wins</th>
+              <th>Regular Wins</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(r => (
+              <tr key={r.player} className="row">
+                <td style={{ fontWeight: 600 }}>{r.player}</td>
+                <td>
+                  {r.streak > 0
+                    ? <span className="badge badge-green">🔥 {r.streak} week{r.streak === 1 ? '' : 's'}</span>
+                    : <span style={{ color: 'var(--text-dim)', fontFamily: 'DM Mono', fontSize: 12 }}>—</span>}
+                </td>
+                <td>
+                  <span className={`score ${r.bestWeek !== null && r.bestWeek > 0 ? 'under' : r.bestWeek !== null && r.bestWeek < 0 ? 'over' : 'even'}`} style={{ fontSize: 13 }}>
+                    {r.bestWeek !== null ? formatMoney(r.bestWeek) : '—'}
+                  </span>
+                </td>
+                <td><span style={{ fontFamily: 'DM Mono', fontSize: 13, color: '#c084fc', fontWeight: 700 }}>{r.majorWins || '—'}</span></td>
+                <td><span style={{ fontFamily: 'DM Mono', fontSize: 13, color: 'var(--green)', fontWeight: 700 }}>{r.regularWins || '—'}</span></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+// The full generic insights block. Founding league keeps its own legacy
+// score-based H2H table (rank data doesn't exist for the hardcoded era), so it
+// opts out of the rank-based grid via showHeadToHead.
+export function LeagueInsights({ history, golferHistory, roster, showHeadToHead = true }: {
+  history: any[]
+  golferHistory: any[]
+  roster: string[]
+  showHeadToHead?: boolean
+}) {
+  if (history.length === 0 || roster.length === 0) return null
+  return (
+    <>
+      {showHeadToHead && <HeadToHeadGrid history={history} roster={roster} />}
+      <MoneyOverTimeChart history={history} roster={roster} />
+      <TrustyGolfers golferHistory={golferHistory} roster={roster} />
+      <StreaksAndSplits history={history} roster={roster} />
+    </>
+  )
+}
+
 // ─── Stats Tab ────────────────────────────────────────────────────────────────
 // Stats view for custom (non-founding) leagues. Derives everything from the
 // league's own history — no hardcoded baselines can leak original-league data.
-export function CustomLeagueStatsView({ history }: { history: any[] }) {
+export function CustomLeagueStatsView({ history, golferHistory }: { history: any[]; golferHistory: any[] }) {
   // Derive players from this league's tournament history
   const players = Array.from(new Set(
     history.flatMap(h => (h.standings || []).map((s: any) => s.player))
@@ -142,18 +446,21 @@ export function CustomLeagueStatsView({ history }: { history: any[] }) {
           </table>
         </div>
       </div>
+
+      {/* ── Generic history-derived insights ── */}
+      <LeagueInsights history={history} golferHistory={golferHistory} roster={players} />
     </div>
   )
 }
 
-export function StatsTab({ history, leagueId }: { history: any[]; leagueId: string }) {
+export function StatsTab({ history, golferHistory, leagueId }: { history: any[]; golferHistory: any[]; leagueId: string }) {
   // Hooks must be called unconditionally; branch after.
   const [activeYear, setActiveYear] = useState<number | 'all'>('all')
   const isFoundingLeague = leagueId === FOUNDING_LEAGUE_ID
   // Custom leagues get a scoped view derived entirely from their own
   // history. The hardcoded ALL_STATS / MAJORS_HISTORY baselines below are
   // intentionally untouched — they only render for the founding league.
-  if (!isFoundingLeague) return <CustomLeagueStatsView history={history} />
+  if (!isFoundingLeague) return <CustomLeagueStatsView history={history} golferHistory={golferHistory} />
 
   // ── Merge hardcoded baseline + live Supabase results ──
   // Live results come from finalized tournaments stored in DB (2026+)
@@ -615,6 +922,11 @@ export function StatsTab({ history, leagueId }: { history: any[]; leagueId: stri
           </div>
         )
       })()}
+
+      {/* ── Generic history-derived insights (this season's finalized events) ──
+          The legacy score-based H2H table above covers head-to-head, so the
+          rank-based generic grid is skipped here. */}
+      <LeagueInsights history={history} golferHistory={golferHistory} roster={LEGACY_PLAYERS} showHeadToHead={false} />
     </div>
   )
 }
