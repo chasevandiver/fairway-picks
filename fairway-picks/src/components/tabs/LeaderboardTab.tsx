@@ -263,6 +263,31 @@ export function LeaderboardTab({
         </div>
       )}
 
+      {/* ── On the move — biggest movers among picked golfers today ── */}
+      {(() => {
+        const pickedNames = new Set(
+          Object.values(pickMap).flat().map(n => n.toLowerCase())
+        )
+        const movers = safeData.filter(
+          g => g.today !== null && pickedNames.has(g.name.toLowerCase())
+        )
+        if (movers.length < 2) return null
+        const hot = movers.reduce((best, g) => (g.today! < best.today! ? g : best), movers[0])
+        const sliding = movers.reduce((worst, g) => (g.today! > worst.today! ? g : worst), movers[0])
+        return (
+          <div className="flex gap-12 mb-24" style={{ flexWrap: 'wrap', alignItems: 'center' }}>
+            <span style={{ fontFamily: 'DM Mono', fontSize: 12 }}>
+              🔥 Hot: <span style={{ fontWeight: 700, color: 'var(--green)' }}>{hot.name}</span>{' '}
+              <span className={`score ${scoreClass(hot.today)}`} style={{ fontSize: 12 }}>({toRelScore(hot.today)})</span>
+            </span>
+            <span style={{ fontFamily: 'DM Mono', fontSize: 12 }}>
+              🧊 Sliding: <span style={{ fontWeight: 700, color: 'var(--red)' }}>{sliding.name}</span>{' '}
+              <span className={`score ${scoreClass(sliding.today)}`} style={{ fontSize: 12 }}>({toRelScore(sliding.today)})</span>
+            </span>
+          </div>
+        )
+      })()}
+
       {liveData.length > 0 && (
         <div className="card">
           <div className="card-header">
