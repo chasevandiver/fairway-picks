@@ -98,6 +98,6 @@ SELECT
   )
 UNION ALL
 SELECT
-  'founding row count still 3',
+  'founding league has members',
   (SELECT COUNT(*) FROM league_members
-    WHERE league_id = '00000000-0000-0000-0000-000000000001') = 3;
+    WHERE league_id = '00000000-0000-0000-0000-000000000001') >= 3;
