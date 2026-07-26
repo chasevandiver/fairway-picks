@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { formatMoney } from '@/lib/scoring'
 import { FOUNDING_LEAGUE_ID } from '@/lib/founding'
 import { LEGACY_PLAYERS, MAJORS_HISTORY, MAJOR_COLORS, ALL_STATS } from '@/lib/constants'
+import { SectionDesc } from '@/components/app/SectionDesc'
 
 // ─── Generic history-derived insights (all league types) ─────────────────────
 // Everything below is computed purely from (history, golferHistory, roster) —
@@ -42,8 +43,11 @@ function HeadToHeadGrid({ history, roster }: { history: any[]; roster: string[] 
   return (
     <div className="card mb-24">
       <div className="card-header"><div className="card-title">⚔️ Head-to-Head Records</div></div>
-      <div style={{ overflowX: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+      <SectionDesc style={{ padding: '12px 20px 0' }}>
+        Your all-time record vs each player — a win means you finished ahead of them that week. Read across a row: green means you own that matchup.
+      </SectionDesc>
+      <div className="scroll-x">
+        <table style={{ width: '100%', minWidth: 640, borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ borderBottom: '2px solid var(--border)' }}>
               <th style={{ ...labelStyle, padding: '10px 16px', textAlign: 'left' }}>Player</th>
@@ -121,6 +125,9 @@ function MoneyOverTimeChart({ history, roster }: { history: any[]; roster: strin
         <div className="card-title">📈 Money Over Time</div>
         <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: 'var(--text-dim)' }}>Cumulative · {n} event{n === 1 ? '' : 's'}</span>
       </div>
+      <SectionDesc style={{ padding: '12px 20px 0' }}>
+        Cumulative season winnings after each tournament — every line is a player, and the higher it climbs, the better their season. Dips are weeks they paid out.
+      </SectionDesc>
       <div className="card-body">
         <svg
           viewBox={`0 0 ${W} ${H}`}
@@ -198,6 +205,9 @@ function TrustyGolfers({ golferHistory, roster }: { golferHistory: any[]; roster
         <div className="card-title">🤝 Trusty Golfer</div>
         <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: 'var(--text-dim)' }}>Most-picked this season</span>
       </div>
+      <SectionDesc style={{ padding: '12px 20px 0' }}>
+        The golfer each player keeps going back to, and how those picks actually finish — a low average finish means the loyalty is paying off.
+      </SectionDesc>
       <div className="card-body">
         {rows.map((r, i) => (
           <div key={r.player} style={{
@@ -253,8 +263,11 @@ function StreaksAndSplits({ history, roster }: { history: any[]; roster: string[
   return (
     <div className="card mb-24">
       <div className="card-header"><div className="card-title">🔁 Streaks & Splits</div></div>
-      <div style={{ overflowX: 'auto' }}>
-        <table className="table">
+      <SectionDesc style={{ padding: '12px 20px 0' }}>
+        Cashing streak counts back-to-back recent weeks finishing in the money, best week is the biggest single-week haul, and the wins split shows who shows up for the majors vs the regular stops.
+      </SectionDesc>
+      <div className="scroll-x">
+        <table className="table" style={{ minWidth: 560 }}>
           <thead>
             <tr>
               <th>Player</th>
@@ -289,6 +302,300 @@ function StreaksAndSplits({ history, roster }: { history: any[]; roster: string[
   )
 }
 
+// One-table season summary: weeks won, podiums, average finish, and money.
+function SeasonScoreboard({ history, roster }: { history: any[]; roster: string[] }) {
+  if (history.length === 0 || roster.length === 0) return null
+  const rows = roster.map(p => {
+    let played = 0, weeksWon = 0, podiums = 0, total = 0
+    const ranks: number[] = []
+    for (const t of history) {
+      const s = (t.standings || []).find((st: any) => st.player === p)
+      if (s) {
+        played++
+        if (s.rank === 1) weeksWon++
+        if (s.rank != null && s.rank <= 3) podiums++
+        if (s.rank != null) ranks.push(s.rank)
+      }
+      total += t.money?.[p] ?? 0
+    }
+    const avgFinish = ranks.length > 0 ? ranks.reduce((s, v) => s + v, 0) / ranks.length : null
+    const avgMoney = played > 0 ? total / played : null
+    return { player: p, played, weeksWon, podiums, avgFinish, avgMoney, total }
+  }).filter(r => r.played > 0)
+    .sort((a, b) => (b.total - a.total) || (b.weeksWon - a.weeksWon))
+
+  if (rows.length === 0) return null
+  return (
+    <div className="card mb-24">
+      <div className="card-header">
+        <div className="card-title">📋 Season Scoreboard</div>
+        <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: 'var(--text-dim)' }}>This season</span>
+      </div>
+      <SectionDesc style={{ padding: '12px 20px 0' }}>
+        The whole season in one table — weeks won, top-3 finishes, average weekly finish, and dollars per week. This is where the &quot;who&apos;s actually good&quot; argument gets settled.
+      </SectionDesc>
+      <div className="scroll-x">
+        <table className="table" style={{ minWidth: 560 }}>
+          <thead>
+            <tr>
+              <th>Player</th>
+              <th>Weeks Won</th>
+              <th>Podiums</th>
+              <th>Avg Finish</th>
+              <th>Avg $/Week</th>
+              <th>Total $</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(r => (
+              <tr key={r.player} className="row">
+                <td style={{ fontWeight: 600 }}>{r.player}</td>
+                <td><span style={{ fontFamily: 'DM Mono', fontSize: 13, color: 'var(--gold)', fontWeight: 700 }}>{r.weeksWon || '—'}</span></td>
+                <td><span style={{ fontFamily: 'DM Mono', fontSize: 13, color: 'var(--indigo)', fontWeight: 700 }}>{r.podiums || '—'}</span></td>
+                <td><span style={{ fontFamily: 'DM Mono', fontSize: 13, color: 'var(--text-dim)' }}>{r.avgFinish !== null ? r.avgFinish.toFixed(1) : '—'}</span></td>
+                <td>
+                  <span className={`score ${r.avgMoney !== null && r.avgMoney > 0 ? 'under' : r.avgMoney !== null && r.avgMoney < 0 ? 'over' : 'even'}`} style={{ fontSize: 13 }}>
+                    {r.avgMoney !== null ? formatMoney(Math.round(r.avgMoney)) : '—'}
+                  </span>
+                </td>
+                <td>
+                  <span className={`score ${r.total > 0 ? 'under' : r.total < 0 ? 'over' : 'even'}`} style={{ fontSize: 13, fontWeight: 700 }}>
+                    {formatMoney(r.total)}
+                  </span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+// Closest head-to-head matchup: most evenly split W-L with ≥4 meetings
+// (fallback: closest overall).
+function RivalryMeter({ history, roster }: { history: any[]; roster: string[] }) {
+  if (roster.length < 2 || history.length === 0) return null
+  const pairs: { a: string; b: string; aWins: number; bWins: number }[] = []
+  for (let i = 0; i < roster.length; i++) {
+    for (let j = i + 1; j < roster.length; j++) {
+      pairs.push({ a: roster[i], b: roster[j], aWins: 0, bWins: 0 })
+    }
+  }
+  for (const t of history) {
+    const standings = t.standings || []
+    for (const pair of pairs) {
+      const sa = standings.find((s: any) => s.player === pair.a)
+      const sb = standings.find((s: any) => s.player === pair.b)
+      if (!sa || !sb || sa.rank == null || sb.rank == null) continue
+      if (sa.rank < sb.rank) pair.aWins++
+      else if (sb.rank < sa.rank) pair.bWins++
+    }
+  }
+  const played = pairs.filter(p => p.aWins + p.bWins > 0)
+  if (played.length === 0) return null
+  const closeness = (p: typeof pairs[number]) => Math.abs(p.aWins - p.bWins)
+  const eligible = played.filter(p => p.aWins + p.bWins >= 4)
+  const pool = eligible.length > 0 ? eligible : played
+  const rivalry = [...pool].sort((x, y) =>
+    (closeness(x) - closeness(y)) || ((y.aWins + y.bWins) - (x.aWins + x.bWins))
+  )[0]
+  const meetings = rivalry.aWins + rivalry.bWins
+
+  return (
+    <div className="card mb-24">
+      <div className="card-header">
+        <div className="card-title">🤼 Rivalry Meter</div>
+        <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: 'var(--text-dim)' }}>{meetings} meeting{meetings === 1 ? '' : 's'}</span>
+      </div>
+      <SectionDesc style={{ padding: '12px 20px 0' }}>
+        The closest head-to-head matchup in the league — the most evenly split weekly record. These two just can&apos;t shake each other.
+      </SectionDesc>
+      <div className="card-body" style={{ textAlign: 'center' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 14, flexWrap: 'wrap' }}>
+          <span style={{ fontWeight: 700, fontSize: 16, overflowWrap: 'anywhere' }}>{rivalry.a}</span>
+          <span style={{ fontFamily: 'DM Mono', fontSize: 24, fontWeight: 700, color: 'var(--gold)', whiteSpace: 'nowrap' }}>
+            {rivalry.aWins}–{rivalry.bWins}
+          </span>
+          <span style={{ fontWeight: 700, fontSize: 16, overflowWrap: 'anywhere' }}>{rivalry.b}</span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Each player's single best and single worst money week.
+function BoomBust({ history, roster }: { history: any[]; roster: string[] }) {
+  if (history.length === 0 || roster.length === 0) return null
+  const rows = roster.map(p => {
+    let best: { amount: number; tournament: string } | null = null
+    let worst: { amount: number; tournament: string } | null = null
+    for (const t of history) {
+      const s = (t.standings || []).find((st: any) => st.player === p)
+      if (!s) continue
+      const m = t.money?.[p] ?? 0
+      if (!best || m > best.amount) best = { amount: m, tournament: t.tournament_name || '—' }
+      if (!worst || m < worst.amount) worst = { amount: m, tournament: t.tournament_name || '—' }
+    }
+    if (!best || !worst) return null
+    return { player: p, best, worst }
+  }).filter((r): r is { player: string; best: { amount: number; tournament: string }; worst: { amount: number; tournament: string } } => r !== null)
+    .sort((a, b) => b.best.amount - a.best.amount)
+
+  if (rows.length === 0) return null
+  return (
+    <div className="card mb-24">
+      <div className="card-header"><div className="card-title">🎢 Boom / Bust</div></div>
+      <SectionDesc style={{ padding: '12px 20px 0' }}>
+        Each player&apos;s ceiling and floor — their single best and single worst money week of the season.
+      </SectionDesc>
+      <div className="scroll-x">
+        <table className="table" style={{ minWidth: 480 }}>
+          <thead>
+            <tr>
+              <th>Player</th>
+              <th>💥 Boom</th>
+              <th>📉 Bust</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(r => (
+              <tr key={r.player} className="row">
+                <td style={{ fontWeight: 600 }}>{r.player}</td>
+                <td>
+                  <span className={`score ${r.best.amount > 0 ? 'under' : r.best.amount < 0 ? 'over' : 'even'}`} style={{ fontSize: 13, fontWeight: 700 }}>{formatMoney(r.best.amount)}</span>
+                  <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: 'var(--text-dim)', marginTop: 2 }}>{r.best.tournament.slice(0, 24)}</div>
+                </td>
+                <td>
+                  <span className={`score ${r.worst.amount > 0 ? 'under' : r.worst.amount < 0 ? 'over' : 'even'}`} style={{ fontSize: 13, fontWeight: 700 }}>{formatMoney(r.worst.amount)}</span>
+                  <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: 'var(--text-dim)', marginTop: 2 }}>{r.worst.tournament.slice(0, 24)}</div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+// Distinct golfers drafted vs total picks — field-scanners vs favorites-riders.
+function LoyaltyIndex({ golferHistory, roster }: { golferHistory: any[]; roster: string[] }) {
+  const rows = roster.map(p => {
+    const mine = golferHistory.filter(g => g.player_name === p)
+    if (mine.length === 0) return null
+    const distinct = new Set(mine.map(g => g.golfer_name)).size
+    return { player: p, distinct, picks: mine.length, ratio: distinct / mine.length }
+  }).filter((r): r is { player: string; distinct: number; picks: number; ratio: number } => r !== null)
+    .sort((a, b) => a.ratio - b.ratio)
+
+  if (rows.length === 0) return null
+  return (
+    <div className="card mb-24">
+      <div className="card-header">
+        <div className="card-title">🧭 Loyalty Index</div>
+        <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: 'var(--text-dim)' }}>Most loyal first</span>
+      </div>
+      <SectionDesc style={{ padding: '12px 20px 0' }}>
+        How many different golfers each player has drafted vs their total picks — a low number means they ride their favorites, a high number means they scan the whole field.
+      </SectionDesc>
+      <div className="card-body">
+        {rows.map((r, i) => (
+          <div key={r.player} style={{ padding: '10px 0', borderTop: i > 0 ? '1px solid var(--border)' : undefined }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 6 }}>
+              <span style={{ fontWeight: 600, fontSize: 13 }}>{r.player}</span>
+              <span style={{ fontFamily: 'DM Mono', fontSize: 12, color: 'var(--text-dim)', whiteSpace: 'nowrap' }}>
+                {r.distinct} different golfer{r.distinct === 1 ? '' : 's'} in {r.picks} pick{r.picks === 1 ? '' : 's'}
+              </span>
+            </div>
+            <div style={{ height: 6, background: 'var(--surface2)', borderRadius: 3, overflow: 'hidden' }}>
+              <div style={{ width: `${Math.round(r.ratio * 100)}%`, height: '100%', background: 'var(--indigo)', borderRadius: 3 }} />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// Share of each player's drafted golfers that were cut or withdrew.
+function CutRate({ golferHistory, roster }: { golferHistory: any[]; roster: string[] }) {
+  const rows = roster.map(p => {
+    const mine = golferHistory.filter(g => g.player_name === p)
+    if (mine.length === 0) return null
+    const cuts = mine.filter(g => g.status === 'cut' || g.status === 'wd').length
+    return { player: p, cuts, picks: mine.length, pct: (cuts / mine.length) * 100 }
+  }).filter((r): r is { player: string; cuts: number; picks: number; pct: number } => r !== null)
+    .sort((a, b) => a.pct - b.pct)
+
+  if (rows.length === 0) return null
+  return (
+    <div className="card mb-24">
+      <div className="card-header">
+        <div className="card-title">✂️ Cut Rate</div>
+        <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: 'var(--text-dim)' }}>Lower is better</span>
+      </div>
+      <SectionDesc style={{ padding: '12px 20px 0' }}>
+        What share of each player&apos;s drafted golfers got cut or withdrew — the smaller the bar, the fewer wasted picks.
+      </SectionDesc>
+      <div className="card-body">
+        {rows.map((r, i) => (
+          <div key={r.player} style={{ padding: '10px 0', borderTop: i > 0 ? '1px solid var(--border)' : undefined }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 6 }}>
+              <span style={{ fontWeight: 600, fontSize: 13 }}>{r.player}</span>
+              <span style={{ fontFamily: 'DM Mono', fontSize: 12, color: r.pct > 0 ? 'var(--red)' : 'var(--text-dim)', whiteSpace: 'nowrap' }}>
+                {r.pct.toFixed(0)}% · {r.cuts} of {r.picks}
+              </span>
+            </div>
+            <div style={{ height: 6, background: 'var(--surface2)', borderRadius: 3, overflow: 'hidden' }}>
+              <div style={{ width: `${Math.min(100, r.pct)}%`, height: '100%', background: 'var(--red)', borderRadius: 3 }} />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// Lowest single round (strokes) by any drafted golfer all season.
+// Rounds below 55 are treated as data noise and ignored.
+function BestSingleRound({ golferHistory }: { golferHistory: any[] }) {
+  let best: { golfer: string; player: string; tournament: string; round: number; strokes: number } | null = null
+  for (const g of golferHistory) {
+    const rounds: (number | null)[] = g.rounds || []
+    rounds.forEach((r, ri) => {
+      if (r == null || r < 55) return
+      if (!best || r < best.strokes) {
+        best = {
+          golfer: g.golfer_name,
+          player: g.player_name,
+          tournament: g.tournaments?.name || '—',
+          round: ri + 1,
+          strokes: r,
+        }
+      }
+    })
+  }
+  if (!best) return null
+  const b: { golfer: string; player: string; tournament: string; round: number; strokes: number } = best
+
+  return (
+    <div className="card mb-24">
+      <div className="card-header"><div className="card-title">🔥 Best Single Round</div></div>
+      <SectionDesc style={{ padding: '12px 20px 0' }}>
+        The lowest single round shot by any drafted golfer all season — the hottest 18 holes anyone&apos;s pick has played.
+      </SectionDesc>
+      <div className="card-body" style={{ textAlign: 'center' }}>
+        <div style={{ fontFamily: 'DM Serif Display', fontSize: 40, lineHeight: 1, color: 'var(--green)' }}>{b.strokes}</div>
+        <div style={{ fontWeight: 700, fontSize: 15, marginTop: 8, overflowWrap: 'anywhere' }}>{b.golfer}</div>
+        <div style={{ fontFamily: 'DM Mono', fontSize: 12, color: 'var(--text-dim)', marginTop: 4, overflowWrap: 'anywhere' }}>
+          drafted by {b.player} · R{b.round} at {b.tournament}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // The full generic insights block. Founding league keeps its own legacy
 // score-based H2H table (rank data doesn't exist for the hardcoded era), so it
 // opts out of the rank-based grid via showHeadToHead.
@@ -301,9 +608,15 @@ export function LeagueInsights({ history, golferHistory, roster, showHeadToHead 
   if (history.length === 0 || roster.length === 0) return null
   return (
     <>
+      <SeasonScoreboard history={history} roster={roster} />
       {showHeadToHead && <HeadToHeadGrid history={history} roster={roster} />}
+      <RivalryMeter history={history} roster={roster} />
       <MoneyOverTimeChart history={history} roster={roster} />
+      <BoomBust history={history} roster={roster} />
       <TrustyGolfers golferHistory={golferHistory} roster={roster} />
+      <LoyaltyIndex golferHistory={golferHistory} roster={roster} />
+      <CutRate golferHistory={golferHistory} roster={roster} />
+      <BestSingleRound golferHistory={golferHistory} />
       <StreaksAndSplits history={history} roster={roster} />
     </>
   )
@@ -399,6 +712,9 @@ export function CustomLeagueStatsView({ history, golferHistory }: { history: any
           <div className="card-title">Player Stats</div>
           <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: 'var(--text-dim)' }}>This season</span>
         </div>
+        <SectionDesc style={{ padding: '12px 20px 0' }}>
+          Everyone&apos;s season at a glance — weekly finishes, majors won, times they drafted the tournament winner or a top-3 golfer, and how many of their picks got cut.
+        </SectionDesc>
         <div className="stats-table-wrap">
           <table className="stats-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
@@ -560,6 +876,9 @@ export function StatsTab({ history, golferHistory, leagueId }: { history: any[];
           <div className="card-title">All-Time Player Stats</div>
           <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: 'var(--text-dim)' }}>2020 – 2026 · All events</span>
         </div>
+        <SectionDesc style={{ padding: '12px 20px 0' }}>
+          The all-time ledger — weekly wins and podiums, majors won, times you drafted the tournament winner or a top-3 golfer, and total cuts eaten since 2020.
+        </SectionDesc>
         <div className="stats-table-wrap">
           <table className="stats-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
@@ -643,6 +962,9 @@ export function StatsTab({ history, golferHistory, leagueId }: { history: any[];
             ))}
           </div>
         </div>
+        <SectionDesc style={{ padding: '12px 20px 0' }}>
+          Who took home each of the four majors, year by year — the biggest weeks on the calendar. Tap a year chip to zoom in.
+        </SectionDesc>
         <div className="majors-grid-wrap">
           <div className="majors-grid" style={{ padding: '20px 24px', display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 0, overflowX: 'auto' }}>
           {/* Column headers */}
@@ -739,6 +1061,9 @@ export function StatsTab({ history, golferHistory, leagueId }: { history: any[];
       <div className="grid-2">
         <div className="card">
           <div className="card-header"><div className="card-title">🏅 Podium Finishes</div></div>
+          <SectionDesc style={{ padding: '12px 24px 0' }}>
+            All-time 1st, 2nd, and 3rd place weekly finishes stacked into one bar per player — the more gold in the bar, the more weeks they&apos;ve won.
+          </SectionDesc>
           <div style={{ padding: '20px 24px' }}>
             {mergedStats.map(s => (
               <div key={s.player} style={{ marginBottom: 16 }}>
@@ -762,6 +1087,9 @@ export function StatsTab({ history, golferHistory, leagueId }: { history: any[];
 
         <div className="card">
           <div className="card-header"><div className="card-title">✂️ Cuts Taken</div></div>
+          <SectionDesc style={{ padding: '12px 24px 0' }}>
+            How many drafted golfers missed the cut, all-time — the longer the bar, the more Fridays that ended early.
+          </SectionDesc>
           <div style={{ padding: '20px 24px' }}>
             {[...mergedStats].sort((a,b) => b.cut - a.cut).map(s => (
               <div key={s.player} style={{ marginBottom: 14 }}>
@@ -804,8 +1132,11 @@ export function StatsTab({ history, golferHistory, leagueId }: { history: any[];
         return (
           <div className="card mb-24">
             <div className="card-header"><div className="card-title">⚔️ Head-to-Head Records</div></div>
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <SectionDesc style={{ padding: '12px 20px 0' }}>
+              Your all-time record vs each player — a win means you posted a lower score than them that week. Green means you own that matchup.
+            </SectionDesc>
+            <div className="scroll-x">
+              <table style={{ width: '100%', minWidth: 640, borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ borderBottom: '2px solid var(--border)' }}>
                     <th style={{ padding: '10px 16px', textAlign: 'left', fontFamily: 'DM Mono', fontSize: 10, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Player</th>
@@ -890,6 +1221,9 @@ export function StatsTab({ history, golferHistory, leagueId }: { history: any[];
               <div className="card-title">🔥 Rivalry Tracker</div>
               <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: 'var(--text-dim)' }}>Closest season money races</span>
             </div>
+            <SectionDesc style={{ padding: '12px 20px 0' }}>
+              The three tightest money races this season — the smaller the gap between two players week after week, the hotter the rivalry.
+            </SectionDesc>
             <div className="card-body">
               {topRivals.map((r, i) => {
                 const aTotal = cumulative[r.a] || 0

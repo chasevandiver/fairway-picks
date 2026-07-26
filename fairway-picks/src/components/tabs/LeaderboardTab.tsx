@@ -171,7 +171,7 @@ export function LeaderboardTab({
               <div className="card-title">My Picks Today</div>
               <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: 'var(--text-dim)' }}>{currentPlayer}</span>
             </div>
-            <div style={{ display: 'flex', gap: 8, overflowX: 'auto', padding: '12px 16px' }}>
+            <div className="scroll-x" style={{ display: 'flex', gap: 8, padding: '12px 16px' }}>
               {mine.golfers.map(g => (
                 <div key={g.name} style={{
                   flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: 8,
@@ -297,8 +297,8 @@ export function LeaderboardTab({
               <span style={{ fontFamily: 'DM Mono', fontSize: 12, color: 'var(--text-dim)' }}>ESPN · Live</span>
             </div>
           </div>
-          <div style={{ overflowX: 'auto' }}>
-          <table className="table">
+          <div className="scroll-x">
+          <table className="table" style={{ minWidth: 560 }}>
             <thead>
               <tr>
                 {sortableTh('pos', 'Pos')}

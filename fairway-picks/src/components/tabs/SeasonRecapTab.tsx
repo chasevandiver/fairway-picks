@@ -4,20 +4,24 @@ import { formatMoney, moneyClass } from '@/lib/scoring'
 import type { SeasonMoney } from '@/lib/types'
 import { FOUNDING_LEAGUE_ID } from '@/lib/founding'
 import { LEGACY_PLAYERS } from '@/lib/constants'
+import { SectionDesc } from '@/components/app/SectionDesc'
 
 // ─── Award card (recap-local presentational helper) ──────────────────────────
-function AwardCard({ emoji, name, winner, detail }: {
+function AwardCard({ emoji, name, winner, detail, how }: {
   emoji: string
   name: string
   winner: string
   detail: string
+  how: string
 }) {
   return (
     <div className="card" style={{ padding: '16px 18px', textAlign: 'center' }}>
       <div style={{ fontSize: 28, lineHeight: 1, marginBottom: 8 }}>{emoji}</div>
       <div style={{ fontFamily: 'DM Mono', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-dim)', marginBottom: 6 }}>{name}</div>
-      <div style={{ fontFamily: 'DM Serif Display', fontSize: 22, lineHeight: 1.2, marginBottom: 4 }}>{winner}</div>
-      <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>{detail}</div>
+      <div style={{ fontFamily: 'DM Serif Display', fontSize: 22, lineHeight: 1.2, marginBottom: 4, overflowWrap: 'anywhere' }}>{winner}</div>
+      <div style={{ fontSize: 11, color: 'var(--text-dim)', overflowWrap: 'anywhere' }}>{detail}</div>
+      {/* How it's earned — plain-English one-liner */}
+      <div style={{ fontSize: 10, color: 'var(--text-dim)', opacity: 0.75, marginTop: 6, lineHeight: 1.4, overflowWrap: 'anywhere' }}>{how}</div>
     </div>
   )
 }
@@ -25,7 +29,7 @@ function AwardCard({ emoji, name, winner, detail }: {
 // Season awards derived purely from history/golferHistory — works for both
 // the founding league and custom leagues.
 function computeSeasonAwards(history: any[], golferHistory: any[], players: string[]) {
-  const awards: { emoji: string; name: string; winner: string; detail: string }[] = []
+  const awards: { emoji: string; name: string; winner: string; detail: string; how: string }[] = []
   if (history.length === 0 || players.length === 0) return awards
 
   // Season MVP — most total money across the season
@@ -38,6 +42,7 @@ function computeSeasonAwards(history: any[], golferHistory: any[], players: stri
   awards.push({
     emoji: '👑', name: 'Season MVP', winner: mvp,
     detail: `${formatMoney(totals[mvp])} total on the season`,
+    how: 'Most total money won across the whole season',
   })
 
   // Best Single Week — biggest one-tournament haul
@@ -52,6 +57,7 @@ function computeSeasonAwards(history: any[], golferHistory: any[], players: stri
   if (bw) awards.push({
     emoji: '💰', name: 'Best Single Week', winner: bw.player,
     detail: `${formatMoney(bw.amount)} at ${bw.tournament}`,
+    how: 'Biggest one-tournament payday by anyone',
   })
 
   // Cut Magnet — most cut/wd golfers picked
@@ -67,6 +73,7 @@ function computeSeasonAwards(history: any[], golferHistory: any[], players: stri
     awards.push({
       emoji: '✂️', name: 'Cut Magnet', winner: cutPlayer,
       detail: `${cuts} golfer${cuts === 1 ? '' : 's'} missed the weekend`,
+      how: 'Most drafted golfers who missed the cut or withdrew',
     })
   }
 
@@ -83,6 +90,7 @@ function computeSeasonAwards(history: any[], golferHistory: any[], players: stri
   if (bh) awards.push({
     emoji: '🎯', name: 'Bargain Hunter', winner: bh.player,
     detail: `${bh.golfer} finished ${bh.pos === 1 ? '1st' : `#${bh.pos}`} at ${bh.tournament}`,
+    how: 'Best single finish by any drafted golfer this season',
   })
 
   // Consistency Award — best average rank, min 2 tournaments played
@@ -100,6 +108,7 @@ function computeSeasonAwards(history: any[], golferHistory: any[], players: stri
   if (ca) awards.push({
     emoji: '🧊', name: 'Consistency Award', winner: ca.player,
     detail: `Avg finish ${ca.avg.toFixed(1)} over ${ca.played} events`,
+    how: 'Best average weekly finish (needs at least 2 events)',
   })
 
   return awards
@@ -196,10 +205,10 @@ export function SeasonRecapTab({ history, golferHistory, seasonMoney, leagueId }
       {leader && (
         <div className="card gradient-card-gold leader-glow" style={{
           borderRadius: 12, padding: '20px 24px', marginBottom: 24,
-          display: 'flex', alignItems: 'center', gap: 16,
+          display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap',
         }}>
           <div style={{ fontSize: 40 }}>🏆</div>
-          <div>
+          <div style={{ minWidth: 0, overflowWrap: 'anywhere' }}>
             <div style={{ fontFamily: 'DM Serif Display', fontSize: 22 }}>
               <span style={{ color: 'var(--gold)' }}>{leader.player_name}</span> is leading the season
             </div>
@@ -211,6 +220,9 @@ export function SeasonRecapTab({ history, golferHistory, seasonMoney, leagueId }
       )}
 
       {/* Per-player recap cards */}
+      <SectionDesc style={{ marginBottom: 12 }}>
+        Each player&apos;s season in one card — their best and worst money weeks, plus a letter grade for every pick based on where that golfer finished.
+      </SectionDesc>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16, marginBottom: 24 }}>
         {sorted.map((sm, i) => {
           const p = sm.player_name
@@ -282,8 +294,11 @@ export function SeasonRecapTab({ history, golferHistory, seasonMoney, leagueId }
       {/* Week by week money chart */}
       <div className="card">
         <div className="card-header"><div className="card-title">📊 Money by Tournament</div></div>
-        <div style={{ overflowX: 'auto' }}>
-          <table className="table">
+        <SectionDesc style={{ padding: '12px 20px 0' }}>
+          Every finalized week&apos;s winnings side by side, with season totals at the bottom — swipe sideways to see everyone.
+        </SectionDesc>
+        <div className="scroll-x">
+          <table className="table" style={{ minWidth: 560 }}>
             <thead>
               <tr>
                 <th>Tournament</th>
@@ -338,9 +353,12 @@ export function SeasonRecapTab({ history, golferHistory, seasonMoney, leagueId }
               <div style={{ fontFamily: 'DM Serif Display', fontSize: 20 }}>🏆 Season Awards</div>
               <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: 'var(--text-dim)', whiteSpace: 'nowrap' }}>Screenshot & share 📸</span>
             </div>
+            <SectionDesc style={{ marginBottom: 12 }}>
+              End-of-season hardware, earned automatically from every finalized tournament — each card says how it&apos;s won.
+            </SectionDesc>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 12 }}>
               {awards.map(a => (
-                <AwardCard key={a.name} emoji={a.emoji} name={a.name} winner={a.winner} detail={a.detail} />
+                <AwardCard key={a.name} emoji={a.emoji} name={a.name} winner={a.winner} detail={a.detail} how={a.how} />
               ))}
             </div>
           </div>

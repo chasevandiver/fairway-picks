@@ -167,7 +167,8 @@ export function HistoryTab({ history, golferHistory, isAdmin, roster, rules, onD
                           )}
                         </div>
                       </div>
-                      <table className="table">
+                      <div className="scroll-x">
+                      <table className="table" style={{ minWidth: 640 }}>
                         <thead>
                           <tr>
                             <th>Tournament</th>
@@ -217,6 +218,7 @@ export function HistoryTab({ history, golferHistory, isAdmin, roster, rules, onD
                           })}
                         </tbody>
                       </table>
+                      </div>
                     </div>
                   )
                 })}
@@ -243,8 +245,8 @@ export function HistoryTab({ history, golferHistory, isAdmin, roster, rules, onD
               </button>
             )}
           </div>
-          <div style={{ overflowX: 'auto' }}>
-          <table className="table">
+          <div className="scroll-x">
+          <table className="table" style={{ minWidth: 480 }}>
             <thead>
               <tr>
                 <th style={{ width: 28 }}></th>

@@ -4,6 +4,7 @@ import { formatMoney, moneyClass } from '@/lib/scoring'
 import type { LeagueRules } from '@/lib/rules'
 import type { Tournament, SeasonMoney } from '@/lib/types'
 import { AnimatedMoney } from '@/components/app/AnimatedMoney'
+import { SectionDesc } from '@/components/app/SectionDesc'
 
 // ─── Money Tab ────────────────────────────────────────────────────────────────
 export function MoneyTab({ seasonMoney, weekMoney, tournament, history, roster, rules }: {
@@ -59,7 +60,10 @@ export function MoneyTab({ seasonMoney, weekMoney, tournament, history, roster, 
       )}
 
       <div className="mb-24">
-        <h3 style={{ fontFamily: 'DM Serif Display', fontSize: 20, marginBottom: 16 }}>Season Totals</h3>
+        <h3 style={{ fontFamily: 'DM Serif Display', fontSize: 20, marginBottom: 6 }}>Season Totals</h3>
+        <SectionDesc style={{ marginBottom: 16 }}>
+          Each player&apos;s running profit or loss for the whole season — everything they&apos;ve won minus everything they&apos;ve paid out.
+        </SectionDesc>
         <div className="money-grid">
           {sorted.map((sm, i) => {
             const v = sm.total
@@ -83,6 +87,9 @@ export function MoneyTab({ seasonMoney, weekMoney, tournament, history, roster, 
             <div className="card-title">This Week · {tournament.name}</div>
             <span className="badge badge-gold">Projected</span>
           </div>
+          <SectionDesc style={{ padding: '12px 20px 0' }}>
+            What everyone would win or owe if the tournament ended right now — live numbers that move all weekend, nothing&apos;s final until the last putt drops.
+          </SectionDesc>
           <div className="card-body">
             <div className="money-grid mb-24">
               {roster.map((p) => {
@@ -109,8 +116,11 @@ export function MoneyTab({ seasonMoney, weekMoney, tournament, history, roster, 
       {history.length > 0 && (
         <div className="card">
           <div className="card-header"><div className="card-title">Tournament History</div></div>
-          <div style={{ overflowX: 'auto' }}>
-            <table className="table">
+          <SectionDesc style={{ padding: '12px 20px 0' }}>
+            Week-by-week money results for every finalized tournament — green means they cashed that week, red means they paid.
+          </SectionDesc>
+          <div className="scroll-x">
+            <table className="table" style={{ minWidth: 560 }}>
               <thead>
                 <tr>
                   <th>Tournament</th>
