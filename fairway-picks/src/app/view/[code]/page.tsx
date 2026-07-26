@@ -92,7 +92,8 @@ function PlayerCard({
 
       {expanded && (
         <div style={{ marginTop: 4, padding: 16, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8 }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <div className="scroll-x">
+          <table style={{ width: '100%', minWidth: 480, borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--border)' }}>
                 {['Golfer', 'R1', 'R2', 'R3', 'R4', 'Total'].map((h, i) => (
@@ -128,6 +129,7 @@ function PlayerCard({
               })}
             </tbody>
           </table>
+          </div>
         </div>
       )}
     </div>
@@ -356,8 +358,8 @@ export default function GuestLeaguePage({ params }: { params: { code: string } }
         {history.length > 0 && (
           <div className="card" style={{ marginBottom: 24 }}>
             <div className="card-header"><div className="card-title">Tournament History</div></div>
-            <div style={{ overflowX: 'auto' }}>
-              <table className="table">
+            <div className="scroll-x">
+              <table className="table" style={{ minWidth: 560 }}>
                 <thead>
                   <tr>
                     <th>Tournament</th>

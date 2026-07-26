@@ -16,8 +16,8 @@ function AwardCard({ emoji, name, winner, detail }: {
     <div className="card" style={{ padding: '16px 18px', textAlign: 'center' }}>
       <div style={{ fontSize: 28, lineHeight: 1, marginBottom: 8 }}>{emoji}</div>
       <div style={{ fontFamily: 'DM Mono', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-dim)', marginBottom: 6 }}>{name}</div>
-      <div style={{ fontFamily: 'DM Serif Display', fontSize: 22, lineHeight: 1.2, marginBottom: 4 }}>{winner}</div>
-      <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>{detail}</div>
+      <div style={{ fontFamily: 'DM Serif Display', fontSize: 22, lineHeight: 1.2, marginBottom: 4, overflowWrap: 'anywhere' }}>{winner}</div>
+      <div style={{ fontSize: 11, color: 'var(--text-dim)', overflowWrap: 'anywhere' }}>{detail}</div>
     </div>
   )
 }
@@ -196,10 +196,10 @@ export function SeasonRecapTab({ history, golferHistory, seasonMoney, leagueId }
       {leader && (
         <div className="card gradient-card-gold leader-glow" style={{
           borderRadius: 12, padding: '20px 24px', marginBottom: 24,
-          display: 'flex', alignItems: 'center', gap: 16,
+          display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap',
         }}>
           <div style={{ fontSize: 40 }}>🏆</div>
-          <div>
+          <div style={{ minWidth: 0, overflowWrap: 'anywhere' }}>
             <div style={{ fontFamily: 'DM Serif Display', fontSize: 22 }}>
               <span style={{ color: 'var(--gold)' }}>{leader.player_name}</span> is leading the season
             </div>
@@ -282,8 +282,8 @@ export function SeasonRecapTab({ history, golferHistory, seasonMoney, leagueId }
       {/* Week by week money chart */}
       <div className="card">
         <div className="card-header"><div className="card-title">📊 Money by Tournament</div></div>
-        <div style={{ overflowX: 'auto' }}>
-          <table className="table">
+        <div className="scroll-x">
+          <table className="table" style={{ minWidth: 560 }}>
             <thead>
               <tr>
                 <th>Tournament</th>

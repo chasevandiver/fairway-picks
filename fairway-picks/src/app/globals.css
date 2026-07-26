@@ -152,6 +152,31 @@ body {
   max-width: calc(1280px + 240px);
 }
 
+/* ── Horizontal scroll wrapper (all widths) ──
+   Wrap any block that can grow wider than the viewport (tables, matrices,
+   charts) so it pans sideways inside the card instead of stretching the page. */
+.scroll-x {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  max-width: 100%;
+}
+.stats-table-wrap,
+.majors-grid-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  max-width: 100%;
+}
+
+/* Defense-in-depth: one unwrapped wide element must never push the whole
+   page wider than the phone — wide blocks scroll inside .scroll-x instead. */
+.main-content,
+.tab-content {
+  min-width: 0;
+  overflow-x: hidden;
+}
+.main-content { max-width: min(100%, calc(1280px + 240px)); }
+.tab-content { max-width: 100%; }
+
 /* ── Page Header ── */
 .page-header {
   margin-bottom: 32px;

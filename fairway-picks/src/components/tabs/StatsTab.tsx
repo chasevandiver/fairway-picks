@@ -42,8 +42,8 @@ function HeadToHeadGrid({ history, roster }: { history: any[]; roster: string[] 
   return (
     <div className="card mb-24">
       <div className="card-header"><div className="card-title">⚔️ Head-to-Head Records</div></div>
-      <div style={{ overflowX: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+      <div className="scroll-x">
+        <table style={{ width: '100%', minWidth: 640, borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ borderBottom: '2px solid var(--border)' }}>
               <th style={{ ...labelStyle, padding: '10px 16px', textAlign: 'left' }}>Player</th>
@@ -253,8 +253,8 @@ function StreaksAndSplits({ history, roster }: { history: any[]; roster: string[
   return (
     <div className="card mb-24">
       <div className="card-header"><div className="card-title">🔁 Streaks & Splits</div></div>
-      <div style={{ overflowX: 'auto' }}>
-        <table className="table">
+      <div className="scroll-x">
+        <table className="table" style={{ minWidth: 560 }}>
           <thead>
             <tr>
               <th>Player</th>
@@ -804,8 +804,8 @@ export function StatsTab({ history, golferHistory, leagueId }: { history: any[];
         return (
           <div className="card mb-24">
             <div className="card-header"><div className="card-title">⚔️ Head-to-Head Records</div></div>
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <div className="scroll-x">
+              <table style={{ width: '100%', minWidth: 640, borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ borderBottom: '2px solid var(--border)' }}>
                     <th style={{ padding: '10px 16px', textAlign: 'left', fontFamily: 'DM Mono', fontSize: 10, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Player</th>

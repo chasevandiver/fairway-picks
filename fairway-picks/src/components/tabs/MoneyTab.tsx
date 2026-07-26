@@ -109,8 +109,8 @@ export function MoneyTab({ seasonMoney, weekMoney, tournament, history, roster, 
       {history.length > 0 && (
         <div className="card">
           <div className="card-header"><div className="card-title">Tournament History</div></div>
-          <div style={{ overflowX: 'auto' }}>
-            <table className="table">
+          <div className="scroll-x">
+            <table className="table" style={{ minWidth: 560 }}>
               <thead>
                 <tr>
                   <th>Tournament</th>
