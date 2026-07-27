@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react'
 import type { LeagueRules } from '@/lib/rules'
 import type { Tournament, Pick, GolferScore, PlayerStanding } from '@/lib/types'
-import { PGA_SCHEDULE } from '@/lib/constants'
+import { PGA_SCHEDULE, HISTORICAL_PLAYERS } from '@/lib/constants'
+import { FOUNDING_LEAGUE_ID } from '@/lib/founding'
 import { isMajorName } from '@/lib/majors'
 import { parseHistoricalPaste, importTotals, type ParsedEvent } from '@/lib/importHistory'
 import { formatMoney } from '@/lib/scoring'
@@ -184,9 +185,13 @@ export function AdminTab({
   const [importMsg, setImportMsg] = useState('')
   const totals = parsed ? importTotals(parsed.events) : {}
 
+  // Past players never appear in the active roster, but their columns are in
+  // the old sheets — without this their money would be quietly discarded.
+  const importRoster = leagueId === FOUNDING_LEAGUE_ID ? [...roster, ...HISTORICAL_PLAYERS] : roster
+
   const handlePreview = () => {
     const year = Number(seasonYear)
-    setParsed(parseHistoricalPaste(pasteText, roster, Number.isInteger(year) && year > 1900 ? year : undefined))
+    setParsed(parseHistoricalPaste(pasteText, importRoster, Number.isInteger(year) && year > 1900 ? year : undefined))
     setImportMsg('')
   }
 
@@ -490,7 +495,7 @@ export function AdminTab({
         <div className="card-body">
           <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: 'var(--text-dim)', marginBottom: 8, lineHeight: 1.8 }}>
             Expected columns — <strong>Tournament</strong>, <strong>Date</strong>, then one per player:<br />
-            <span style={{ whiteSpace: 'pre' }}>{'Tournament\tDate\t' + roster.slice(0, 3).join('\t')}</span><br />
+            <span style={{ whiteSpace: 'pre' }}>{'Tournament\tDate\t' + importRoster.slice(0, 3).join('\t')}</span><br />
             <span style={{ whiteSpace: 'pre' }}>{'Sentry Tournament\t2024-01-07\t-15\t60\t-15'}</span>
           </div>
           <textarea

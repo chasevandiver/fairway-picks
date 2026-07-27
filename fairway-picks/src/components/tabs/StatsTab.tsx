@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { formatMoney, parseWinnerPlayers } from '@/lib/scoring'
 import { FOUNDING_LEAGUE_ID } from '@/lib/founding'
-import { LEGACY_PLAYERS, MAJORS_HISTORY, MAJOR_COLORS, ALL_STATS } from '@/lib/constants'
+import { LEGACY_PLAYERS, HISTORICAL_PLAYERS, ALL_TIME_PLAYERS, MAJORS_HISTORY, MAJOR_COLORS, ALL_STATS } from '@/lib/constants'
 import { majorKey, type MajorKey } from '@/lib/majors'
 import { appEraCounts, countsTowardTallies } from '@/lib/leagueStats'
 import { MoreStats } from '@/components/tabs/MoreStats'
@@ -805,7 +805,7 @@ export function StatsTab({ history, golferHistory, historyPicks, leagueId }: { h
   // ── Merge hardcoded baseline + live Supabase results ──
   // Live results come from finalized tournaments stored in DB (2026+)
   const liveStatsByPlayer: Record<string, { first: number; second: number; third: number; winners: number; top3: number; cut: number; majors: number }> = {}
-  LEGACY_PLAYERS.forEach(p => liveStatsByPlayer[p] = { first: 0, second: 0, third: 0, winners: 0, top3: 0, cut: 0, majors: 0 })
+  ALL_TIME_PLAYERS.forEach(p => liveStatsByPlayer[p] = { first: 0, second: 0, third: 0, winners: 0, top3: 0, cut: 0, majors: 0 })
 
   // Played and golfers-picked exist only for the app era — the hardcoded
   // ALL_STATS baseline has no pick counts for 2020–2025, and podium counts are
@@ -830,7 +830,7 @@ export function StatsTab({ history, golferHistory, historyPicks, leagueId }: { h
       liveStatsByPlayer[p].cut += s.golfers_cut || 0
     }
     if (h.money) {
-      for (const p of LEGACY_PLAYERS) {
+      for (const p of ALL_TIME_PLAYERS) {
         if (!liveStatsByPlayer[p]) continue
         const r = (h.standings || []).find((s: any) => s.player === p)
         if (r?.has_winner) liveStatsByPlayer[p].winners++
@@ -882,17 +882,40 @@ export function StatsTab({ history, golferHistory, historyPicks, leagueId }: { h
   const allMajors = [...MAJORS_HISTORY, ...liveMajors]
   const years = Array.from(new Set([2020, 2021, 2022, 2023, 2024, 2025, ...liveMajors.map(m => m.year)])).sort()
 
+  // maxCut and the charts below stay on the active roster — a historical-only
+  // player has no cut total to scale a bar against.
   const maxCut = Math.max(...mergedStats.map(s => s.cut))
 
   // Major wins per player (merged)
   const majorsByPlayer: Record<string, number> = {}
-  LEGACY_PLAYERS.forEach(p => majorsByPlayer[p] = 0)
+  ALL_TIME_PLAYERS.forEach(p => majorsByPlayer[p] = 0)
   allMajors.forEach(m => {
     const winners = parseWinnerPlayers(m.winner)
     for (const p of winners) {
       if (p in majorsByPlayer) majorsByPlayer[p] += winners.length > 1 ? 0.5 : 1
     }
   })
+
+  // Historical-only players get a row in the all-time table, but only for the
+  // numbers we actually hold. ALL_STATS never recorded their finishes, cuts or
+  // tour winners, so those stay null and render as an em dash rather than a
+  // zero that would read as "played and never placed".
+  const historicalRows = HISTORICAL_PLAYERS
+    .filter(p => (majorsByPlayer[p] ?? 0) > 0 || (liveStatsByPlayer[p]?.first ?? 0) > 0)
+    .map(p => ({
+      player: p,
+      first: null, second: null, third: null,
+      majors: majorsByPlayer[p] ?? 0,
+      winners: null, top3: null, cut: null,
+      historical: true as const,
+    }))
+
+  const tableRows: {
+    player: string
+    first: number | null; second: number | null; third: number | null
+    majors: number; winners: number | null; top3: number | null; cut: number | null
+    historical?: boolean
+  }[] = [...mergedStats, ...historicalRows]
 
   return (
     <div>
@@ -948,12 +971,17 @@ export function StatsTab({ history, golferHistory, historyPicks, leagueId }: { h
               </tr>
             </thead>
             <tbody>
-              {mergedStats.map((s, i) => (
+              {tableRows.map((s, i) => (
                 <tr key={s.player} style={{ borderTop: '1px solid var(--border)', background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.015)' }}>
                   <td style={{ padding: '14px 20px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                       <div className="user-avatar" style={{ width: 30, height: 30, fontSize: 12 }}>{s.player[0]}</div>
-                      <span style={{ fontWeight: 600 }}>{s.player}</span>
+                      <div>
+                        <span style={{ fontWeight: 600 }}>{s.player}</span>
+                        {s.historical && (
+                          <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: 'var(--text-dim)' }}>past player</div>
+                        )}
+                      </div>
                     </div>
                   </td>
                   <td style={{ padding: '14px 20px', textAlign: 'center' }}>
@@ -992,6 +1020,8 @@ export function StatsTab({ history, golferHistory, historyPicks, leagueId }: { h
           * Played and Picked cover the app era only (2026 on). The 2020–2025 baseline
           records finishes and cuts but never stored how many events each player entered
           or how many golfers they drafted, so those years are left out rather than guessed at.
+          Past players are listed for the records they hold; an em dash means that number
+          was never recorded for them, not that it is zero.
         </SectionDesc>
       </div>
 

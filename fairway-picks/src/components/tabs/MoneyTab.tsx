@@ -22,7 +22,13 @@ export function MoneyTab({ seasonMoney, weekMoney, tournament, history, roster, 
   // Total dollars that changed hands (sum of positive balances = what winners collected)
   const totalPot = seasonMoney.reduce((s, sm) => s + Math.max(0, sm.total), 0)
   const tournamentsPlayed = history.length
-  const seasonRows = moneyBySeason(history, roster)
+  // Columns follow the money rather than the current roster, so a past player
+  // who only appears in imported seasons still gets a column.
+  const moneyRoster = Array.from(new Set([
+    ...roster,
+    ...history.flatMap((h: any) => Object.keys(h.money ?? {})),
+  ]))
+  const seasonRows = moneyBySeason(history, moneyRoster)
   const visibleHistory = season === 'all' ? history : history.filter(h => seasonOf(h) === season)
 
   return (
@@ -137,7 +143,7 @@ export function MoneyTab({ seasonMoney, weekMoney, tournament, history, roster, 
               <thead>
                 <tr>
                   <th>Season</th>
-                  {roster.map((p) => <th key={p}>{p}</th>)}
+                  {moneyRoster.map((p) => <th key={p}>{p}</th>)}
                   <th>Events</th>
                 </tr>
               </thead>
@@ -150,7 +156,7 @@ export function MoneyTab({ seasonMoney, weekMoney, tournament, history, roster, 
                         <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: 'var(--text-dim)' }}>imported</div>
                       )}
                     </td>
-                    {roster.map((p) => {
+                    {moneyRoster.map((p) => {
                       const v = row.totals[p] ?? 0
                       return (
                         <td key={p}>
@@ -165,7 +171,7 @@ export function MoneyTab({ seasonMoney, weekMoney, tournament, history, roster, 
                 ))}
                 <tr className="row" style={{ borderTop: '2px solid var(--border)' }}>
                   <td style={{ fontWeight: 700 }}>All-time</td>
-                  {roster.map((p) => {
+                  {moneyRoster.map((p) => {
                     const v = seasonRows.reduce((s, r) => s + (r.totals[p] ?? 0), 0)
                     return (
                       <td key={p}>

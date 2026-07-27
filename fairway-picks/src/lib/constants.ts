@@ -1,8 +1,13 @@
-import { LEGACY_PLAYER_NAMES } from '@/lib/founding'
+import { LEGACY_PLAYER_NAMES, HISTORICAL_PLAYER_NAMES, ALL_TIME_PLAYER_NAMES } from '@/lib/founding'
 
 // The founding league's historical roster — used only for founding-league
 // claiming and legacy stats. Custom leagues derive their roster from members.
 export const LEGACY_PLAYERS: string[] = [...LEGACY_PLAYER_NAMES]
+
+// Historical-only names. Never claimable and never drafted, but counted by the
+// all-time stats and accepted by the season importer.
+export const HISTORICAL_PLAYERS: string[] = [...HISTORICAL_PLAYER_NAMES]
+export const ALL_TIME_PLAYERS: string[] = [...ALL_TIME_PLAYER_NAMES]
 
 // ─── 2026 PGA Tour Schedule ───────────────────────────────────────────────────
 export const PGA_SCHEDULE = [

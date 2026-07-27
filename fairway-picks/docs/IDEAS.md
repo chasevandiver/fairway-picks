@@ -103,10 +103,17 @@ source.
 Eric, Max, Hayden, Andrew, Brennan, Chase. The `Terra` name appearing in the
 2026 sheet tabs is not added.
 
-One genuine roster gap to decide on: **JHall** played 2023–24 and owns the 2023
-Masters in `MAJORS_HISTORY`, but isn't in `LEGACY_PLAYERS` — so that major
-currently counts for nobody. Either add him as a historical-only name or accept
-that his results stay unattributed.
+**JHall is a historical-only name.** He played 2023–24 and owns the 2023 Masters
+in `MAJORS_HISTORY`, but wasn't in any roster constant, so that major counted for
+nobody. `HISTORICAL_PLAYER_NAMES` in `src/lib/founding.ts` now holds him:
+counted by the all-time tallies and the Major Wins Leaderboard, accepted as a
+column by the season importer, and given a row in the all-time table — but never
+claimable, never in a draft order, and never in the active roster.
+
+His finishes, cuts and tour winners were never recorded, so those cells show an
+em dash rather than a zero that would read as "played and never placed". A test
+now asserts every winner in `MAJORS_HISTORY` is attributable to someone, so this
+can't silently regress when a name is added.
 
 ### The double-counting trap
 
