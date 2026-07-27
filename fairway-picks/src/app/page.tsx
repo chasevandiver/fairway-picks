@@ -55,6 +55,8 @@ export default function App() {
   const [seasonMoney, setSeasonMoney] = useState<SeasonMoney[]>([])
   const [history, setHistory] = useState<any[]>([])
   const [golferHistory, setGolferHistory] = useState<any[]>([])
+  // Draft order for finished events — powers the draft-slot stats.
+  const [historyPicks, setHistoryPicks] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const [dataLoaded, setDataLoaded] = useState(false)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
@@ -314,6 +316,7 @@ export default function App() {
       }
 
       setGolferHistory(golferResults ?? [])
+      setHistoryPicks(leagueDataRes.historyPicks ?? [])
     } else {
       // A failed load used to be indistinguishable from an empty league.
       notify("Couldn't load league data. Pull to refresh or try again shortly.")
@@ -749,12 +752,12 @@ export default function App() {
           <SkeletonScreen />
         ) : (
           <div key={tabKey} className="tab-content">
-            {tab === 'live'    && <LeaderboardTab tournament={tournament} standings={standings} roster={roster} liveData={liveData} pickMap={pickMap} loading={loading} lastUpdated={lastUpdated} onRefresh={fetchScores} money={weekMoney} flashMap={flashMap} isLiveData={isLiveData} currentPlayer={currentPlayer} />}
+            {tab === 'live'    && <LeaderboardTab tournament={tournament} standings={standings} roster={roster} liveData={liveData} pickMap={pickMap} loading={loading} lastUpdated={lastUpdated} onRefresh={fetchScores} money={weekMoney} flashMap={flashMap} isLiveData={isLiveData} currentPlayer={currentPlayer} rules={effectiveRules} isMajor={(tournament as any)?.is_major ?? false} />}
             {tab === 'picks'   && <PicksTab standings={standings} pickMap={pickMap} liveData={liveData} tournament={tournament} roster={roster} />}
             {tab === 'money'   && <MoneyTab seasonMoney={seasonMoney} weekMoney={weekMoney} tournament={tournament} history={history} roster={roster} rules={effectiveRules} />}
             {tab === 'draft'   && <DraftTab tournament={tournament} picks={picks} liveData={liveData} currentPlayer={currentPlayer ?? ''} isAdmin={isAdmin} onPickMade={handlePickMade} onUndoPick={handleUndoPick} picksPerPlayer={effectiveRules.picks_per_player} />}
             {tab === 'history' && <HistoryTab history={history} golferHistory={golferHistory} isAdmin={isAdmin} roster={roster} rules={leagueRules} onDeleteTournament={handleDeleteTournament} onEditResult={handleEditResult} onDeleteResult={handleDeleteResult} />}
-            {tab === 'stats'   && <StatsTab history={history} golferHistory={golferHistory} leagueId={leagueId} />}
+            {tab === 'stats'   && <StatsTab history={history} golferHistory={golferHistory} historyPicks={historyPicks} leagueId={leagueId} />}
             {tab === 'recap'   && <SeasonRecapTab history={history} golferHistory={golferHistory} seasonMoney={seasonMoney} leagueId={leagueId} />}
             {tab === 'admin'   && isAdmin && <AdminTab tournament={tournament} standings={standings} weekMoney={weekMoney} picks={picks} liveData={liveData} leagueId={leagueId} leagueName={leagueName} inviteCode={inviteCode} leagueRules={leagueRules} roster={roster} members={members} commissionerId={commissionerId} currentUserId={user?.id ?? ''} isPublicView={isPublicView} onSetupTournament={handleSetupTournament} onFinalize={handleFinalize} onClearTournament={handleClearTournament} onClearPicks={handleClearPicks} onSwapGolfer={handleSwapGolfer} onSaveRules={handleSaveRules} onSaveInviteCode={handleSaveInviteCode} onRemoveMember={handleRemoveMember} onRenameLeague={handleRenameLeague} onTogglePublicView={handleTogglePublicView} />}
           </div>

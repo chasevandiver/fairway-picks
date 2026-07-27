@@ -5,6 +5,8 @@ import { formatMoney, parseWinnerPlayers } from '@/lib/scoring'
 import { FOUNDING_LEAGUE_ID } from '@/lib/founding'
 import { LEGACY_PLAYERS, MAJORS_HISTORY, MAJOR_COLORS, ALL_STATS } from '@/lib/constants'
 import { majorKey, type MajorKey } from '@/lib/majors'
+import { appEraCounts } from '@/lib/leagueStats'
+import { MoreStats } from '@/components/tabs/MoreStats'
 import { SectionDesc } from '@/components/app/SectionDesc'
 
 // ─── Generic history-derived insights (all league types) ─────────────────────
@@ -304,7 +306,8 @@ function StreaksAndSplits({ history, roster }: { history: any[]; roster: string[
 }
 
 // One-table season summary: weeks won, podiums, average finish, and money.
-function SeasonScoreboard({ history, roster }: { history: any[]; roster: string[] }) {
+function SeasonScoreboard({ history, golferHistory, roster }: { history: any[]; golferHistory: any[]; roster: string[] }) {
+  const counts = appEraCounts(history, golferHistory, roster)
   if (history.length === 0 || roster.length === 0) return null
   const rows = roster.map(p => {
     let played = 0, weeksWon = 0, podiums = 0, total = 0
@@ -333,13 +336,15 @@ function SeasonScoreboard({ history, roster }: { history: any[]; roster: string[
         <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: 'var(--text-dim)' }}>This season</span>
       </div>
       <SectionDesc style={{ padding: '12px 20px 0' }}>
-        The whole season in one table — weeks won, top-3 finishes, average weekly finish, and dollars per week. This is where the &quot;who&apos;s actually good&quot; argument gets settled.
+        The whole season in one table — events entered, golfers drafted (distinct golfers in brackets), weeks won, top-3 finishes, average weekly finish, and dollars per week. This is where the &quot;who&apos;s actually good&quot; argument gets settled.
       </SectionDesc>
       <div className="scroll-x">
-        <table className="table" style={{ minWidth: 560 }}>
+        <table className="table" style={{ minWidth: 720 }}>
           <thead>
             <tr>
               <th>Player</th>
+              <th>Played</th>
+              <th>Golfers</th>
               <th>Weeks Won</th>
               <th>Podiums</th>
               <th>Avg Finish</th>
@@ -351,6 +356,11 @@ function SeasonScoreboard({ history, roster }: { history: any[]; roster: string[
             {rows.map(r => (
               <tr key={r.player} className="row">
                 <td style={{ fontWeight: 600 }}>{r.player}</td>
+                <td><span style={{ fontFamily: 'DM Mono', fontSize: 13, color: 'var(--text-dim)' }}>{r.played}</span></td>
+                <td>
+                  <span style={{ fontFamily: 'DM Mono', fontSize: 13, color: 'var(--text-dim)' }}>{counts[r.player]?.picked || '—'}</span>
+                  <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: 'var(--text-dim)', opacity: 0.7 }}> ({counts[r.player]?.uniqueGolfers ?? 0})</span>
+                </td>
                 <td><span style={{ fontFamily: 'DM Mono', fontSize: 13, color: 'var(--gold)', fontWeight: 700 }}>{r.weeksWon || '—'}</span></td>
                 <td><span style={{ fontFamily: 'DM Mono', fontSize: 13, color: 'var(--indigo)', fontWeight: 700 }}>{r.podiums || '—'}</span></td>
                 <td><span style={{ fontFamily: 'DM Mono', fontSize: 13, color: 'var(--text-dim)' }}>{r.avgFinish !== null ? r.avgFinish.toFixed(1) : '—'}</span></td>
@@ -600,16 +610,17 @@ function BestSingleRound({ golferHistory }: { golferHistory: any[] }) {
 // The full generic insights block. Founding league keeps its own legacy
 // score-based H2H table (rank data doesn't exist for the hardcoded era), so it
 // opts out of the rank-based grid via showHeadToHead.
-export function LeagueInsights({ history, golferHistory, roster, showHeadToHead = true }: {
+export function LeagueInsights({ history, golferHistory, historyPicks = [], roster, showHeadToHead = true }: {
   history: any[]
   golferHistory: any[]
+  historyPicks?: any[]
   roster: string[]
   showHeadToHead?: boolean
 }) {
   if (history.length === 0 || roster.length === 0) return null
   return (
     <>
-      <SeasonScoreboard history={history} roster={roster} />
+      <SeasonScoreboard history={history} golferHistory={golferHistory} roster={roster} />
       {showHeadToHead && <HeadToHeadGrid history={history} roster={roster} />}
       <RivalryMeter history={history} roster={roster} />
       <MoneyOverTimeChart history={history} roster={roster} />
@@ -619,6 +630,7 @@ export function LeagueInsights({ history, golferHistory, roster, showHeadToHead 
       <CutRate golferHistory={golferHistory} roster={roster} />
       <BestSingleRound golferHistory={golferHistory} />
       <StreaksAndSplits history={history} roster={roster} />
+      <MoreStats history={history} golferHistory={golferHistory} historyPicks={historyPicks} roster={roster} />
     </>
   )
 }
@@ -626,7 +638,7 @@ export function LeagueInsights({ history, golferHistory, roster, showHeadToHead 
 // ─── Stats Tab ────────────────────────────────────────────────────────────────
 // Stats view for custom (non-founding) leagues. Derives everything from the
 // league's own history — no hardcoded baselines can leak original-league data.
-export function CustomLeagueStatsView({ history, golferHistory }: { history: any[]; golferHistory: any[] }) {
+export function CustomLeagueStatsView({ history, golferHistory, historyPicks }: { history: any[]; golferHistory: any[]; historyPicks: any[] }) {
   // Derive players from this league's tournament history
   const players = Array.from(new Set(
     history.flatMap(h => (h.standings || []).map((s: any) => s.player))
@@ -687,6 +699,7 @@ export function CustomLeagueStatsView({ history, golferHistory }: { history: any
     .sort((a, b) => (b.first - a.first) || (b.winners - a.winners) || (b.top3 - a.top3))
 
   const maxCut = Math.max(1, ...rows.map(s => s.cut))
+  const picked = appEraCounts(history, golferHistory, players)
 
   return (
     <div>
@@ -733,6 +746,7 @@ export function CustomLeagueStatsView({ history, golferHistory }: { history: any
                   { label: '🎯 Winners', color: 'var(--green)' },
                   { label: '🔝 Top 3', color: 'var(--indigo)' },
                   { label: '✂️ Cuts', color: 'var(--red)' },
+                  { label: '🏌️ Picked', color: 'var(--text-dim)' },
                 ].map((h, i) => (
                   <th key={i} className={i === 0 ? 'player-cell' : 'num-cell'} style={{ padding: '10px 20px', textAlign: i === 0 ? 'left' : 'center', fontFamily: 'DM Mono', fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: h.color, fontWeight: 600, whiteSpace: 'nowrap' }}>{h.label}</th>
                 ))}
@@ -760,6 +774,10 @@ export function CustomLeagueStatsView({ history, golferHistory }: { history: any
                     </div>
                     <div style={{ fontSize: 10, marginTop: 2 }}>{s.cut}</div>
                   </td>
+                  <td className="num-cell" style={{ padding: '14px 20px', textAlign: 'center', fontFamily: 'DM Mono', color: 'var(--text-dim)' }}>
+                    {picked[s.player]?.picked || '—'}
+                    <div style={{ fontSize: 10, opacity: 0.7 }}>{picked[s.player]?.uniqueGolfers ?? 0} unique</div>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -768,24 +786,30 @@ export function CustomLeagueStatsView({ history, golferHistory }: { history: any
       </div>
 
       {/* ── Generic history-derived insights ── */}
-      <LeagueInsights history={history} golferHistory={golferHistory} roster={players} />
+      <LeagueInsights history={history} golferHistory={golferHistory} historyPicks={historyPicks} roster={players} />
     </div>
   )
 }
 
-export function StatsTab({ history, golferHistory, leagueId }: { history: any[]; golferHistory: any[]; leagueId: string }) {
+export function StatsTab({ history, golferHistory, historyPicks, leagueId }: { history: any[]; golferHistory: any[]; historyPicks: any[]; leagueId: string }) {
   // Hooks must be called unconditionally; branch after.
   const [activeYear, setActiveYear] = useState<number | 'all'>('all')
   const isFoundingLeague = leagueId === FOUNDING_LEAGUE_ID
   // Custom leagues get a scoped view derived entirely from their own
   // history. The hardcoded ALL_STATS / MAJORS_HISTORY baselines below are
   // intentionally untouched — they only render for the founding league.
-  if (!isFoundingLeague) return <CustomLeagueStatsView history={history} golferHistory={golferHistory} />
+  if (!isFoundingLeague) return <CustomLeagueStatsView history={history} golferHistory={golferHistory} historyPicks={historyPicks} />
 
   // ── Merge hardcoded baseline + live Supabase results ──
   // Live results come from finalized tournaments stored in DB (2026+)
   const liveStatsByPlayer: Record<string, { first: number; second: number; third: number; winners: number; top3: number; cut: number; majors: number }> = {}
   LEGACY_PLAYERS.forEach(p => liveStatsByPlayer[p] = { first: 0, second: 0, third: 0, winners: 0, top3: 0, cut: 0, majors: 0 })
+
+  // Played and golfers-picked exist only for the app era — the hardcoded
+  // ALL_STATS baseline has no pick counts for 2020–2025, and podium counts are
+  // not an event count. Kept out of `mergedStats` so they can't be summed with
+  // a baseline that doesn't exist.
+  const appEra = appEraCounts(history, golferHistory, LEGACY_PLAYERS)
 
   const liveMajors: typeof MAJORS_HISTORY = []
 
@@ -910,6 +934,8 @@ export function StatsTab({ history, golferHistory, leagueId }: { history: any[];
                   { label: '🎯 Winners', color: 'var(--green)' },
                   { label: '🔝 Top 3', color: 'var(--indigo)' },
                   { label: '✂️ Cuts', color: 'var(--red)' },
+                  { label: '📅 Played*', color: 'var(--text-dim)' },
+                  { label: '🏌️ Picked*', color: 'var(--text-dim)' },
                 ].map((h, i) => (
                   <th key={i} className={i === 0 ? 'player-cell' : 'num-cell'} style={{ padding: '10px 20px', textAlign: i === 0 ? 'left' : 'center', fontFamily: 'DM Mono', fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: h.color, fontWeight: 600, whiteSpace: 'nowrap' }}>{h.label}</th>
                 ))}
@@ -945,11 +971,22 @@ export function StatsTab({ history, golferHistory, leagueId }: { history: any[];
                   <td style={{ padding: '14px 20px', textAlign: 'center' }}>
                     <span style={{ fontFamily: 'DM Mono', fontSize: 16, fontWeight: 700, color: 'var(--red)' }}>{s.cut || '—'}</span>
                   </td>
+                  <td style={{ padding: '14px 20px', textAlign: 'center' }}>
+                    <span style={{ fontFamily: 'DM Mono', fontSize: 16, fontWeight: 700, color: 'var(--text-dim)' }}>{appEra[s.player]?.played || '—'}</span>
+                  </td>
+                  <td style={{ padding: '14px 20px', textAlign: 'center' }}>
+                    <span style={{ fontFamily: 'DM Mono', fontSize: 16, fontWeight: 700, color: 'var(--text-dim)' }}>{appEra[s.player]?.picked || '—'}</span>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
+        <SectionDesc style={{ padding: '0 20px 16px' }}>
+          * Played and Picked cover the app era only (2026 on). The 2020–2025 baseline
+          records finishes and cuts but never stored how many events each player entered
+          or how many golfers they drafted, so those years are left out rather than guessed at.
+        </SectionDesc>
       </div>
 
       {/* ── Majors Wall ── */}
@@ -1278,7 +1315,7 @@ export function StatsTab({ history, golferHistory, leagueId }: { history: any[];
       {/* ── Generic history-derived insights (this season's finalized events) ──
           The legacy score-based H2H table above covers head-to-head, so the
           rank-based generic grid is skipped here. */}
-      <LeagueInsights history={history} golferHistory={golferHistory} roster={LEGACY_PLAYERS} showHeadToHead={false} />
+      <LeagueInsights history={history} golferHistory={golferHistory} historyPicks={historyPicks} roster={LEGACY_PLAYERS} showHeadToHead={false} />
     </div>
   )
 }

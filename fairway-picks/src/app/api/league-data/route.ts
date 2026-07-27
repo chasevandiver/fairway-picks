@@ -85,9 +85,10 @@ export async function GET(request: NextRequest) {
   let results: any[] = []
   let golferResults: any[] = []
   let picks: any[] = []
+  let historyPicks: any[] = []
 
   if (tournamentIds.length > 0) {
-    const [{ data: r }, { data: gr }] = await Promise.all([
+    const [{ data: r }, { data: gr }, { data: hp }] = await Promise.all([
       db.from('results')
         .select('*, tournaments(name, date, is_major)')
         .in('tournament_id', tournamentIds)
@@ -96,9 +97,16 @@ export async function GET(request: NextRequest) {
         .select('*, tournaments(name, date, is_major)')
         .in('tournament_id', tournamentIds)
         .order('created_at', { ascending: false }),
+      // Draft order for finished events. golfer_results records what a golfer
+      // did but not which round they were taken in, so draft-position stats
+      // need the picks rows too. Narrow select — this is the widest table.
+      db.from('picks')
+        .select('tournament_id, player_name, golfer_name, pick_order')
+        .in('tournament_id', tournamentIds),
     ])
     results = r ?? []
     golferResults = gr ?? []
+    historyPicks = hp ?? []
   }
 
   if (activeTournament) {
@@ -134,6 +142,7 @@ export async function GET(request: NextRequest) {
     results,
     golferResults,
     picks,
+    historyPicks,
     tournamentIds,
     members,
     // Invite codes are for members only — a public-view guest must never see one.
