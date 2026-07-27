@@ -9,6 +9,8 @@ import {
   computeStandings,
   computeMoney,
   snakeDraftOrder,
+  formatWinnerPlayer,
+  parseWinnerPlayers,
 } from '../scoring'
 import type { GolferScore } from '../types'
 import { DEFAULT_RULES } from '../rules'
@@ -253,5 +255,35 @@ describe('snakeDraftOrder', () => {
     const order = snakeDraftOrder(['A', 'B', 'C'], 2)
     expect(order.map((o) => o.player)).toEqual(['A', 'B', 'C', 'C', 'B', 'A'])
     expect(order.map((o) => o.pick)).toEqual([1, 2, 3, 4, 5, 6])
+  })
+})
+
+describe('formatWinnerPlayer / parseWinnerPlayers', () => {
+  it('renders a single winner plainly', () => {
+    expect(formatWinnerPlayer(['Chase'])).toBe('Chase')
+  })
+
+  it('renders co-winners as a tie', () => {
+    expect(formatWinnerPlayer(['Brennan', 'Hayden'])).toBe('Brennan/Hayden (Tie)')
+  })
+
+  it('returns null when nobody finished first', () => {
+    expect(formatWinnerPlayer([])).toBeNull()
+  })
+
+  it('round-trips through parseWinnerPlayers', () => {
+    for (const names of [['Chase'], ['Brennan', 'Hayden'], ['Max', 'Andrew', 'Eric']]) {
+      expect(parseWinnerPlayers(formatWinnerPlayer(names))).toEqual(names)
+    }
+  })
+
+  it('parses the hardcoded 2023 tie string', () => {
+    expect(parseWinnerPlayers('Brennan/Hayden (Tie)')).toEqual(['Brennan', 'Hayden'])
+  })
+
+  it('handles empty and missing winners', () => {
+    expect(parseWinnerPlayers(null)).toEqual([])
+    expect(parseWinnerPlayers(undefined)).toEqual([])
+    expect(parseWinnerPlayers('')).toEqual([])
   })
 })

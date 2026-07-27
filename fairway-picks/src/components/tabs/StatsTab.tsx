@@ -1,9 +1,10 @@
 'use client'
 
 import { useState } from 'react'
-import { formatMoney } from '@/lib/scoring'
+import { formatMoney, parseWinnerPlayers } from '@/lib/scoring'
 import { FOUNDING_LEAGUE_ID } from '@/lib/founding'
 import { LEGACY_PLAYERS, MAJORS_HISTORY, MAJOR_COLORS, ALL_STATS } from '@/lib/constants'
+import { majorKey, type MajorKey } from '@/lib/majors'
 import { SectionDesc } from '@/components/app/SectionDesc'
 
 // ─── Generic history-derived insights (all league types) ─────────────────────
@@ -668,9 +669,12 @@ export function CustomLeagueStatsView({ history, golferHistory }: { history: any
       stats[p].cut += s.golfers_cut || 0
     }
     if (isMajor && h.winner_player) {
-      if (stats[h.winner_player]) stats[h.winner_player].majors++
+      const winners = parseWinnerPlayers(h.winner_player)
+      for (const p of winners) {
+        if (stats[p]) stats[p].majors += winners.length > 1 ? 0.5 : 1
+      }
       liveMajors.push({
-        year: new Date(h.date).getFullYear(),
+        year: Number(String(h.date).slice(0, 4)),
         name: h.tournament_name,
         winner: h.winner_player,
         tournament: h.tournament_name,
@@ -804,16 +808,29 @@ export function StatsTab({ history, golferHistory, leagueId }: { history: any[];
       }
     }
     if (isMajor && h.winner_player) {
-      const majorType = (['Masters', 'PGA Championship', 'US Open', 'The Open'] as const)
-        .find(m => h.tournament_name?.includes(m)) ?? 'The Open'
-      const logos: Record<string, string> = { 'Masters': '🌲', 'PGA Championship': '🏆', 'US Open': '🦅', 'The Open': '🏴󠁧󠁢󠁳󠁣󠁴󠁿' }
-      liveMajors.push({
-        year: new Date(h.date).getFullYear(),
-        name: majorType,
-        winner: h.winner_player,
-        logo: logos[majorType],
-      })
-      liveStatsByPlayer[h.winner_player].majors++
+      // A tie writes "A/B (Tie)" — credit each named player a half, matching
+      // how the hardcoded MAJORS_HISTORY tie strings are scored below. The
+      // lookup is guarded: a winner outside LEGACY_PLAYERS (JHall, or any
+      // future name) used to throw here and blank the whole tab.
+      const winners = parseWinnerPlayers(h.winner_player)
+      for (const p of winners) {
+        if (liveStatsByPlayer[p]) liveStatsByPlayer[p].majors += winners.length > 1 ? 0.5 : 1
+      }
+      // The Majors Wall only has columns for the four majors. A league that
+      // flags something else as a major still counts above, but has no cell to
+      // sit in — better an absent row than one parked in the wrong column.
+      const majorType = majorKey(h.tournament_name)
+      if (majorType) {
+        const logos: Record<MajorKey, string> = { 'Masters': '🌲', 'PGA Championship': '🏆', 'US Open': '🦅', 'The Open': '🏴󠁧󠁢󠁳󠁣󠁴󠁿' }
+        liveMajors.push({
+          // h.date is 'YYYY-MM-DD'; new Date() reads it as UTC midnight, so
+          // getFullYear() can roll a January event back a year west of GMT.
+          year: Number(String(h.date).slice(0, 4)),
+          name: majorType,
+          winner: h.winner_player,
+          logo: logos[majorType],
+        })
+      }
     }
   }
 
@@ -841,8 +858,9 @@ export function StatsTab({ history, golferHistory, leagueId }: { history: any[];
   const majorsByPlayer: Record<string, number> = {}
   LEGACY_PLAYERS.forEach(p => majorsByPlayer[p] = 0)
   allMajors.forEach(m => {
-    for (const p of LEGACY_PLAYERS) {
-      if (m.winner.includes(p)) majorsByPlayer[p] += m.winner.includes('Tie') ? 0.5 : 1
+    const winners = parseWinnerPlayers(m.winner)
+    for (const p of winners) {
+      if (p in majorsByPlayer) majorsByPlayer[p] += winners.length > 1 ? 0.5 : 1
     }
   })
 

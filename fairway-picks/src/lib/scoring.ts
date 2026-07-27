@@ -218,6 +218,27 @@ export function computeStandings(
   return ranked
 }
 
+// ─── Weekly pool winner ───────────────────────────────────────────────────────
+// A week can have more than one rank-1 player. History records that as
+// "A/B (Tie)" — the same shape the pre-2026 hardcoded majors used — so the
+// half-a-major tie scoring works for live results too.
+
+/** Render the rank-1 player names as a single winner string, or null if none. */
+export function formatWinnerPlayer(names: string[]): string | null {
+  if (names.length === 0) return null
+  return names.length > 1 ? `${names.join('/')} (Tie)` : names[0]
+}
+
+/** Split a winner string back into its individual players. */
+export function parseWinnerPlayers(winner?: string | null): string[] {
+  if (!winner) return []
+  return winner
+    .replace(/\s*\(tie\)\s*$/i, '')
+    .split('/')
+    .map(s => s.trim())
+    .filter(Boolean)
+}
+
 export function computeMoney(
   standings: any[],
   players: string[],

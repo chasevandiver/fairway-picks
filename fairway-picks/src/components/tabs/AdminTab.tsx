@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import type { LeagueRules } from '@/lib/rules'
 import type { Tournament, Pick, GolferScore, PlayerStanding } from '@/lib/types'
 import { PGA_SCHEDULE } from '@/lib/constants'
+import { isMajorName } from '@/lib/majors'
 import { useConfirm } from '@/components/app/ConfirmDialog'
 import type { LeagueMember } from '@/lib/roster'
 
@@ -132,11 +133,12 @@ export function AdminTab({
 
   const selectedTournament = PGA_SCHEDULE.find((e) => e.name === selectedEvent)
 
-  // Auto-detect majors when tournament is selected
-  const MAJOR_NAMES = ['Masters', 'PGA Championship', 'U.S. Open', 'The Open Championship', 'US Open']
+  // Auto-detect majors when tournament is selected. Shares one normalizer with
+  // the Majors Wall so setup and display can't disagree on a spelling — they
+  // used to, which is how a finalized "U.S. Open" landed in the wrong column.
   useEffect(() => {
     if (selectedTournament) {
-      setIsMajor(MAJOR_NAMES.some(m => selectedTournament.name.includes(m)))
+      setIsMajor(isMajorName(selectedTournament.name))
     }
   }, [selectedTournament?.name])
 

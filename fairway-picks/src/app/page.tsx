@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
-import { buildPickMap, computeStandings, computeMoney } from '@/lib/scoring'
+import { buildPickMap, computeStandings, computeMoney, formatWinnerPlayer } from '@/lib/scoring'
 import { DEFAULT_RULES, mergeRules } from '@/lib/rules'
 import type { LeagueRules } from '@/lib/rules'
 import type { Tournament, Pick, GolferScore, SeasonMoney } from '@/lib/types'
@@ -286,6 +286,7 @@ export default function App() {
               is_major: r.tournaments?.is_major || false,
               standings: [],
               money: {},
+              winners: [] as string[],
               winner_player: null,
             }
           }
@@ -298,7 +299,14 @@ export default function App() {
             golfers_cut: r.golfers_cut || 0,
           })
           grouped[tid].money[r.player_name] = r.money_won
-          if (r.rank === 1) grouped[tid].winner_player = r.player_name
+          if (r.rank === 1) grouped[tid].winners.push(r.player_name)
+        }
+        // A tied week has more than one rank-1 row. Collecting them all and
+        // formatting once beats last-write-wins, which silently dropped every
+        // co-winner but the last row read.
+        for (const g of Object.values(grouped) as any[]) {
+          g.winner_player = formatWinnerPlayer(g.winners)
+          delete g.winners
         }
         setHistory(Object.values(grouped))
       } else {
