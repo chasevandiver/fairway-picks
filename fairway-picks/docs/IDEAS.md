@@ -1,10 +1,12 @@
 # Fairway Picks — ideas backlog
 
-Written up from the commissioner's notes. Nothing here is built yet — the only
-code that shipped alongside this doc is the Majors Wall fix (note 2, done).
+Written up from the commissioner's notes.
 
-Each item carries an effort tag and a "needs" line so you can pick by appetite
-rather than by reading the whole thing:
+**Status: all five notes are built.** This doc is kept as the record of what was
+decided and why — particularly the double-counting rules around imported
+seasons, which are the reason several things work the way they do.
+
+Effort tags below are what each item actually took:
 
 - **S** — an hour or two, one file, no new data.
 - **M** — half a day, a few files, still no schema change.
@@ -12,7 +14,7 @@ rather than by reading the whole thing:
 
 ---
 
-## 1. Tournaments played & golfers picked · **S**
+## 1. Tournaments played & golfers picked · **S** · shipped
 
 **Needs:** nothing new — both numbers are already in memory.
 
@@ -29,11 +31,12 @@ Three tables want the columns:
 | All-Time Player Stats (founding) | `StatsTab.tsx` ~`:874` | `Played`, `Golfers Picked` |
 | Player Stats (custom leagues) | `StatsTab.tsx` `CustomLeagueStatsView` | `Golfers Picked` (`Played` exists) |
 
-One wrinkle: the founding league's all-time row is `ALL_STATS` +
-live results, and `ALL_STATS` has no pick counts for 2020–2025. Until note 3
-lands, the honest options are to label the column "since 2026" or to leave it
-blank for the pre-app era. Don't invent a number — `first + second + third`
-looks like an event count but is really a podium count.
+One wrinkle: the founding league's all-time row is `ALL_STATS` + live results,
+and `ALL_STATS` has no pick counts for 2020–2025. Both columns are marked with
+an asterisk and footnoted as app-era only rather than guessed at —
+`first + second + third` looks like an event count but is really a podium
+count. `appEraCounts()` also skips imported historical events, which carry
+money but no roster.
 
 `HistoryTab`'s Golfer Log already shows Total Picks / Unique Golfers / Tour
 Wins / Cuts, but only for one player at a time behind a selector
@@ -62,7 +65,7 @@ Also fixed alongside it:
 
 ---
 
-## 3. Historical seasons from the old sheets · **L**
+## 3. Historical seasons from the old sheets · **L** · shipped
 
 **Needs:** an import pipeline and a rework of how all-time totals are summed.
 
@@ -112,47 +115,69 @@ that his results stay unattributed.
 (`StatsTab.tsx:821-833`). Import 2020–2025 into `history` and every first,
 podium, tour win and cut is counted twice.
 
-So the import can't be additive. Staged fix:
+So the import can't be additive. What shipped:
 
-1. **Import 2020–2025** into real `tournaments` / `results` / `golfer_results`
-   rows, marked so they're distinguishable from app-era events.
-2. **Switch the all-time table from "baseline + live" to "derived, with a
-   baseline fallback"** — sum from imported rows for any season that's been
-   imported, and fall back to `ALL_STATS` only for seasons that haven't. Never
-   both for the same season.
+1. **Migration 012 adds `tournaments.is_historical`.** An imported event is a
+   real tournament in every other respect — it appears in History and in money
+   totals — but `countsTowardTallies()` makes every all-time finish, cut and
+   major tally skip it, because the baseline already counts those events.
+2. **Money is added with no guard, because there is nothing to guard against.**
+   `ALL_STATS` records finishes and cuts, never dollars. That asymmetry is the
+   whole reason this works: the number you were missing is the one number that
+   was never duplicated.
 3. **Season money falls out for free.** `tournaments.date` already carries the
-   year, so a season selector needs no schema change — just a filter applied to
-   `history` before it reaches Stats, Money and History.
+   year, so `seasonOf()` and `moneyBySeason()` needed no schema change. The
+   Money tab now leads with a Money by Season table and an all-time row, and
+   the tournament history below it has season filter chips.
+4. **Import is a paste, not a pipeline.** The Admin tab takes the money ledger
+   copied straight out of a sheet — `parseHistoricalPaste()` in
+   `src/lib/importHistory.ts` reads the sheet's own formats (`$60`, `($15)`,
+   `M/D/YYYY`), skips non-player columns, and previews per-player season totals
+   so you can check them against the sheet before writing anything.
+
+The parser warns rather than blocks when a row doesn't net to zero. A pool only
+redistributes money, so a non-zero row almost always means a player column was
+missed on the way over — but a league that once did something unusual shouldn't
+be locked out of importing its own history.
+
+**When every pre-app season is in**, the baseline can be retired: drop
+`ALL_STATS` / `MAJORS_HISTORY`, stop setting `is_historical`, and the tallies
+become fully derived. Nothing above blocks that.
 
 ### The checksum
 
 The 2026 sheet's Lifetime Earnings block gives an independent reconciliation
-target for the import: **Chase −$265 · Max −$70 · Hayden $225 · Andrew −$15 ·
-Brennan $190**. If the imported per-tournament money doesn't sum to those
-figures, the import is wrong — do not adjust the target to match.
+target: **Chase −$265 · Max −$70 · Hayden $225 · Andrew −$15 · Brennan $190**.
+The import preview shows per-player totals before writing anything — check them
+against the sheet. If they don't line up, the import is wrong; don't adjust the
+target to match.
 
 ### Practical notes
 
-- The Drive MCP reader returns worksheet contents but **not worksheet titles**,
-  and long sheets come back truncated. A reliable import wants the Sheets API
-  (`spreadsheets.get?fields=sheets.properties.title`) or an xlsx export per
-  season rather than MCP reads.
-- 2025 is already an xlsx, so exporting the rest to xlsx makes all six seasons
-  a single code path.
-- Do this **one season at a time**, verifying money totals per season before
-  moving on. Six seasons of silent drift is not debuggable.
+- **One season at a time**, checking the preview totals against the sheet before
+  importing. Six seasons of silent drift is not debuggable.
+- Imported tournaments are ordinary rows — if a season goes in wrong, delete it
+  from the History tab and paste it again.
+- Fully automating the import was considered and rejected. The sheets run
+  500KB–1.7MB each, and the Drive reader returns no worksheet titles and
+  truncates long tabs, so a scripted read would be guessing at which tab is
+  which. Pasting a season takes seconds and shows you exactly what is about to
+  be written.
+- Per-tournament golfer detail (the round-by-round blocks) is **not** imported
+  by the paste — it carries money only. Bringing those in would let the
+  round-derived stats reach back before 2026, and is the natural next step.
 
 ---
 
-## 4. More stats, with descriptions · **S–M each**
+## 4. More stats, with descriptions · **S–M each** · shipped
 
-Every section already got a one-line `SectionDesc` explainer. Two gaps remain:
-a **glossary** and more to explain.
+Every section already had a one-line `SectionDesc` explainer. Two gaps are now
+closed: a **glossary** and more to explain.
 
-### Glossary · **S**
+### Glossary
 
-One page defining every term in the order it appears, and — more useful — the
-things that surprise people:
+A collapsible section at the foot of the Stats tab, twelve terms, defining what
+appears where — and, more usefully, the things that surprise people:
 
 - **Adjusted score** vs. raw score: a cut golfer's missed weekend counts as a
   repeat of R1+R2 (`cutAdjScore`, `src/lib/scoring.ts:116`).
@@ -167,8 +192,19 @@ things that surprise people:
 
 ### New stats
 
-Richest untapped source is `golfer_results.rounds` — per-round strokes for
-every drafted golfer, currently read only by `BestSingleRound`.
+All twelve are built, in `src/lib/leagueStats.ts` (pure and tested) and
+rendered by `src/components/tabs/MoreStats.tsx`. The richest source turned out
+to be `golfer_results.rounds` — per-round strokes for every drafted golfer,
+previously read by exactly one component.
+
+The round-derived three needed a course par, which `golfer_results` never
+stores. `derivePars()` solves it per tournament from any golfer who completed
+four rounds: `par = (strokes − score) / 4`, taking the most common answer and
+ignoring cut golfers whose stored score carries the doubling penalty.
+
+Draft-slot value and chalk-vs-sleeper needed `pick_order` for finished events,
+which `/api/league-data` only returned for the active tournament. It now also
+returns `historyPicks` — a narrow select over the finished tournament ids.
 
 | Stat | What it says | Needs |
 |---|---|---|
@@ -185,47 +221,46 @@ every drafted golfer, currently read only by `BestSingleRound`.
 | **Record book** | best & worst single week, biggest blowout, longest streak | existing |
 | **Chalk vs. sleeper** | avg draft position of the golfers you take | `picks` |
 
-Everything marked "existing" is a pure function of `history` / `golferHistory`
-and slots straight into `LeagueInsights` (`StatsTab.tsx:602-623`) next to the
-ten components already there.
+One judgement call worth recording: **most valuable golfers** splits each
+week's money evenly across the four golfers on that roster. Crediting a single
+golfer with a whole week would flatter whoever happened to sit beside a winner,
+and no golfer wins a week alone.
 
-**Put the maths in `src/lib/`, not in the tab.** `vitest.config.ts` only
-includes `src/**/*.test.ts`, so anything living in a `.tsx` can never be tested.
-`StatsTab.tsx` is already 1,266 lines with thirteen inline components.
+**The maths lives in `src/lib/`, not in the tab.** `vitest.config.ts` only
+includes `src/**/*.test.ts`, so anything in a `.tsx` can never be tested —
+and `StatsTab.tsx` was already 1,266 lines with thirteen inline components.
 
 ---
 
-## 5. Tournament companion · **M**
+## 5. Tournament companion · **M** · shipped
 
-Both of the picked features are pure client-side derivations of data the app
-already polls every 120 s. No schema change, no new endpoint, no new
-permissions. They belong on the Leaderboard tab beside the existing Projected
-Payouts strip.
+Both are pure client-side derivations of data the app already polls every
+120 s — no schema change, no new endpoint, no new permissions. They sit on the
+Leaderboard tab beside the existing Projected Payouts strip, in
+`src/lib/live.ts`.
 
 ### Live head-to-head + sweat meter
 
-- **Head-to-head:** your adjusted total against each opponent's, as a signed
-  stroke margin — "you lead Max by 3, trail Hayden by 1". `computeStandings`
-  already returns every player's `totalScore`; this is presentation.
-- **Sweat meter:** which single golfer is swinging the most money right now.
-  Re-run `computeMoney` with one golfer's score nudged, diff the payouts, and
-  show the largest mover — "Scheffler is worth $30 to Chase". `computeMoney` is
-  pure and cheap, so this is a memo over a handful of re-runs.
+Shipped as one **Where You Stand** card.
 
-Both read straight from what `page.tsx:396-403` already memoizes.
+- **Head-to-head** — your adjusted total against each opponent's as a signed
+  stroke margin: "lead Max 3, trail Hayden 1".
+- **Sweat meter** — re-runs `computeMoney` with one golfer's score nudged two
+  either way, diffs the payouts, and names the golfer moving the most dollars
+  across the league. The engine is pure, so this is arithmetic over a memo.
 
 ### Cut-line tracker + holes left
 
-- **Cut line:** `PicksTab.tsx:24-30` already estimates it as the 65th
-  percentile of active golfers. Promote that to `src/lib/` (so it's testable),
-  show the projected number, and mark each of your golfers' cushion — with a
-  bubble warning inside a stroke either way.
-- **Holes left:** sum `18 - thru` across each player's live golfers. Whoever has
-  the most golf left has the most room to move — "you have 41 holes left,
-  Andrew has 22". Genuinely changes how a Friday afternoon feels.
+- **Cut Watch** — `projectCutLine()` moved out of `PicksTab` into
+  `src/lib/live.ts`, so both tabs now agree on the number and it is tested.
+  Shows the projected line plus every drafted golfer's cushion, sorted most
+  precarious first, with a bubble flag inside a stroke either way.
+- **Holes Left** — `18 − thru` summed across each player's live golfers, as a
+  bar per player. Whoever has the most golf left has the most room to move; a
+  two-shot lead over someone with 30 holes in hand is not really a lead.
 
-Only show either during live play: the cut line is meaningless after R2, and
-holes-left is zero once everyone's in.
+All three render only during live play, and Cut Watch hides after R2 when the
+line stops meaning anything.
 
 ---
 

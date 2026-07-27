@@ -22,6 +22,8 @@ export type HistoryEntry = {
   tournament_name?: string
   date?: string
   is_major?: boolean
+  /** Imported from a pre-app season — see countsTowardTallies below. */
+  is_historical?: boolean
   standings?: HistoryStanding[]
   money?: Record<string, number>
   winner_player?: string | null
@@ -66,6 +68,60 @@ function mean(xs: number[]): number | null {
 /** Chronological order. History arrives grouped by id, not sorted. */
 export function byDate<T extends { date?: string }>(entries: T[]): T[] {
   return [...entries].sort((a, b) => String(a.date ?? '').localeCompare(String(b.date ?? '')))
+}
+
+// ─── Seasons ──────────────────────────────────────────────────────────────────
+// A season is just the calendar year of the event. `tournaments.date` already
+// carries it, so nothing needs a season column.
+
+/** Year of an event. 'YYYY-MM-DD' is sliced rather than parsed — new Date()
+ *  reads it as UTC midnight, which rolls a January event back a year west of
+ *  GMT. */
+export function seasonOf(entry: { date?: string }): number | null {
+  const year = Number(String(entry.date ?? '').slice(0, 4))
+  return Number.isInteger(year) && year > 1900 ? year : null
+}
+
+export function seasonsIn(history: HistoryEntry[]): number[] {
+  const years = new Set<number>()
+  for (const h of history) {
+    const y = seasonOf(h)
+    if (y !== null) years.add(y)
+  }
+  return Array.from(years).sort((a, b) => b - a)
+}
+
+/**
+ * Whether an event should be counted by all-time finish/cut/major tallies.
+ *
+ * Imported pre-app seasons are excluded because the hardcoded ALL_STATS and
+ * MAJORS_HISTORY baselines already count those events — adding them again is
+ * the double-count. Money has no baseline to collide with (ALL_STATS records
+ * finishes and cuts, never dollars), so imported money is always counted.
+ */
+export function countsTowardTallies(h: HistoryEntry): boolean {
+  return h.is_historical !== true
+}
+
+export type SeasonMoneyRow = { season: number; events: number; historical: boolean; totals: Record<string, number> }
+
+/** Money per player per season, newest season first. */
+export function moneyBySeason(history: HistoryEntry[], players: string[]): SeasonMoneyRow[] {
+  const acc: Record<number, SeasonMoneyRow> = {}
+  for (const h of history) {
+    const season = seasonOf(h)
+    if (season === null) continue
+    const row = (acc[season] ??= { season, events: 0, historical: true, totals: {} })
+    row.events++
+    // A season is only labelled historical when every event in it is.
+    if (countsTowardTallies(h)) row.historical = false
+    for (const p of players) {
+      const v = h.money?.[p]
+      if (v === undefined) continue
+      row.totals[p] = (row.totals[p] ?? 0) + v
+    }
+  }
+  return Object.values(acc).sort((a, b) => b.season - a.season)
 }
 
 // ─── Course par ───────────────────────────────────────────────────────────────
@@ -117,6 +173,7 @@ export function appEraCounts(
   for (const p of players) out[p] = { played: 0, picked: 0, uniqueGolfers: 0 }
 
   for (const h of history) {
+    if (!countsTowardTallies(h)) continue
     for (const s of h.standings ?? []) {
       if (out[s.player]) out[s.player].played++
     }

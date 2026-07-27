@@ -5,7 +5,7 @@ import { formatMoney, parseWinnerPlayers } from '@/lib/scoring'
 import { FOUNDING_LEAGUE_ID } from '@/lib/founding'
 import { LEGACY_PLAYERS, MAJORS_HISTORY, MAJOR_COLORS, ALL_STATS } from '@/lib/constants'
 import { majorKey, type MajorKey } from '@/lib/majors'
-import { appEraCounts } from '@/lib/leagueStats'
+import { appEraCounts, countsTowardTallies } from '@/lib/leagueStats'
 import { MoreStats } from '@/components/tabs/MoreStats'
 import { SectionDesc } from '@/components/app/SectionDesc'
 
@@ -668,6 +668,8 @@ export function CustomLeagueStatsView({ history, golferHistory, historyPicks }: 
   const liveMajors: { year: number; name: string; winner: string; tournament: string }[] = []
 
   for (const h of history) {
+    // Money-only imports have no ranks or cut counts to tally.
+    if (!countsTowardTallies(h)) continue
     const isMajor = h.is_major === true
     for (const s of (h.standings || [])) {
       const p = s.player
@@ -814,6 +816,10 @@ export function StatsTab({ history, golferHistory, historyPicks, leagueId }: { h
   const liveMajors: typeof MAJORS_HISTORY = []
 
   for (const h of history) {
+    // Imported pre-app seasons carry money but not tallies — ALL_STATS and
+    // MAJORS_HISTORY already count those finishes, cuts and majors, so adding
+    // them here would double every one of them.
+    if (!countsTowardTallies(h)) continue
     const isMajor = h.is_major === true
     for (const s of (h.standings || [])) {
       const p = s.player

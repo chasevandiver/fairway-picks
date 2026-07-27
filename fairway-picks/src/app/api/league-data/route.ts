@@ -90,11 +90,11 @@ export async function GET(request: NextRequest) {
   if (tournamentIds.length > 0) {
     const [{ data: r }, { data: gr }, { data: hp }] = await Promise.all([
       db.from('results')
-        .select('*, tournaments(name, date, is_major)')
+        .select('*, tournaments(name, date, is_major, is_historical)')
         .in('tournament_id', tournamentIds)
         .order('created_at', { ascending: false }),
       db.from('golfer_results')
-        .select('*, tournaments(name, date, is_major)')
+        .select('*, tournaments(name, date, is_major, is_historical)')
         .in('tournament_id', tournamentIds)
         .order('created_at', { ascending: false }),
       // Draft order for finished events. golfer_results records what a golfer

@@ -25,6 +25,7 @@ import { StatsTab } from '@/components/tabs/StatsTab'
 import { SeasonRecapTab } from '@/components/tabs/SeasonRecapTab'
 import { Toast, type ToastState } from '@/components/app/Toast'
 import { useConfirm } from '@/components/app/ConfirmDialog'
+import type { ParsedEvent } from '@/lib/importHistory'
 
 export default function App() {
   const supabase = createClient()
@@ -286,6 +287,9 @@ export default function App() {
               tournament_name: r.tournaments?.name,
               date: r.tournaments?.date,
               is_major: r.tournaments?.is_major || false,
+              // Pre-app seasons: money counts, but finish/cut tallies skip them
+              // because the hardcoded ALL_STATS baseline already has those events.
+              is_historical: r.tournaments?.is_historical || false,
               standings: [],
               money: {},
               winners: [] as string[],
@@ -443,6 +447,51 @@ export default function App() {
         router.replace('/dashboard')
       },
     })
+  }
+
+  // Import a pre-app season's money ledger. Each row becomes a finalized
+  // tournament flagged is_historical plus one results row per player carrying
+  // only money_won — the finishes and cuts for these years are already in the
+  // hardcoded ALL_STATS baseline, so re-recording them would double every one.
+  const handleImportHistory = async (events: ParsedEvent[]): Promise<number> => {
+    let imported = 0
+    for (const e of events) {
+      const { data: t, error: tErr } = await supabase
+        .from('tournaments')
+        .insert({
+          name: e.name,
+          course: '',
+          date: e.date,
+          status: 'finalized',
+          is_major: e.isMajor,
+          is_historical: true,
+          league_id: leagueId,
+          draft_order: Object.keys(e.money),
+        })
+        .select()
+        .single()
+      if (tErr || !t) {
+        notify(`Couldn't import "${e.name}" (${e.date}). Imported ${imported} before stopping.`)
+        break
+      }
+      const rows = Object.entries(e.money).map(([player_name, money_won]) => ({
+        tournament_id: t.id,
+        player_name,
+        money_won,
+      }))
+      const { error: rErr } = await supabase.from('results').insert(rows)
+      if (rErr) {
+        // Leave nothing half-written: a tournament with no results would show
+        // as an empty week in History.
+        await supabase.from('tournaments').delete().eq('id', t.id)
+        notify(`Couldn't import money for "${e.name}". Imported ${imported} before stopping.`)
+        break
+      }
+      imported++
+    }
+    await loadData()
+    if (imported > 0) notify(`Imported ${imported} historical tournament${imported === 1 ? '' : 's'}.`, 'success')
+    return imported
   }
 
   const handleSetupTournament = async (data: { name: string; course: string; date: string; draft_order: string[]; is_major: boolean }) => {
@@ -759,7 +808,7 @@ export default function App() {
             {tab === 'history' && <HistoryTab history={history} golferHistory={golferHistory} isAdmin={isAdmin} roster={roster} rules={leagueRules} onDeleteTournament={handleDeleteTournament} onEditResult={handleEditResult} onDeleteResult={handleDeleteResult} />}
             {tab === 'stats'   && <StatsTab history={history} golferHistory={golferHistory} historyPicks={historyPicks} leagueId={leagueId} />}
             {tab === 'recap'   && <SeasonRecapTab history={history} golferHistory={golferHistory} seasonMoney={seasonMoney} leagueId={leagueId} />}
-            {tab === 'admin'   && isAdmin && <AdminTab tournament={tournament} standings={standings} weekMoney={weekMoney} picks={picks} liveData={liveData} leagueId={leagueId} leagueName={leagueName} inviteCode={inviteCode} leagueRules={leagueRules} roster={roster} members={members} commissionerId={commissionerId} currentUserId={user?.id ?? ''} isPublicView={isPublicView} onSetupTournament={handleSetupTournament} onFinalize={handleFinalize} onClearTournament={handleClearTournament} onClearPicks={handleClearPicks} onSwapGolfer={handleSwapGolfer} onSaveRules={handleSaveRules} onSaveInviteCode={handleSaveInviteCode} onRemoveMember={handleRemoveMember} onRenameLeague={handleRenameLeague} onTogglePublicView={handleTogglePublicView} />}
+            {tab === 'admin'   && isAdmin && <AdminTab tournament={tournament} standings={standings} weekMoney={weekMoney} picks={picks} liveData={liveData} leagueId={leagueId} leagueName={leagueName} inviteCode={inviteCode} leagueRules={leagueRules} roster={roster} members={members} commissionerId={commissionerId} currentUserId={user?.id ?? ''} isPublicView={isPublicView} onSetupTournament={handleSetupTournament} onFinalize={handleFinalize} onClearTournament={handleClearTournament} onClearPicks={handleClearPicks} onSwapGolfer={handleSwapGolfer} onSaveRules={handleSaveRules} onSaveInviteCode={handleSaveInviteCode} onRemoveMember={handleRemoveMember} onRenameLeague={handleRenameLeague} onTogglePublicView={handleTogglePublicView} onImportHistory={handleImportHistory} />}
           </div>
         )}
       </main>
