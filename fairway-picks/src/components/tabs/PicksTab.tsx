@@ -3,6 +3,7 @@
 import { toRelScore, scoreClass, getCurrentRound, buildCutDisplayRounds } from '@/lib/scoring'
 import type { Tournament, GolferScore, PlayerStanding } from '@/lib/types'
 import { ScorecardRow } from '@/components/app/PlayerCard'
+import { projectCutLine } from '@/lib/live'
 
 // ─── Picks Tab ────────────────────────────────────────────────────────────────
 const ROUND_LABELS = ['R1', 'R2', 'R3', 'R4']
@@ -21,13 +22,8 @@ export function PicksTab({ standings, pickMap, liveData, tournament, roster }: {
 
   const par = liveData[0]?.par ?? 72
 
-  // ── Compute cut line score for alerts ──
-  const activeLiveGolfers = liveData.filter(g => g.status === 'active' && g.score !== null)
-  let cutScore: number | null = null
-  if (activeLiveGolfers.length > 20) {
-    const sorted = [...activeLiveGolfers].sort((a, b) => (a.score ?? 0) - (b.score ?? 0))
-    cutScore = sorted[Math.floor(sorted.length * 0.65)]?.score ?? null
-  }
+  // Shared with the Leaderboard tab's Cut Watch so both agree on the line.
+  const cutScore = projectCutLine(liveData)
 
   return (
     <div>

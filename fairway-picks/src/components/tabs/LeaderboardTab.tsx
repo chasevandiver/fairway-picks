@@ -1,9 +1,12 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { toRelScore, scoreClass, getCurrentRound, formatMoney, moneyClass } from '@/lib/scoring'
+import { toRelScore, scoreClass, getCurrentRound, formatMoney, moneyClass, computeStandings, computeMoney } from '@/lib/scoring'
 import type { Tournament, GolferScore, PlayerStanding } from '@/lib/types'
+import type { LeagueRules } from '@/lib/rules'
 import { ExpandablePlayerCard } from '@/components/app/PlayerCard'
+import { SectionDesc } from '@/components/app/SectionDesc'
+import { projectCutLine, cutWatch, holesLeft, liveHeadToHead, sweatMeter } from '@/lib/live'
 
 type SortKey = 'pos' | 'golfer' | 'total' | 'today'
 
@@ -17,7 +20,7 @@ function posValue(g: GolferScore): number {
 
 // ─── Leaderboard Tab ──────────────────────────────────────────────────────────
 export function LeaderboardTab({
-  tournament, standings, liveData, pickMap, loading, lastUpdated, onRefresh, money, flashMap, roster, isLiveData, currentPlayer
+  tournament, standings, liveData, pickMap, loading, lastUpdated, onRefresh, money, flashMap, roster, isLiveData, currentPlayer, rules, isMajor
 }: {
   tournament: Tournament | null
   standings: PlayerStanding[]
@@ -31,9 +34,38 @@ export function LeaderboardTab({
   flashMap: Record<string, 'up' | 'down'>
   isLiveData: boolean
   currentPlayer: string | null
+  rules: LeagueRules
+  isMajor: boolean
 }) {
   const safeData = Array.isArray(liveData) ? liveData : []
   const par = safeData[0]?.par ?? 72
+
+  // ── Companion derivations ──
+  // All of these re-read the feed already on screen; none of them fetch.
+  const cutLine = useMemo(() => projectCutLine(safeData), [safeData])
+  const watch = useMemo(() => cutWatch(safeData, pickMap, cutLine), [safeData, pickMap, cutLine])
+  const leverage = useMemo(() => holesLeft(safeData, pickMap, roster), [safeData, pickMap, roster])
+  const h2h = useMemo(
+    () => (currentPlayer ? liveHeadToHead(standings, currentPlayer) : []),
+    [standings, currentPlayer],
+  )
+
+  // Nudge one golfer's score and re-run the money engine. The engine is pure,
+  // so this is just arithmetic — no request, no mutation of the real feed.
+  const swing = useMemo(() => {
+    if (safeData.length === 0 || roster.length === 0) return null
+    const rescore = (golfer: string, delta: number) => {
+      const shifted = safeData.map(g =>
+        g.name === golfer && g.score !== null ? { ...g, score: g.score + delta } : g
+      )
+      return computeMoney(computeStandings(shifted, pickMap, roster, rules), roster, rules, isMajor)
+    }
+    return sweatMeter(pickMap, money, rescore)
+  }, [safeData, pickMap, roster, rules, isMajor, money])
+
+  // Everything above is only meaningful while golf is being played.
+  const inPlay = safeData.some(g => g.status === 'active' && g.thru !== 'F' && g.score !== null)
+  const totalHolesLeft = leverage.reduce((s, r) => s + r.holes, 0)
 
   // Tour Leaderboard sorting — default (sortKey null) keeps the feed's
   // position order.
@@ -194,6 +226,118 @@ export function LeaderboardTab({
           </div>
         )
       })()}
+
+      {/* ── Head-to-head + sweat meter ── */}
+      {inPlay && (h2h.length > 0 || swing) && (
+        <div className="card mb-24">
+          <div className="card-header">
+            <div className="card-title">🥊 Where You Stand</div>
+            <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: 'var(--gold)' }}>Live</span>
+          </div>
+          <SectionDesc style={{ padding: '12px 20px 0' }}>
+            Your combined adjusted score against each opponent right now, and the one golfer whose next few holes move the most money in the league.
+          </SectionDesc>
+          {h2h.length > 0 && (
+            <div className="scroll-x" style={{ display: 'flex', gap: 8, padding: '12px 16px' }}>
+              {h2h.map(r => (
+                <div key={r.opponent} style={{
+                  flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: 8,
+                  background: 'var(--surface2)', border: '1px solid var(--border)',
+                  borderRadius: 8, padding: '8px 12px', whiteSpace: 'nowrap',
+                }}>
+                  <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: 'var(--text-dim)' }}>
+                    {r.margin < 0 ? 'lead' : r.margin > 0 ? 'trail' : 'level'}
+                  </span>
+                  <span style={{ fontWeight: 600, fontSize: 13 }}>{r.opponent}</span>
+                  <span className={`score ${r.margin < 0 ? 'under' : r.margin > 0 ? 'over' : 'even'}`} style={{ fontSize: 13, fontWeight: 700 }}>
+                    {r.margin === 0 ? 'E' : Math.abs(r.margin)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+          {swing && (
+            <div style={{ padding: '0 20px 16px', fontFamily: 'DM Mono', fontSize: 12 }}>
+              🎢 Biggest swing: <span style={{ fontWeight: 700 }}>{swing.golfer}</span>
+              <span style={{ color: 'var(--text-dim)' }}> ({swing.player})</span>
+              {' — worth '}
+              <span style={{ color: 'var(--gold)', fontWeight: 700 }}>{formatMoney(Math.round(swing.swing))}</span>
+              {' across the league'}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Cut watch — only meaningful before the cut falls ── */}
+      {inPlay && getCurrentRound(safeData) <= 1 && watch.length > 0 && (
+        <div className="card mb-24">
+          <div className="card-header">
+            <div className="card-title">✂️ Cut Watch</div>
+            <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: 'var(--text-dim)' }}>
+              {cutLine !== null ? `Projected line ${toRelScore(cutLine)}` : 'Line not set yet'}
+            </span>
+          </div>
+          <SectionDesc style={{ padding: '12px 20px 0' }}>
+            Where each drafted golfer sits against the projected cut, estimated as the 65th percentile of the field still playing. Within a stroke either way counts as the bubble. The line moves all day — treat it as a warning, not a verdict.
+          </SectionDesc>
+          <div className="scroll-x">
+            <table className="table" style={{ minWidth: 480 }}>
+              <thead>
+                <tr><th>Golfer</th><th>Picked By</th><th>Score</th><th>Cushion</th></tr>
+              </thead>
+              <tbody>
+                {watch.map(r => (
+                  <tr key={`${r.player}-${r.golfer}`} className="row">
+                    <td>
+                      <span style={{ fontWeight: 500 }}>{r.golfer}</span>
+                      {r.state === 'bubble' && <span className="badge badge-gold" style={{ marginLeft: 8 }}>BUBBLE</span>}
+                      {r.state === 'cut' && <span className="badge badge-red" style={{ marginLeft: 8 }}>CUT</span>}
+                    </td>
+                    <td><span className="badge badge-green">{r.player}</span></td>
+                    <td><span className={`score ${scoreClass(r.score)}`}>{toRelScore(r.score)}</span></td>
+                    <td>
+                      {r.cushion === null
+                        ? <span style={{ color: 'var(--text-dim)' }}>—</span>
+                        : <span className={`score ${r.cushion > 0 ? 'under' : r.cushion < 0 ? 'over' : 'even'}`}>
+                            {r.cushion > 0 ? `+${r.cushion}` : r.cushion === 0 ? 'E' : String(r.cushion)}
+                          </span>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ── Holes left — who still has room to move ── */}
+      {inPlay && totalHolesLeft > 0 && (
+        <div className="card mb-24">
+          <div className="card-header">
+            <div className="card-title">⏳ Holes Left</div>
+            <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: 'var(--text-dim)' }}>This round</span>
+          </div>
+          <SectionDesc style={{ padding: '12px 20px 0' }}>
+            How much golf each player&apos;s roster still has to play in the current round. Whoever has the most left has the most room to move — a two-shot lead over someone with 30 holes in hand is not really a lead.
+          </SectionDesc>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '12px 20px 20px' }}>
+            {leverage.map(r => (
+              <div key={r.player} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <span style={{ fontWeight: 600, fontSize: 13, width: 90, flex: '0 0 auto' }}>{r.player}</span>
+                <div style={{ flex: 1, background: 'var(--surface2)', borderRadius: 4, overflow: 'hidden', height: 8 }}>
+                  <div style={{
+                    width: `${(r.holes / Math.max(1, leverage[0].holes)) * 100}%`,
+                    height: 8, background: 'var(--green)',
+                  }} />
+                </div>
+                <span style={{ fontFamily: 'DM Mono', fontSize: 12, color: 'var(--text-dim)', whiteSpace: 'nowrap' }}>
+                  {r.holes} · {r.golfersLeft} out
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* ── Projected payouts (live, not final) ── */}
       {roster.length > 0 && standings.length > 0 && (

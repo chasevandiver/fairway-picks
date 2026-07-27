@@ -1,6 +1,8 @@
 'use client'
 
+import { useState } from 'react'
 import { formatMoney, moneyClass } from '@/lib/scoring'
+import { moneyBySeason, seasonOf } from '@/lib/leagueStats'
 import type { LeagueRules } from '@/lib/rules'
 import type { Tournament, SeasonMoney } from '@/lib/types'
 import { AnimatedMoney } from '@/components/app/AnimatedMoney'
@@ -15,10 +17,19 @@ export function MoneyTab({ seasonMoney, weekMoney, tournament, history, roster, 
   roster: string[]
   rules: LeagueRules
 }) {
+  const [season, setSeason] = useState<number | 'all'>('all')
   const sorted = [...seasonMoney].sort((a, b) => b.total - a.total)
   // Total dollars that changed hands (sum of positive balances = what winners collected)
   const totalPot = seasonMoney.reduce((s, sm) => s + Math.max(0, sm.total), 0)
   const tournamentsPlayed = history.length
+  // Columns follow the money rather than the current roster, so a past player
+  // who only appears in imported seasons still gets a column.
+  const moneyRoster = Array.from(new Set([
+    ...roster,
+    ...history.flatMap((h: any) => Object.keys(h.money ?? {})),
+  ]))
+  const seasonRows = moneyBySeason(history, moneyRoster)
+  const visibleHistory = season === 'all' ? history : history.filter(h => seasonOf(h) === season)
 
   return (
     <div>
@@ -113,9 +124,96 @@ export function MoneyTab({ seasonMoney, weekMoney, tournament, history, roster, 
         </div>
       )}
 
+      {seasonRows.length > 1 && (
+        <div className="card mb-24">
+          <div className="card-header">
+            <div className="card-title">💰 Money by Season</div>
+            <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: 'var(--text-dim)' }}>
+              {seasonRows.length} seasons
+            </span>
+          </div>
+          <SectionDesc style={{ padding: '12px 20px 0' }}>
+            Every season side by side, with the all-time line at the bottom. Seasons marked
+            <em> imported</em> came from the old spreadsheets and carry money only — their
+            finishes and cuts are already counted in the all-time stats, so they are
+            deliberately left out of those tallies rather than added twice.
+          </SectionDesc>
+          <div className="scroll-x">
+            <table className="table" style={{ minWidth: 560 }}>
+              <thead>
+                <tr>
+                  <th>Season</th>
+                  {moneyRoster.map((p) => <th key={p}>{p}</th>)}
+                  <th>Events</th>
+                </tr>
+              </thead>
+              <tbody>
+                {seasonRows.map((row) => (
+                  <tr key={row.season} className="row">
+                    <td>
+                      <div style={{ fontWeight: 600 }}>{row.season}</div>
+                      {row.historical && (
+                        <div style={{ fontFamily: 'DM Mono', fontSize: 10, color: 'var(--text-dim)' }}>imported</div>
+                      )}
+                    </td>
+                    {moneyRoster.map((p) => {
+                      const v = row.totals[p] ?? 0
+                      return (
+                        <td key={p}>
+                          <span className={`score ${v > 0 ? 'under' : v < 0 ? 'over' : 'even'}`} style={{ fontSize: 13 }}>
+                            {formatMoney(v)}
+                          </span>
+                        </td>
+                      )
+                    })}
+                    <td><span style={{ fontFamily: 'DM Mono', fontSize: 12, color: 'var(--text-dim)' }}>{row.events}</span></td>
+                  </tr>
+                ))}
+                <tr className="row" style={{ borderTop: '2px solid var(--border)' }}>
+                  <td style={{ fontWeight: 700 }}>All-time</td>
+                  {moneyRoster.map((p) => {
+                    const v = seasonRows.reduce((s, r) => s + (r.totals[p] ?? 0), 0)
+                    return (
+                      <td key={p}>
+                        <span className={`score ${v > 0 ? 'under' : v < 0 ? 'over' : 'even'}`} style={{ fontSize: 13, fontWeight: 700 }}>
+                          {formatMoney(v)}
+                        </span>
+                      </td>
+                    )
+                  })}
+                  <td>
+                    <span style={{ fontFamily: 'DM Mono', fontSize: 12, color: 'var(--text-dim)' }}>
+                      {seasonRows.reduce((s, r) => s + r.events, 0)}
+                    </span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       {history.length > 0 && (
         <div className="card">
-          <div className="card-header"><div className="card-title">Tournament History</div></div>
+          <div className="card-header">
+            <div className="card-title">Tournament History</div>
+            {seasonRows.length > 1 && (
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {(['all', ...seasonRows.map(r => r.season)] as const).map((y) => (
+                  <button
+                    key={y}
+                    onClick={() => setSeason(y as number | 'all')}
+                    style={{
+                      padding: '4px 12px', borderRadius: 100, fontSize: 11, fontFamily: 'DM Mono', cursor: 'pointer', border: '1px solid',
+                      background: season === y ? 'var(--gold-dim)' : 'var(--surface2)',
+                      borderColor: season === y ? 'rgba(245,158,11,0.3)' : 'var(--border)',
+                      color: season === y ? 'var(--gold)' : 'var(--text-dim)',
+                    }}
+                  >{y === 'all' ? 'All' : y}</button>
+                ))}
+              </div>
+            )}
+          </div>
           <SectionDesc style={{ padding: '12px 20px 0' }}>
             Week-by-week money results for every finalized tournament — green means they cashed that week, red means they paid.
           </SectionDesc>
@@ -128,7 +226,7 @@ export function MoneyTab({ seasonMoney, weekMoney, tournament, history, roster, 
                 </tr>
               </thead>
               <tbody>
-                {history.map((h: any, i: number) => (
+                {visibleHistory.map((h: any, i: number) => (
                   <tr key={i} className="row">
                     <td>
                       <div style={{ fontWeight: 500 }}>{h.tournament_name}</div>

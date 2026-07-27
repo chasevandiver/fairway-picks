@@ -20,6 +20,14 @@ automatic money tracking, and shareable leagues. Built with Next.js 14
   so mid-season edits never rewrite history.
 - **Money tracking** derived from finalized results (single source of truth),
   plus season stats, head-to-head records, and a season recap.
+- **Live tournament companion**: head-to-head margins against every opponent,
+  a sweat meter for the golfer swinging the most money, a projected cut line
+  with per-golfer cushion, and holes remaining per roster.
+- **Deep stats** — weekend vs. weekday scoring, Sunday charge, draft-slot
+  value, nemesis golfers, a record book, and a glossary explaining every term.
+- **Past-season import**: paste the money ledger from an old spreadsheet to
+  get season-by-season money. Imported seasons are money-only so they can't
+  double-count the all-time finish and cut totals.
 
 ## Setup
 
@@ -27,7 +35,8 @@ automatic money tracking, and shareable leagues. Built with Next.js 14
 
 1. Create a project at [supabase.com](https://supabase.com) (free tier works).
 2. In the SQL editor, run the migrations in `supabase/migrations/` **in
-   order**: `001` → `002` → `003` → `005` → `006` → `007` → `008` → `009` → `010`.
+   order**: `001` → `002` → `003` → `005` → `006` → `007` → `008` → `009` →
+   `010` → `011` → `012`.
    (`004` is a guarded one-time repair — skip it; it aborts if run.)
    For `006`, `008`, and `009`, run the matching scripts in
    `supabase/verification/` before and after and compare the output.

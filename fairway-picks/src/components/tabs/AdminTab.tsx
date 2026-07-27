@@ -3,7 +3,12 @@
 import { useState, useEffect } from 'react'
 import type { LeagueRules } from '@/lib/rules'
 import type { Tournament, Pick, GolferScore, PlayerStanding } from '@/lib/types'
-import { PGA_SCHEDULE } from '@/lib/constants'
+import { PGA_SCHEDULE, HISTORICAL_PLAYERS } from '@/lib/constants'
+import { FOUNDING_LEAGUE_ID } from '@/lib/founding'
+import { isMajorName } from '@/lib/majors'
+import { parseHistoricalPaste, importTotals, type ParsedEvent } from '@/lib/importHistory'
+import { formatMoney } from '@/lib/scoring'
+import { SectionDesc } from '@/components/app/SectionDesc'
 import { useConfirm } from '@/components/app/ConfirmDialog'
 import type { LeagueMember } from '@/lib/roster'
 
@@ -12,7 +17,7 @@ export function AdminTab({
   tournament, standings, weekMoney, picks, liveData,
   leagueId, leagueName, inviteCode, leagueRules, roster,
   members, commissionerId, currentUserId, isPublicView,
-  onSetupTournament, onFinalize, onClearTournament, onClearPicks, onSwapGolfer, onSaveRules, onSaveInviteCode,
+  onSetupTournament, onFinalize, onClearTournament, onClearPicks, onSwapGolfer, onSaveRules, onSaveInviteCode, onImportHistory,
   onRemoveMember, onRenameLeague, onTogglePublicView
 }: {
   tournament: Tournament | null
@@ -39,6 +44,7 @@ export function AdminTab({
   onRemoveMember: (userId: string) => Promise<void>
   onRenameLeague: (name: string) => Promise<void>
   onTogglePublicView: (next: boolean) => Promise<void>
+  onImportHistory: (events: ParsedEvent[]) => Promise<number>
 }) {
   const [selectedEvent, setSelectedEvent] = useState('')
   const [participants, setParticipants] = useState<string[]>(roster)
@@ -132,11 +138,12 @@ export function AdminTab({
 
   const selectedTournament = PGA_SCHEDULE.find((e) => e.name === selectedEvent)
 
-  // Auto-detect majors when tournament is selected
-  const MAJOR_NAMES = ['Masters', 'PGA Championship', 'U.S. Open', 'The Open Championship', 'US Open']
+  // Auto-detect majors when tournament is selected. Shares one normalizer with
+  // the Majors Wall so setup and display can't disagree on a spelling — they
+  // used to, which is how a finalized "U.S. Open" landed in the wrong column.
   useEffect(() => {
     if (selectedTournament) {
-      setIsMajor(MAJOR_NAMES.some(m => selectedTournament.name.includes(m)))
+      setIsMajor(isMajorName(selectedTournament.name))
     }
   }, [selectedTournament?.name])
 
@@ -166,6 +173,45 @@ export function AdminTab({
         setMsg('✅ Results recorded & season money updated!')
         setFinalizing(false)
         setTimeout(() => setMsg(''), 4000)
+      },
+    })
+  }
+
+  // ── Historical season import ──
+  const [pasteText, setPasteText] = useState('')
+  const [seasonYear, setSeasonYear] = useState('')
+  const [parsed, setParsed] = useState<ReturnType<typeof parseHistoricalPaste> | null>(null)
+  const [importing, setImporting] = useState(false)
+  const [importMsg, setImportMsg] = useState('')
+  const totals = parsed ? importTotals(parsed.events) : {}
+
+  // Past players never appear in the active roster, but their columns are in
+  // the old sheets — without this their money would be quietly discarded.
+  const importRoster = leagueId === FOUNDING_LEAGUE_ID ? [...roster, ...HISTORICAL_PLAYERS] : roster
+
+  const handlePreview = () => {
+    const year = Number(seasonYear)
+    setParsed(parseHistoricalPaste(pasteText, importRoster, Number.isInteger(year) && year > 1900 ? year : undefined))
+    setImportMsg('')
+  }
+
+  const handleImport = () => {
+    if (!parsed || parsed.events.length === 0) return
+    const span = `${parsed.events[0].date.slice(0, 4)}`
+    confirm({
+      title: 'Import past season',
+      message: `This adds ${parsed.events.length} historical tournaments (${span}) to the league's money history. They carry money only — finishes and cuts stay as they are. You can delete them again from the History tab.`,
+      confirmLabel: 'Import',
+      onConfirm: async () => {
+        setImporting(true)
+        try {
+          const count = await onImportHistory(parsed.events)
+          setImportMsg(`✅ Imported ${count} tournament${count === 1 ? '' : 's'}.`)
+          setPasteText('')
+          setParsed(null)
+        } finally {
+          setImporting(false)
+        }
       },
     })
   }
@@ -426,6 +472,118 @@ export function AdminTab({
                 </div>
               ))}
             </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── Historical season import ── */}
+      <div className="card mb-24">
+        <div className="card-header">
+          <div className="card-title">📜 Import a Past Season</div>
+          {parsed && (
+            <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: parsed.errors.length ? 'var(--red)' : 'var(--green)' }}>
+              {parsed.errors.length ? `${parsed.errors.length} problem${parsed.errors.length === 1 ? '' : 's'}` : `${parsed.events.length} events ready`}
+            </span>
+          )}
+        </div>
+        <SectionDesc style={{ padding: '12px 20px 0' }}>
+          Paste the money ledger from an old Golf Picks spreadsheet — select the block
+          including its header row and copy. Imported seasons carry <strong>money only</strong>:
+          their finishes, cuts and majors are already counted in the all-time stats, so
+          they are deliberately left out of those tallies rather than added twice.
+        </SectionDesc>
+        <div className="card-body">
+          <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: 'var(--text-dim)', marginBottom: 8, lineHeight: 1.8 }}>
+            Expected columns — <strong>Tournament</strong>, <strong>Date</strong>, then one per player:<br />
+            <span style={{ whiteSpace: 'pre' }}>{'Tournament\tDate\t' + importRoster.slice(0, 3).join('\t')}</span><br />
+            <span style={{ whiteSpace: 'pre' }}>{'Sentry Tournament\t2024-01-07\t-15\t60\t-15'}</span>
+          </div>
+          <textarea
+            className="form-input"
+            value={pasteText}
+            onChange={e => { setPasteText(e.target.value); setImportMsg('') }}
+            placeholder="Paste here…"
+            rows={6}
+            aria-label="Historical season money ledger"
+            style={{ width: '100%', fontFamily: 'DM Mono', fontSize: 12, resize: 'vertical' }}
+          />
+          <div className="flex gap-12" style={{ marginTop: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+            <input
+              type="number"
+              className="form-input"
+              value={seasonYear}
+              onChange={e => setSeasonYear(e.target.value)}
+              placeholder="Season year"
+              aria-label="Season year, used for dates written as month/day only"
+              style={{ width: 130 }}
+            />
+            <button className="btn btn-secondary" onClick={handlePreview} disabled={!pasteText.trim()}>
+              Preview
+            </button>
+            <button
+              className="btn btn-primary"
+              onClick={handleImport}
+              disabled={!parsed || parsed.errors.length > 0 || parsed.events.length === 0 || importing}
+            >
+              {importing ? 'Importing…' : `Import${parsed?.events.length ? ` ${parsed.events.length} events` : ''}`}
+            </button>
+          </div>
+
+          {parsed && parsed.errors.length > 0 && (
+            <div className="alert alert-red" style={{ marginTop: 12, textAlign: 'left' }}>
+              <div style={{ fontWeight: 600, marginBottom: 6 }}>Fix these before importing:</div>
+              <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12, lineHeight: 1.7 }}>
+                {parsed.errors.slice(0, 8).map((e, i) => <li key={i}>{e}</li>)}
+              </ul>
+              {parsed.errors.length > 8 && (
+                <div style={{ fontSize: 12, marginTop: 6 }}>…and {parsed.errors.length - 8} more.</div>
+              )}
+            </div>
+          )}
+
+          {parsed && parsed.errors.length === 0 && parsed.warnings.length > 0 && (
+            <div className="alert alert-gold" style={{ marginTop: 12, textAlign: 'left' }}>
+              <div style={{ fontWeight: 600, marginBottom: 6 }}>Worth a look — you can still import:</div>
+              <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12, lineHeight: 1.7 }}>
+                {parsed.warnings.slice(0, 6).map((w, i) => <li key={i}>{w}</li>)}
+              </ul>
+              {parsed.warnings.length > 6 && (
+                <div style={{ fontSize: 12, marginTop: 6 }}>…and {parsed.warnings.length - 6} more.</div>
+              )}
+            </div>
+          )}
+
+          {parsed && parsed.errors.length === 0 && parsed.events.length > 0 && (
+            <div style={{ marginTop: 16 }}>
+              <div style={{ fontFamily: 'DM Mono', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-dim)', marginBottom: 8 }}>
+                Season totals — check these against the sheet before importing
+              </div>
+              <div className="scroll-x">
+                <table className="table" style={{ minWidth: 420 }}>
+                  <thead>
+                    <tr>{parsed.players.map(p => <th key={p}>{p}</th>)}</tr>
+                  </thead>
+                  <tbody>
+                    <tr className="row">
+                      {parsed.players.map(p => {
+                        const v = totals[p] ?? 0
+                        return (
+                          <td key={p}>
+                            <span className={`score ${v > 0 ? 'under' : v < 0 ? 'over' : 'even'}`} style={{ fontSize: 13, fontWeight: 700 }}>
+                              {formatMoney(v)}
+                            </span>
+                          </td>
+                        )
+                      })}
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {importMsg && (
+            <div className="alert alert-green" style={{ marginTop: 12 }}>{importMsg}</div>
           )}
         </div>
       </div>

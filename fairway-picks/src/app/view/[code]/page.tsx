@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import {
   toRelScore, scoreClass, formatMoney, moneyClass,
-  buildPickMap, computeStandings,
+  buildPickMap, computeStandings, formatWinnerPlayer,
 } from '@/lib/scoring'
 import type { GolferScore, PlayerStanding } from '@/lib/types'
 import { mergeRules } from '@/lib/rules'
@@ -210,12 +210,16 @@ export default function GuestLeaguePage({ params }: { params: { code: string } }
           name: r.tournaments?.name,
           date: r.tournaments?.date,
           money: {},
+          winners: [] as string[],
           winner: null,
         }
       }
       grouped[tid].money[r.player_name] = r.money_won
-      if (r.rank === 1) grouped[tid].winner = r.player_name
+      if (r.rank === 1) grouped[tid].winners.push(r.player_name)
     }
+    // Tied weeks have several rank-1 rows; show them all rather than whichever
+    // one happened to be read last.
+    for (const g of Object.values(grouped) as any[]) g.winner = formatWinnerPlayer(g.winners)
     history.push(...Object.values(grouped).sort((a: any, b: any) => b.date?.localeCompare(a.date)))
   }
 
